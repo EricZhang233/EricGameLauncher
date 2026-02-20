@@ -1,0 +1,47 @@
+name: Add Pre-built Zip to Release
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  upload_asset:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      # 验证是否是 v 开头的 tag，如果是，拿到纯数字版本
+      - name: Extract base version from tag
+        id: get_version
+        run: |
+          if [[ "${{ github.event.release.tag_name }}" != v* ]]; then
+            echo "Skipping because tag does not start with 'v'"
+            exit 0
+          fi
+          BASE_VERSION=${{ github.event.release.tag_name }}
+          BASE_VERSION=${BASE_VERSION#v}
+          echo "VERSION=$BASE_VERSION" >> $GITHUB_OUTPUT
+          echo "Expected version is $BASE_VERSION"
+
+      # 验证 zip 文件是否在仓库里
+      - name: Check Zip File Existence
+        if: steps.get_version.outputs.VERSION != ''
+        run: |
+          ZIP_PATH="output/${{ steps.get_version.outputs.VERSION }}/EricGameLauncher_${{ steps.get_version.outputs.VERSION }}.zip"
+          if [ ! -f "$ZIP_PATH" ]; then
+            echo "❌ Error: Could not find zip file at $ZIP_PATH"
+            exit 1
+          else
+            echo "✅ Found zip file: $ZIP_PATH"
+          fi
+
+      # 仅向现有的 GitHub Release 追加预打包好的附件，并覆盖正文内容为 .releasenote.md
+      - name: Upload Asset to Release
+        if: steps.get_version.outputs.VERSION != ''
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: .releasenote.md
+          files: output/${{ steps.get_version.outputs.VERSION }}/EricGameLauncher_${{ steps.get_version.outputs.VERSION }}.zip
