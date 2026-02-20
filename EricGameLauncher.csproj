@@ -1,0 +1,59 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.26100</TargetFramework>
+    <UseWinUI>true</UseWinUI>
+    <RootNamespace>EricGameLauncher</RootNamespace>
+    <AssemblyName>EricGameLauncher</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <ErrorOnUnsupportedTargetingPlatformVersion>false</ErrorOnUnsupportedTargetingPlatformVersion>
+    <AppxPackage>false</AppxPackage>
+    <GenerateAppxPackageOnBuild>false</GenerateAppxPackageOnBuild>
+    <WindowsAppSDKUsePrerelease>false</WindowsAppSDKUsePrerelease>
+    <WindowsPackageType>None</WindowsPackageType>
+    <DisablePriGeneration>true</DisablePriGeneration>
+    <ApplicationIcon>ico.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <Target Name="SyncVersion" BeforeTargets="BeforeBuild">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File SyncVersion.ps1" ConsoleToMSBuild="true" StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="ExtractedVersion" />
+    </Exec>
+    <PropertyGroup Condition="'$(ExtractedVersion)' != ''">
+      <Version>$(ExtractedVersion)</Version>
+      <AssemblyVersion>$(ExtractedVersion)</AssemblyVersion>
+      <FileVersion>$(ExtractedVersion)</FileVersion>
+    </PropertyGroup>
+    <Message Importance="High" Text="Synced Version from Version.cs: $(ExtractedVersion)" />
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260101001" />
+    <PackageReference Include="WinUIEx" Version="2.4.0" />
+    <PackageReference Include="System.Drawing.Common" Version="8.0.8" />
+    <PackageReference Include="TinyPinyin.Net" Version="1.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Package.appxmanifest" />
+    <Content Include="ico.ico" />
+    <Content Include="i18n.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="_old-version1.3.1\**" />
+    <EmbeddedResource Remove="_old-version1.3.1\**" />
+    <None Remove="_old-version1.3.1\**" />
+    <Page Remove="_old-version1.3.1\**" />
+  </ItemGroup>
+
+</Project>
+
+
