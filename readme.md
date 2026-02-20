@@ -1,6 +1,6 @@
 ﻿<div align="center">
 
-# 🎮 Eric Game Launcher
+#  <img src="ico.ico"/> Eric Game Launcher
 
 **让游戏启动回归纯粹与极速**
 
