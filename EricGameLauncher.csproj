@@ -60,10 +60,8 @@
 
   <ItemGroup>
     <None Include="Package.appxmanifest" />
-    <Content Include="ico.ico" />
-    <Content Include="i18n.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <EmbeddedResource Include="ico.ico" />
+    <EmbeddedResource Include="i18n.json" />
   </ItemGroup>
 
   <ItemGroup>

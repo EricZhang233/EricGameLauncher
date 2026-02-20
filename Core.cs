@@ -73,18 +73,14 @@ namespace EricGameLauncher
 
             if (_allTranslations == null)
             {
-                string appDir = AppContext.BaseDirectory;
-                string filePath = Path.Combine(appDir, "i18n.json");
-
-                if (!File.Exists(filePath))
-                {
-
-                    return;
-                }
-
                 try
                 {
-                    string json = File.ReadAllText(filePath);
+                    var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+                    using var stream = assembly.GetManifestResourceStream("EricGameLauncher.i18n.json");
+                    if (stream == null) return;
+                    
+                    using var reader = new StreamReader(stream);
+                    string json = reader.ReadToEnd();
                     _allTranslations = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(json);
                 }
                 catch (Exception ex) { Logger.Log(ex); }
@@ -93,9 +89,7 @@ namespace EricGameLauncher
             if (_allTranslations != null && _allTranslations.TryGetValue(langCode, out var dict))
             {
                 _strings = dict;
-
             }
-
 
             LanguageChanged?.Invoke();
         }

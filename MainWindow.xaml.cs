@@ -123,10 +123,19 @@ namespace EricGameLauncher
             
             try
             {
-                var iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "ico.ico");
-                if (System.IO.File.Exists(iconPath))
+                var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+                using var stream = assembly.GetManifestResourceStream("EricGameLauncher.ico.ico");
+                if (stream != null)
                 {
-                    this.AppWindow.SetIcon(iconPath);
+                    string tempIconPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "EricGameLauncher_TempIcon.ico");
+                    using var fileStream = new System.IO.FileStream(tempIconPath, System.IO.FileMode.Create, System.IO.FileAccess.Write);
+                    stream.CopyTo(fileStream);
+                    fileStream.Close();
+                    
+                    this.AppWindow.SetIcon(tempIconPath);
+
+                    var bitmap = new BitmapImage(new Uri(tempIconPath));
+                    TitleBarIcon.Source = bitmap;
                 }
             }
             catch (Exception ex) { Logger.Log(ex); }
@@ -220,6 +229,22 @@ namespace EricGameLauncher
         {
             
             
+        }
+
+        private void MenuAuthorIconInternal_Loaded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is Image img)
+                {
+                    string tempIconPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "EricGameLauncher_TempIcon.ico");
+                    if (System.IO.File.Exists(tempIconPath))
+                    {
+                        img.Source = new BitmapImage(new Uri(tempIconPath));
+                    }
+                }
+            }
+            catch (Exception ex) { Logger.Log(ex); }
         }
 
         private void SaveWindowState()
