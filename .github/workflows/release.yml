@@ -1,4 +1,4 @@
-name: Add Pre-built Zip to Release
+name: EricGameLauncher-PostRelease
 on:
   release:
     types: [published]
