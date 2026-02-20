@@ -1,8 +1,9 @@
 <div align="center">
   <img src="ico.ico" />
 </div>
- <div align="center">
-#  Eric Game Launcher
+<div align="center">
+
+# Eric Game Launcher
 
 **让游戏启动回归纯粹与极速**
 
