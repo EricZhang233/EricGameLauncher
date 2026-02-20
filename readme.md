@@ -1,7 +1,8 @@
 <div align="center">
   <img src="ico.ico" />
+  </div>
+<div align="center">
 # Eric Game Launcher
-
 **让游戏启动回归纯粹与极速**
 
 [![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
