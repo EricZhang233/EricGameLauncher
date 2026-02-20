@@ -12,8 +12,8 @@
 [功能特性](#功能特性) • [技术亮点](#技术亮点) • [快速开始](#快速开始) • [开发指南](#开发指南)
 
 <div align="center">
-  <img src="readmescrsoot1.png" width="100%" />
-  <img src="readmescrsoot2.png" width="100%" />
+  <img src="readme_res\readmescrsoot1.png" width="100%" />
+  <img src="readme_res\readmescrsoot2.png" width="100%" />
 </div>
 
 </div>
