@@ -29,9 +29,6 @@ namespace EricGameLauncher
         {
             e.Handled = false; 
         }
-
-
-
         private Window? m_window;
     }
 }

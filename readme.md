@@ -1,7 +1,23 @@
-<div align="center">
-  <img src="ico.ico" />
+﻿<!--
+ readme编写规范：
+  1. 所有readme都需要保留本说明且不可做任何翻译修改。主readme(中文版)是本说明的唯一源头(Source of Truth)，禁止将非中文版本中被修改的说明同步回主readme。非中文版的此说明需始终保持与主readme单向同步更新。
+  2. 非中文版本的readme必须保留主readme(中文版)的所有视觉元素、HTML 标签、图标路径和排版格式，非中文版本的readme是中文版的完整对应精准同步翻译版，翻译不可笼统，不可修改原意，不可增减内容。
+  3. 针对目标语言环境进行功能描述的本土化：英文版需强调符合英语使用习惯的搜索匹配方式（如首字母、空格分隔首字母和 CamelCase 匹配）。
+  4. 非中文版本的readme需要合理修改指向资源的路径，确保资源能够正确显示。
+  5. 非中文版本的readme都需要保留并置顶本说明
+  6. 非中文版本的readme都需要置顶以下元素，可以替换为相应的翻译版本但必须保留原意：
+	    <div align="right">
+	    <a href="../readme.md">For the latest updates, please refer to the Chinese README.</a>
+	    </div>
+  7. 任何关于项目内容的更新，必须首先在主readme(中文版)中完成。在主版确认无误后，再根据本规范同步至其他语言版本。
+  8. 非中文版本的readme顶部的语言切换器仅保留指向主readme(中文版)的链接，不互相跳转。非中文版本的入口仅在主readme中统一显示。
+-->
+
+<div align="right">
+  <a href="readme_res/readme_en.md">English</a> • <a href="readme_res/readme_jp.md">日本語</a>
 </div>
 <div align="center">
+  <img src="ico.ico" />
 
 # Eric Game Launcher
 
@@ -15,8 +31,8 @@
 [功能特性](#功能特性) • [技术亮点](#技术亮点) • [快速开始](#快速开始) • [开发指南](#开发指南)
 
 <div align="center">
-  <img src="readme_res\readmescrsoot1.png" width="100%" />
-  <img src="readme_res\readmescrsoot2.png" width="100%" />
+  <img src="readme_res/readmescrsoot1.png" width="100%" />
+  <img src="readme_res/readmescrsoot2.png" width="100%" />
 </div>
 
 </div>
@@ -27,13 +43,13 @@
 
 **Eric Game Launcher** 是一款专为极简主义者打造的下一代游戏启动器。它摒弃了传统平台的臃肿，利用 **WinUI 3** 和 **.NET 8** 的强大性能，为您提供毫秒级的启动体验和原生的 Windows 11 视觉享受。
 
-无论您的游戏来自 Steam、Epic，还是独立的 `.exe`，这里都是它们统一的家。
+无论您的游戏来自 Steam、Epic，还是独立的 exe，这里都是它们统一的家。
 
 ## 功能特性
 
 ### 专为玩家打造
 *   **极致轻量**：启动即用，用完即走。无后台服务，零广告打扰，系统资源占用几近于零。
-*   **拼音秒搜**：专为中文环境优化。想玩《英雄联盟》？只需输入"YXLM"，结果即刻呈现。
+*   **高效搜索**：支持英文首字母、空格分隔首字母以及大写字母匹配搜索。想玩 "League of Legends"？只需输入 "LOL"，结果即刻呈现。
 *   **专业级属性控制**：这不是一个简陋的快捷方式。
     *   **以管理员身份运行**：可以分别为“游戏主程序”和“游戏管理器”（如 Steam/Epic）设置是否提权，解决权限不足无法启动的痛点。
     *   **运行管理器**：支持配置管理器路径，确保游戏不仅能启动，还能正确拉起平台服务。

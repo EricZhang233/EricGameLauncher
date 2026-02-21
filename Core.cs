@@ -25,10 +25,7 @@ namespace EricGameLauncher
 {
     #region Base Infrastructure
 
-
-    /// <summary>
     /// Internationalization support
-    /// </summary>
     public static class I18n
     {
         private static Dictionary<string, string> _strings = new();
@@ -66,17 +63,13 @@ namespace EricGameLauncher
             LanguageChanged?.Invoke();
         }
 
-        /// <summary>
         /// Get a translated string by key.
-        /// </summary>
         public static string T(string key)
         {
             return _strings.TryGetValue(key, out var value) ? value : key;
         }
 
-        /// <summary>
         /// Get the list of available languages.
-        /// </summary>
         public static List<string> GetAvailableLanguages()
         {
             if (_allTranslations == null)
@@ -92,20 +85,17 @@ namespace EricGameLauncher
             return new List<string> { "Zh-CN", "EN" };
         }
 
-        /// <summary>
         /// Detect the system language.
-        /// </summary>
         public static string DetectSystemLanguage()
         {
             try
             {
                 var culture = System.Globalization.CultureInfo.CurrentUICulture;
-                string name = culture.Name.ToLowerInvariant(); // e.g. "zh-tw", "zh-hk", "zh-hant"
+                string name = culture.Name.ToLowerInvariant();
                 string lang = culture.TwoLetterISOLanguageName.ToLowerInvariant();
 
                 if (lang == "zh")
                 {
-                    // Traditional Chinese: zh-TW, zh-HK, zh-MO, or any Hant script variant
                     bool isTraditional = name.Contains("tw") || name.Contains("hk") ||
                                          name.Contains("mo") || name.Contains("hant");
                     return isTraditional ? "Zh-TW" : "Zh-CN";
@@ -124,10 +114,7 @@ namespace EricGameLauncher
             catch { return "EN"; }
         }
 
-        /// <summary>
         /// Get the display name for a language code.
-        /// Returns "NativeName (LocalizedName)" when UI language differs, e.g. "鏃ユ湰瑾?(鏃ヨ)" in Chinese UI.
-        /// </summary>
         public static string GetDisplayName(string langCode)
         {
             // Native name from the target language itself
@@ -149,9 +136,8 @@ namespace EricGameLauncher
         }
     }
 
-    /// <summary>
+
     /// Configuration management service.
-    /// </summary>
     public static class ConfigService
     {
         private const string AppFolderName = "EricGameLauncher";
@@ -337,7 +323,8 @@ namespace EricGameLauncher
 
         public static void SetWindowBounds(int x, int y, int width, int height)
         {
-            if (_configData?.Settings != null) _configData.Settings.WindowBounds = [x, y, width, height];
+            if (_configData?.Settings != null)
+                _configData.Settings.WindowBounds = new int[] { x, y, width, height };
         }
     }
 

@@ -179,10 +179,9 @@ namespace EricGameLauncher
 
         private void AppWindow_Changed(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowChangedEventArgs args)
         {
-            
             if (args.DidSizeChange || args.DidPositionChange)
             {
-                SaveWindowState();
+                SaveWindowState(args);
             }
         }
 
@@ -207,12 +206,18 @@ namespace EricGameLauncher
                 {
                     var displayArea = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(
                         this.AppWindow.Id, Microsoft.UI.Windowing.DisplayAreaFallback.Primary);
-                    
-                    
-                    if (x < displayArea.WorkArea.Width - 100 && y < displayArea.WorkArea.Height - 100)
-                    {
-                        this.AppWindow.Move(new Windows.Graphics.PointInt32(x, y));
-                    }
+
+                    var work = displayArea.WorkArea;
+                    int workLeft = work.X;
+                    int workTop = work.Y;
+                    int workRight = work.X + work.Width;
+                    int workBottom = work.Y + work.Height;
+
+                    // Clamp saved position into the current work area so window does not drift off-screen
+                    int targetX = Math.Clamp(x, workLeft, Math.Max(workRight - 100, workLeft));
+                    int targetY = Math.Clamp(y, workTop, Math.Max(workBottom - 100, workTop));
+
+                    this.AppWindow.Move(new Windows.Graphics.PointInt32(targetX, targetY));
                 }
             }
             catch (Exception)
@@ -243,22 +248,48 @@ namespace EricGameLauncher
             catch (Exception) { }
         }
 
-        private void SaveWindowState()
+        private void SaveWindowState(Microsoft.UI.Windowing.AppWindowChangedEventArgs? args)
         {
             try
             {
-                
                 var presenter = this.AppWindow.Presenter as Microsoft.UI.Windowing.OverlappedPresenter;
                 if (presenter != null && presenter.State == Microsoft.UI.Windowing.OverlappedPresenterState.Minimized)
                 {
                     return;
                 }
-                
+
+                var current = ConfigService.GetWindowBounds();
+                int x = current.X, y = current.Y, width = current.Width, height = current.Height;
+
                 var size = this.AppWindow.ClientSize;
                 var position = this.AppWindow.Position;
-                
-                ConfigService.SetWindowBounds(position.X, position.Y, size.Width, size.Height);
-                ConfigService.SaveConfig();
+
+                bool changed = false;
+                if (args?.DidSizeChange == true)
+                {
+                    if (width != size.Width || height != size.Height)
+                    {
+                        width = size.Width;
+                        height = size.Height;
+                        changed = true;
+                    }
+                }
+
+                if (args?.DidPositionChange == true)
+                {
+                    if (x != position.X || y != position.Y)
+                    {
+                        x = position.X;
+                        y = position.Y;
+                        changed = true;
+                    }
+                }
+
+                if (changed)
+                {
+                    ConfigService.SetWindowBounds(x, y, width, height);
+                    ConfigService.SaveConfig();
+                }
             }
             catch (Exception) { }
         }
