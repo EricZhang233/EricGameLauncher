@@ -384,6 +384,8 @@ namespace EricGameLauncher
         private string? _alternativeLaunchCommand;
         private bool _runAlongside;
         private string? _alongsideCommand;
+        private bool _isAltAdmin;
+        private bool _isAlongsideAdmin;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -549,6 +551,12 @@ namespace EricGameLauncher
             set => SetProperty(ref _alternativeLaunchCommand, value);
         }
 
+        public bool IsAltAdmin
+        {
+            get => _isAltAdmin;
+            set => SetProperty(ref _isAltAdmin, value);
+        }
+
         public bool RunAlongside
         {
             get => _runAlongside;
@@ -559,6 +567,12 @@ namespace EricGameLauncher
         {
             get => _alongsideCommand;
             set => SetProperty(ref _alongsideCommand, value);
+        }
+
+        public bool IsAlongsideAdmin
+        {
+            get => _isAlongsideAdmin;
+            set => SetProperty(ref _isAlongsideAdmin, value);
         }
 
         [JsonIgnore]
@@ -843,18 +857,59 @@ namespace EricGameLauncher
         {
             try
             {
-                // shellPath is like "shell:AppsFolder\AUMID"
-                // Using Shell.Application to get the icon is one way, but SHGetFileInfo with SHGSI_ICON is easier
-                SHFILEINFO sfi = new SHFILEINFO();
-                IntPtr hSuccess = SHGetFileInfo(shellPath, 0, ref sfi, (uint)Marshal.SizeOf(sfi), SHGFI_ICON | SHGFI_LARGEICON);
-                if (hSuccess != IntPtr.Zero && sfi.hIcon != IntPtr.Zero)
+                // Use IShellItemImageFactory for virtual items like Store apps
+                Guid guid = new Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b"); // IShellItemImageFactory
+                int hr = SHCreateItemFromParsingName(shellPath, IntPtr.Zero, guid, out IShellItemImageFactory? factory);
+                
+                if (hr == 0 && factory != null)
                 {
-                    try { return (Icon)Icon.FromHandle(sfi.hIcon).Clone(); } finally { DestroyIcon(sfi.hIcon); }
+                    // Size 256x256, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK
+                    hr = factory.GetImage(new SIZE { cx = 256, cy = 256 }, 0x3, out IntPtr hBitmap);
+                    if (hr == 0 && hBitmap != IntPtr.Zero)
+                    {
+                        try
+                        {
+                            var bmp = System.Drawing.Image.FromHbitmap(hBitmap);
+                            using (var ms = new MemoryStream())
+                            {
+                                bmp.Save(ms, ImageFormat.Png);
+                                ms.Position = 0;
+                                return Icon.FromHandle(((Bitmap)bmp).GetHicon());
+                            }
+                        }
+                        finally { DeleteObject(hBitmap); }
+                    }
                 }
             }
             catch (Exception ex) { Logger.Log(ex); }
             return null;
         }
+
+        [ComImport]
+        [Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IShellItemImageFactory
+        {
+            [PreserveSig]
+            int GetImage([In, MarshalAs(UnmanagedType.Struct)] SIZE size, [In] int flags, [Out] out IntPtr phbm);
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct SIZE
+        {
+            public int cx;
+            public int cy;
+        }
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
+        private static extern int SHCreateItemFromParsingName(
+            [In, MarshalAs(UnmanagedType.LPWStr)] string pszPath,
+            [In] IntPtr pbc,
+            [In, MarshalAs(UnmanagedType.LPStruct)] Guid riid,
+            [Out, MarshalAs(UnmanagedType.Interface)] out IShellItemImageFactory ppv);
+
+        [DllImport("gdi32.dll")]
+        private static extern bool DeleteObject(IntPtr hObject);
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
         private struct SHFILEINFO
@@ -1100,9 +1155,10 @@ namespace EricGameLauncher
                                     if (!isPhysical && item.IsLink)
                                     {
                                         var link = item.GetLink;
-                                        if (link != null && !string.IsNullOrEmpty(link.Path) && (File.Exists(link.Path) || Directory.Exists(link.Path)))
+                                        string? lPath = link?.Path;
+                                        if (!string.IsNullOrEmpty(lPath) && (File.Exists(lPath) || Directory.Exists(lPath)))
                                         {
-                                            finalPath = link.Path;
+                                            finalPath = lPath;
                                             isPhysical = true;
                                         }
                                     }

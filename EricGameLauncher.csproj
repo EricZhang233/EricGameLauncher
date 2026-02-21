@@ -22,12 +22,15 @@
     <!-- 自定义输出路径逻辑开始 -->
     <VersionFileContent>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\Version.cs'))</VersionFileContent>
     <ExtractedVersion>$([System.Text.RegularExpressions.Regex]::Match($(VersionFileContent), `Version\s*=\s*"([^"]+)"`).Groups[1].Value)</ExtractedVersion>
-    <LowerConfig Condition="'$(Configuration)' != ''">$([System.String]::Copy('$(Configuration)').ToLower())</LowerConfig>
-    <LowerConfig Condition="'$(Configuration)' == ''">debug</LowerConfig>
     
-    <OutputPath>output\$(ExtractedVersion)\$(LowerConfig)\</OutputPath>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <!-- Debug 使用标准路径，Release 使用版本号路径 -->
+    <OutputPath Condition="'$(Configuration)' != 'Release'">bin\$(Configuration)\</OutputPath>
+    <OutputPath Condition="'$(Configuration)' == 'Release'">output\$(ExtractedVersion)\release\</OutputPath>
+    
+    <!-- 仅在 Release 模式下禁用框架文件夹追加，以保持输出目录整洁 -->
+    <!-- 注意：Debug 模式必须保留追加，否则 WinUI 3 的调试启动会因找不到依赖项而失败 (0xe0434352) -->
+    <AppendTargetFrameworkToOutputPath Condition="'$(Configuration)' == 'Release'">false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath Condition="'$(Configuration)' == 'Release'">false</AppendRuntimeIdentifierToOutputPath>
     <!-- 自定义输出路径逻辑结束 -->
   </PropertyGroup>
 
@@ -65,10 +68,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="_old-version1.3.1\**" />
-    <EmbeddedResource Remove="_old-version1.3.1\**" />
-    <None Remove="_old-version1.3.1\**" />
-    <Page Remove="_old-version1.3.1\**" />
     <Content Remove="readme_res\**" />
     <Compile Remove="readme_res\**" />
     <EmbeddedResource Remove="readme_res\**" />
@@ -77,5 +76,3 @@
   </ItemGroup>
 
 </Project>
-
-
