@@ -11,9 +11,11 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Windows.ApplicationModel.DataTransfer;
+using WinRT.Interop;
 
 namespace EricGameLauncher
 {
@@ -28,6 +30,13 @@ namespace EricGameLauncher
         private ToggleSwitch? _toggleCloseAfterLaunch;
         private Slider? _sizeSlider;
         private ListView? _orderItemsControl;
+        private StackPanel[] _customSections;
+        private TextBox[] _customTitles;
+        private TextBox[] _customCommands;
+        private CheckBox[] _customAdmins;
+        private DropDownButton[] _customBrowses;
+        private TextBlock[] _customAdminLabels;
+        private TextBlock[] _customSlotLabels;
 
         private double _iconSize = 118;
         public double IconSize
@@ -77,6 +86,23 @@ namespace EricGameLauncher
         public MainWindow()
         {
             this.InitializeComponent();
+
+            // Initialize custom menu section arrays
+            _customSections = new StackPanel[] { PropCustomSection1, PropCustomSection2, PropCustomSection3, PropCustomSection4, PropCustomSection5, PropCustomSection6, PropCustomSection7, PropCustomSection8, PropCustomSection9, PropCustomSection10 };
+            _customTitles = new TextBox[] { PropCustomTitle1, PropCustomTitle2, PropCustomTitle3, PropCustomTitle4, PropCustomTitle5, PropCustomTitle6, PropCustomTitle7, PropCustomTitle8, PropCustomTitle9, PropCustomTitle10 };
+            _customCommands = new TextBox[] { PropCustomCommand1, PropCustomCommand2, PropCustomCommand3, PropCustomCommand4, PropCustomCommand5, PropCustomCommand6, PropCustomCommand7, PropCustomCommand8, PropCustomCommand9, PropCustomCommand10 };
+            _customAdmins = new CheckBox[] { PropCustomAdmin1, PropCustomAdmin2, PropCustomAdmin3, PropCustomAdmin4, PropCustomAdmin5, PropCustomAdmin6, PropCustomAdmin7, PropCustomAdmin8, PropCustomAdmin9, PropCustomAdmin10 };
+            _customBrowses = new DropDownButton[] { BtnCustomBrowse1, BtnCustomBrowse2, BtnCustomBrowse3, BtnCustomBrowse4, BtnCustomBrowse5, BtnCustomBrowse6, BtnCustomBrowse7, BtnCustomBrowse8, BtnCustomBrowse9, BtnCustomBrowse10 };
+            _customAdminLabels = new TextBlock[] { PropCustomAdminLabel1, PropCustomAdminLabel2, PropCustomAdminLabel3, PropCustomAdminLabel4, PropCustomAdminLabel5, PropCustomAdminLabel6, PropCustomAdminLabel7, PropCustomAdminLabel8, PropCustomAdminLabel9, PropCustomAdminLabel10 };
+            _customSlotLabels = new TextBlock[] { PropCustomSlotLabel1, PropCustomSlotLabel2, PropCustomSlotLabel3, PropCustomSlotLabel4, PropCustomSlotLabel5, PropCustomSlotLabel6, PropCustomSlotLabel7, PropCustomSlotLabel8, PropCustomSlotLabel9, PropCustomSlotLabel10 };
+
+            for (int i = 0; i < 10; i++)
+            {
+                int index = i;
+                _customTitles[index].TextChanged += (s, e) => UpdateCustomVisibility();
+                _customCommands[index].TextChanged += (s, e) => UpdateCustomVisibility();
+                _customBrowses[index].Click += (s, e) => { /* Flyout handled in PopulateShortcutMenus */ };
+            }
 
             
             VersionText.Text = AppVersion.DisplayVersion;
@@ -173,15 +199,53 @@ namespace EricGameLauncher
             
             LoadSettings();
             ApplyLocalization();
-            
+
+            // Intercept Win32 messages to detect user-initiated resize/move
+            _hWnd = WindowNative.GetWindowHandle(this);
+            _oldWndProc = SetWindowLongPtr(_hWnd, GWLP_WNDPROC, Marshal.GetFunctionPointerForDelegate(_wndProcDelegate = new WndProc(WindowProcess)));
+
             _ = LoadData();
         }
 
+        #region Win32 Message Interception
+        private IntPtr _hWnd;
+        private IntPtr _oldWndProc;
+        private WndProc? _wndProcDelegate;
+
+        private delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+        private const int GWLP_WNDPROC = -4;
+        private const uint WM_EXITSIZEMOVE = 0x0232;
+
+        private IntPtr WindowProcess(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+        {
+            if (msg == WM_EXITSIZEMOVE)
+            {
+                // User finished resizing or moving the window
+                SaveWindowState(null);
+            }
+            return CallWindowProc(_oldWndProc, hWnd, msg, wParam, lParam);
+        }
+        #endregion
+
         private void AppWindow_Changed(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowChangedEventArgs args)
         {
-            if (args.DidSizeChange || args.DidPositionChange)
+            // We no longer save window state here to avoid system-triggered drift.
+            // Saving is now handled via WM_EXITSIZEMOVE in WindowProcess.
+            
+            if (args.DidSizeChange && this.AppWindow != null)
             {
-                SaveWindowState(args);
+                // Update hit test region if size changed
+                var inputNonClientPointerSource = Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(this.AppWindow.Id);
+                inputNonClientPointerSource.SetRegionRects(Microsoft.UI.Input.NonClientRegionKind.Caption, new Windows.Graphics.RectInt32[] {
+                    new Windows.Graphics.RectInt32(0, 0, this.AppWindow.Size.Width, 48)
+                });
             }
         }
 
@@ -191,16 +255,15 @@ namespace EricGameLauncher
             {
                 var (x, y, width, height) = ConfigService.GetWindowBounds();
                 
-                
+                // Use Resize instead of ResizeClient to avoid drifting when title bar is extended
                 if (width > 0 && height > 0)
                 {
-                    this.AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(width, height));
+                    this.AppWindow.Resize(new Windows.Graphics.SizeInt32(width, height));
                 }
                 else
                 {
-                    this.AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(660, 420));
+                    this.AppWindow.Resize(new Windows.Graphics.SizeInt32(950, 650));
                 }
-                
                 
                 if (x >= 0 && y >= 0)
                 {
@@ -222,7 +285,7 @@ namespace EricGameLauncher
             }
             catch (Exception)
             {
-                this.AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(660, 420));
+                this.AppWindow.Resize(new Windows.Graphics.SizeInt32(950, 650));
             }
         }
 
@@ -253,19 +316,23 @@ namespace EricGameLauncher
             try
             {
                 var presenter = this.AppWindow.Presenter as Microsoft.UI.Windowing.OverlappedPresenter;
-                if (presenter != null && presenter.State == Microsoft.UI.Windowing.OverlappedPresenterState.Minimized)
+                if (presenter != null && (presenter.State == Microsoft.UI.Windowing.OverlappedPresenterState.Minimized || 
+                                         presenter.State == Microsoft.UI.Windowing.OverlappedPresenterState.Maximized))
                 {
+                    // Do not save window state when minimized or maximized
                     return;
                 }
 
                 var current = ConfigService.GetWindowBounds();
                 int x = current.X, y = current.Y, width = current.Width, height = current.Height;
 
-                var size = this.AppWindow.ClientSize;
+                // Use Size instead of ClientSize for consistent mapping with Resize
+                var size = this.AppWindow.Size;
                 var position = this.AppWindow.Position;
 
                 bool changed = false;
-                if (args?.DidSizeChange == true)
+                // If args is null, it means it's triggered by WM_EXITSIZEMOVE, so we always check for changes
+                if (args == null || args.DidSizeChange)
                 {
                     if (width != size.Width || height != size.Height)
                     {
@@ -275,7 +342,7 @@ namespace EricGameLauncher
                     }
                 }
 
-                if (args?.DidPositionChange == true)
+                if (args == null || args.DidPositionChange)
                 {
                     if (x != position.X || y != position.Y)
                     {
@@ -628,7 +695,10 @@ namespace EricGameLauncher
         {
             try
             {
-                return (sender as FrameworkElement)?.Tag as AppItem;
+                if (sender is FrameworkElement fe) return fe.Tag as AppItem;
+                if (sender is MenuFlyout menu && menu.Items.Count > 0 && menu.Items[0] is FrameworkElement firstItem)
+                    return firstItem.Tag as AppItem;
+                return null;
             }
             catch (Exception)
             {
@@ -644,6 +714,83 @@ namespace EricGameLauncher
                 if (item != null)
                 {
                     LaunchItem(item);
+                }
+            }
+            catch (Exception) { }
+        }
+
+        private void ContextMenu_Opening(object sender, object e)
+        {
+            if (sender is MenuFlyout menu)
+            {
+                var item = GetTag(menu);
+                if (item == null) return;
+
+                // 1. Handle standard menu localization
+                foreach (var flyoutItem in menu.Items)
+                {
+                    if (flyoutItem is MenuFlyoutItem menuItem)
+                    {
+                        var text = menuItem.Text;
+                        if (menuItem.Icon is SymbolIcon si)
+                        {
+                            menuItem.Text = si.Symbol switch
+                            {
+                                Symbol.Play => I18n.T("Menu_Run"),
+                                Symbol.Repair => I18n.T("Menu_RunManager"),
+                                Symbol.Folder => I18n.T("Menu_OpenFileLocation"),
+                                Symbol.Edit => I18n.T("Menu_Properties"),
+                                Symbol.Delete => I18n.T("Menu_Delete"),
+                                _ => text
+                            };
+                        }
+                    }
+                }
+
+                // 2. Clear old custom items
+                var toRemove = menu.Items.Where(i => i.Tag is CustomMenuItem || (i is MenuFlyoutSeparator sep && sep.Name == "CustomMenuSeparator")).ToList();
+                foreach (var r in toRemove) menu.Items.Remove(r);
+
+                // 3. Inject new custom items
+                var customItems = item.GetCustomMenuItems();
+                if (customItems.Count > 0)
+                {
+                    int index = 0;
+                    for (int i = 0; i < menu.Items.Count; i++)
+                    {
+                        if (menu.Items[i] is MenuFlyoutSeparator)
+                        {
+                            index = i;
+                            break;
+                        }
+                    }
+
+                    menu.Items.Insert(index++, new MenuFlyoutSeparator { Name = "CustomMenuSeparator" });
+                    foreach (var ci in customItems)
+                    {
+                        var menuItem = new MenuFlyoutItem
+                        {
+                            Text = ci.Title,
+                            Tag = ci,
+                            Icon = new SymbolIcon(Symbol.Tag)
+                        };
+                        menuItem.Click += MenuCustom_Click;
+                        menu.Items.Insert(index++, menuItem);
+                    }
+                }
+            }
+        }
+
+        private void MenuCustom_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is MenuFlyoutItem menuItem && menuItem.Tag is CustomMenuItem ci)
+                {
+                    if (!string.IsNullOrEmpty(ci.Command))
+                    {
+                        RunProcess(ci.Command, ci.IsAdmin);
+                    }
                 }
             }
             catch (Exception) { }
@@ -736,6 +883,24 @@ namespace EricGameLauncher
                 PropAlongsideCommand.Text = _currentEditingItem.AlongsideCommand ?? "";
                 PropIsAlongsideAdmin.IsChecked = _currentEditingItem.IsAlongsideAdmin;
 
+                var customItems = _currentEditingItem.GetCustomMenuItems();
+                for (int i = 0; i < 10; i++)
+                {
+                    if (i < customItems.Count)
+                    {
+                        _customTitles[i].Text = customItems[i].Title ?? "";
+                        _customCommands[i].Text = customItems[i].Command ?? "";
+                        _customAdmins[i].IsChecked = customItems[i].IsAdmin;
+                    }
+                    else
+                    {
+                        _customTitles[i].Text = "";
+                        _customCommands[i].Text = "";
+                        _customAdmins[i].IsChecked = false;
+                    }
+                }
+                UpdateCustomVisibility();
+
                 
                 if (!string.IsNullOrEmpty(_currentEditingItem.IconPath) && File.Exists(_currentEditingItem.IconPath))
                 {
@@ -791,6 +956,22 @@ namespace EricGameLauncher
                 _currentEditingItem.AlternativeLaunchCommand = PropAlternativeLaunchCommand.Text?.Trim() ?? "";
                 _currentEditingItem.RunAlongside = PropRunAlongside.IsChecked ?? false;
                 _currentEditingItem.AlongsideCommand = PropAlongsideCommand.Text?.Trim() ?? "";
+
+                var customItems = new List<CustomMenuItem>();
+                for (int i = 0; i < 10; i++)
+                {
+                    string cmd = _customCommands[i].Text?.Trim() ?? "";
+                    if (!string.IsNullOrEmpty(cmd))
+                    {
+                        customItems.Add(new CustomMenuItem
+                        {
+                            Title = _customTitles[i].Text?.Trim() ?? "",
+                            Command = cmd,
+                            IsAdmin = _customAdmins[i].IsChecked ?? false
+                        });
+                    }
+                }
+                _currentEditingItem.SetCustomMenuItems(customItems);
 
                 
                 
@@ -860,14 +1041,10 @@ namespace EricGameLauncher
         private void ShowPropertyPanel()
         {
             PropertyPanel.Visibility = Visibility.Visible;
-            
-            
             PopulateShortcutMenus();
-            
             
             var transform = new TranslateTransform { X = 400 };
             PropertyPanel.RenderTransform = transform;
-            
             
             var storyboard = new Storyboard();
             var panelAnimation = new DoubleAnimation
@@ -883,7 +1060,6 @@ namespace EricGameLauncher
             storyboard.Children.Add(panelAnimation);
             storyboard.Begin();
             
-            
             AppGrid.Padding = new Thickness(20, 20, 420, 20);
         }
 
@@ -891,7 +1067,9 @@ namespace EricGameLauncher
         {
             try
             {
-                
+                var startMenuItems = ShortcutScanner.GetStartMenuItems();
+                var desktopItems = ShortcutScanner.GetDesktopItems();
+
                 MenuExeStartMenu.Items.Clear();
                 MenuExeDesktop.Items.Clear();
                 MenuAltStartMenu.Items.Clear();
@@ -901,23 +1079,42 @@ namespace EricGameLauncher
                 MenuMgrStartMenu.Items.Clear();
                 MenuMgrDesktop.Items.Clear();
 
-                
-                var startMenuItems = ShortcutScanner.GetStartMenuItems();
-                var desktopItems = ShortcutScanner.GetDesktopItems();
-
-                
                 PopulateMenuItems(MenuExeStartMenu, startMenuItems, PropExePath);
-                PopulateMenuItems(MenuAltStartMenu, startMenuItems, PropAlternativeLaunchCommand);
-                PopulateMenuItems(MenuAlongStartMenu, startMenuItems, PropAlongsideCommand);
-                PopulateMenuItems(MenuMgrStartMenu, startMenuItems, PropMgrPath);
-
-                
                 PopulateMenuItems(MenuExeDesktop, desktopItems, PropExePath);
+                PopulateMenuItems(MenuAltStartMenu, startMenuItems, PropAlternativeLaunchCommand);
                 PopulateMenuItems(MenuAltDesktop, desktopItems, PropAlternativeLaunchCommand);
+                PopulateMenuItems(MenuAlongStartMenu, startMenuItems, PropAlongsideCommand);
                 PopulateMenuItems(MenuAlongDesktop, desktopItems, PropAlongsideCommand);
+                PopulateMenuItems(MenuMgrStartMenu, startMenuItems, PropMgrPath);
                 PopulateMenuItems(MenuMgrDesktop, desktopItems, PropMgrPath);
+
+                for (int i = 0; i < 10; i++)
+                {
+                    int index = i;
+                    var flyout = new MenuFlyout();
+                    var startMenuSub = new MenuFlyoutSubItem { Text = I18n.T("Menu_StartMenu"), Icon = new FontIcon { Glyph = "\uE700" } };
+                    var desktopSub = new MenuFlyoutSubItem { Text = I18n.T("Menu_Desktop"), Icon = new FontIcon { Glyph = "\uE8FC" } };
+                    var browseItem = new MenuFlyoutItem { Text = I18n.T("Menu_Browse"), Icon = new FontIcon { Glyph = "\uE8E5" } };
+                    
+                    browseItem.Click += (s, e) => BtnBrowseCustom_Click(index);
+
+                    PopulateMenuItems(startMenuSub, startMenuItems, _customCommands[i]);
+                    PopulateMenuItems(desktopSub, desktopItems, _customCommands[i]);
+
+                    flyout.Items.Add(startMenuSub);
+                    flyout.Items.Add(desktopSub);
+                    flyout.Items.Add(new MenuFlyoutSeparator());
+                    flyout.Items.Add(browseItem);
+
+                    _customBrowses[i].Flyout = flyout;
+                }
             }
             catch (Exception) { }
+        }
+
+        private void BtnBrowseCustom_Click(int index)
+        {
+            BrowseFile(_customCommands[index]);
         }
 
         private void PopulateMenuItems(MenuFlyoutSubItem parent, List<ShortcutScanner.FileItem> items, TextBox targetTextBox)
@@ -1448,6 +1645,16 @@ namespace EricGameLauncher
                 _orderItemsControl = OrderItemsControl as ListView;
 
                 // Localize sort flyout text
+                PropSaveText.Text = I18n.T("Button_Save");
+                PropDeleteText.Text = I18n.T("Button_Delete");
+
+                PropCustomMenuLabel.Text = I18n.T("Property_CustomMenu");
+                for (int i = 0; i < 10; i++)
+                {
+                    _customTitles[i].PlaceholderText = I18n.T("Property_CustomTitlePlaceholder");
+                    _customCommands[i].PlaceholderText = I18n.T("Property_CustomCommandPlaceholder");
+                    ToolTipService.SetToolTip(_customAdmins[i], I18n.T("Property_RunAsAdmin"));
+                }
                 SortTitle.Text = I18n.T("Sort_Title");
                 SortDescription.Text = I18n.T("Sort_Description");
             }
@@ -1967,46 +2174,31 @@ namespace EricGameLauncher
                 catch (Exception) { }
 
                 EmptyStateText.Text = I18n.T("Empty_Description");
+
+                // Custom Menu Localization
+                PropCustomMenuLabel.Text = I18n.T("Property_CustomMenu");
+                string titlePlaceholder = I18n.T("Property_CustomTitlePlaceholder");
+                string cmdPlaceholder = I18n.T("Property_CustomCommandPlaceholder");
+                string browseTooltip = I18n.T("Property_BrowseFile");
+                string selectTooltip = I18n.T("Property_SelectFile");
+                string adminTooltip = I18n.T("Property_Admin");
+
+                string customItemLabel = I18n.T("Property_CustomItem");
+                for (int i = 0; i < 10; i++)
+                {
+                    _customSlotLabels[i].Text = $"{customItemLabel} {i + 1}";
+                    _customTitles[i].PlaceholderText = titlePlaceholder;
+                    _customCommands[i].PlaceholderText = cmdPlaceholder;
+                    ToolTipService.SetToolTip(_customBrowses[i], selectTooltip);
+                    ToolTipService.SetToolTip(_customAdmins[i], adminTooltip);
+                    _customAdminLabels[i].Text = adminTooltip;
+                }
             }
             catch (Exception)
             {
             }
         }
 
-        private void ContextMenu_Opening(object sender, object e)
-        {
-            if (sender is MenuFlyout flyout)
-            {
-                foreach (var item in flyout.Items)
-                {
-                    if (item is MenuFlyoutItem menuItem)
-                    {
-                        var text = menuItem.Text;
-                            // We identify items by their Icon property
-                            if (menuItem.Icon is SymbolIcon si)
-                            {
-                                menuItem.Text = si.Symbol switch
-                                {
-                                    Symbol.Play => I18n.T("Menu_Run"),
-                                    Symbol.Folder => I18n.T("Menu_OpenFileLocation"),
-                                    Symbol.Edit => I18n.T("Menu_Properties"),
-                                    Symbol.Delete => I18n.T("Menu_Delete"),
-                                    _ => text
-                                };
-                            }
-                            else if (menuItem.Visibility == Microsoft.UI.Xaml.Visibility.Visible ||
-                                     menuItem.Visibility == Microsoft.UI.Xaml.Visibility.Collapsed)
-                            {
-                                var idx = flyout.Items.IndexOf(item);
-                                if (idx == 1)
-                                {
-                                    menuItem.Text = I18n.T("Menu_RunManager");
-                                }
-                            }
-                    }
-                }
-            }
-        }
 
         private void LanguageComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -2020,6 +2212,22 @@ namespace EricGameLauncher
                     ConfigService.Language = selectedLang;
                     ConfigService.SaveConfig();
                     I18n.Load(selectedLang);
+                }
+            }
+        }
+        private void UpdateCustomVisibility()
+        {
+            for (int i = 0; i < 10; i++)
+            {
+                if (i == 0)
+                {
+                    _customSections[i].Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    // Show if previous one has a command typed
+                    bool prevHasValue = !string.IsNullOrEmpty(_customCommands[i - 1].Text?.Trim());
+                    _customSections[i].Visibility = prevHasValue ? Visibility.Visible : Visibility.Collapsed;
                 }
             }
         }
