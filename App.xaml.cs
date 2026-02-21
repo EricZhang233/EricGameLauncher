@@ -35,5 +35,3 @@ namespace EricGameLauncher
         private Window? m_window;
     }
 }
-
-

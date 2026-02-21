@@ -243,6 +243,8 @@ namespace EricGameLauncher
                     IsAdmin = item.IsAdmin,
                     MgrPath = item.MgrPath,
                     IsMgrAdmin = item.IsMgrAdmin,
+                    IsAltAdmin = item.IsAltAdmin,
+                    IsAlongsideAdmin = item.IsAlongsideAdmin,
                     UseAlternativeLaunch = item.UseAlternativeLaunch,
                     AlternativeLaunchCommand = item.AlternativeLaunchCommand,
                     RunAlongside = item.RunAlongside,
