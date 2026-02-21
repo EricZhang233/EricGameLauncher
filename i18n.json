@@ -59,7 +59,11 @@
 		"Source_StartMenu": "所有应用",
 		"Source_Desktop": "桌面",
 		"Empty_Title": "还没有添加游戏",
-		"Empty_Description": "点击右上角的「更多」按钮添加游戏"
+		"Empty_Description": "点击右上角的「更多」按钮添加游戏",
+		"Property_CustomMenu": "自定义右键菜单",
+		"Property_CustomTitlePlaceholder": "菜单标题",
+		"Property_CustomCommandPlaceholder": "执行路径或参数",
+		"Property_CustomItem": "自定义项"
 	},
 	"EN": {
 		"_LangName": "English",
@@ -121,7 +125,11 @@
 		"Source_StartMenu": "All Apps",
 		"Source_Desktop": "Desktop",
 		"Empty_Title": "No games added yet",
-		"Empty_Description": "Click the \"More\" button in the top-right corner to add games"
+		"Empty_Description": "Click the \"More\" button in the top-right corner to add games",
+		"Property_CustomMenu": "Custom Context Menu",
+		"Property_CustomTitlePlaceholder": "Title",
+		"Property_CustomCommandPlaceholder": "Path or Arguments",
+		"Property_CustomItem": "Custom Item"
 	},
 	"Zh-TW": {
 		"_LangName": "繁體中文",
@@ -183,7 +191,11 @@
 		"Source_StartMenu": "所有應用",
 		"Source_Desktop": "桌面",
 		"Empty_Title": "尚未新增任何遊戲",
-		"Empty_Description": "點擊右上角「更多」按鈕新增遊戲"
+		"Empty_Description": "點擊右上角「更多」按鈕新增遊戲",
+		"Property_CustomMenu": "自定義右鍵選單",
+		"Property_CustomTitlePlaceholder": "選單標題",
+		"Property_CustomCommandPlaceholder": "執行路徑或參數",
+		"Property_CustomItem": "自定義項"
 	},
 	"JA": {
 		"_LangName": "日本語",
@@ -242,7 +254,11 @@
 		"Source_StartMenu": "すべてのアプリ",
 		"Source_Desktop": "デスクトップ",
 		"Empty_Title": "ゲームがまだ追加されていません",
-		"Empty_Description": "右上の「詳細」ボタンをクリックしてゲームを追加"
+		"Empty_Description": "右上の「詳細」ボタンをクリックしてゲームを追加",
+		"Property_CustomMenu": "カスタム右クリックメニュー",
+		"Property_CustomTitlePlaceholder": "メニュータイトル",
+		"Property_CustomCommandPlaceholder": "実行パスまたは引数",
+		"Property_CustomItem": "カスタム項目"
 	},
 	"KO": {
 		"_LangName": "한국어",
@@ -296,7 +312,11 @@
 		"Source_StartMenu": "모든 앱",
 		"Source_Desktop": "바탕 화면",
 		"Empty_Title": "추가된 게임이 없습니다",
-		"Empty_Description": "오른쪽 상단의 \"더 보기\" 버튼을 클릭하여 게임을 추가하세요"
+		"Empty_Description": "오른쪽 상단의 \"더 보기\" 버튼을 클릭하여 게임을 추가하세요",
+		"Property_CustomMenu": "사용자 지정 우클릭 메뉴",
+		"Property_CustomTitlePlaceholder": "메뉴 제목",
+		"Property_CustomCommandPlaceholder": "실행 경로 또는 인수",
+		"Property_CustomItem": "사용자 지정 항목"
 	},
 	"FR": {
 		"_LangName": "Français",
@@ -350,7 +370,11 @@
 		"Source_StartMenu": "Toutes les applications",
 		"Source_Desktop": "Bureau",
 		"Empty_Title": "Aucun jeu ajouté",
-		"Empty_Description": "Cliquez sur le bouton \"Plus\" en haut à droite pour ajouter des jeux"
+		"Empty_Description": "Cliquez sur le bouton \"Plus\" en haut à droite pour ajouter des jeux",
+		"Property_CustomMenu": "Menu contextuel personnalisé",
+		"Property_CustomTitlePlaceholder": "Titre du menu",
+		"Property_CustomCommandPlaceholder": "Chemin ou arguments",
+		"Property_CustomItem": "Élément personnalisé"
 	},
 	"DE": {
 		"_LangName": "Deutsch",
@@ -404,7 +428,11 @@
 		"Source_StartMenu": "Alle Apps",
 		"Source_Desktop": "Desktop",
 		"Empty_Title": "Noch keine Spiele hinzugefügt",
-		"Empty_Description": "Klicken Sie auf die Schaltfläche \"Mehr\" oben rechts, um Spiele hinzuzufügen"
+		"Empty_Description": "Klicken Sie auf die Schaltfläche \"Mehr\" oben rechts, um Spiele hinzuzufügen",
+		"Property_CustomMenu": "Benutzerdefiniertes Kontextmenü",
+		"Property_CustomTitlePlaceholder": "Menütitel",
+		"Property_CustomCommandPlaceholder": "Pfad oder Argumente",
+		"Property_CustomItem": "Benutzerdefiniertes Element"
 	},
 	"ES": {
 		"_LangName": "Español",
@@ -458,6 +486,9 @@
 		"Source_StartMenu": "Todas las aplicaciones",
 		"Source_Desktop": "Escritorio",
 		"Empty_Title": "No hay juegos agregados aún",
-		"Empty_Description": "Haga clic en el botón \"Más\" en la esquina superior derecha para agregar juegos"
+		"Empty_Description": "Haga clic en el botón \"Más\" en la esquina superior derecha para agregar juegos",
+		"Property_CustomMenu": "Menú contextual personalizado",
+		"Property_CustomTitlePlaceholder": "Título del menú",
+		"Property_CustomCommandPlaceholder": "Ruta de ejecución o argumentos"
 	}
 }

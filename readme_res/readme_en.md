@@ -57,6 +57,10 @@ Whether your games are from Steam, Epic, or independent exe files, this is their
         > 💡 **Pro Tip**: Keep the game cover in EGL, but actually call an external tool (like Starward) to launch the game and track playtime.
     *   **Execute Simultaneously on Startup**: Want to automatically open a translator, timer, or performance monitor when playing? Configure this for one-click dual launch.
     *   **Change Icon**: Supports manual image uploads for covers—a savior for those with OCD.
+    *   **Custom Context Menu**: Add up to 10 custom menu items for each project.
+        *   Independently configure titles, command paths, and arguments.
+        *   Toggle "Run as Administrator" for each custom item.
+        *   **Smart Shifting**: Subsequent items automatically shift up when an intermediate item is deleted to keep the list compact.
     *   **Icon Size**: From compact lists to immersive large grids, customize as you wish.
 
 ### Designed for Geeks

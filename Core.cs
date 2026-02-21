@@ -234,7 +234,8 @@ namespace EricGameLauncher
                     UseAlternativeLaunch = item.UseAlternativeLaunch,
                     AlternativeLaunchCommand = item.AlternativeLaunchCommand,
                     RunAlongside = item.RunAlongside,
-                    AlongsideCommand = item.AlongsideCommand
+                    AlongsideCommand = item.AlongsideCommand,
+                    CustomMenu = item.CustomMenu
                 }).ToList();
                 SaveConfigData();
             }
@@ -536,6 +537,62 @@ namespace EricGameLauncher
             set => SetProperty(ref _isAlongsideAdmin, value);
         }
 
+        public string? CustomMenu
+        {
+            get => _customMenu;
+            set => SetProperty(ref _customMenu, value);
+        }
+
+        private string? _customMenu;
+
+        public List<CustomMenuItem> GetCustomMenuItems()
+        {
+            var result = new List<CustomMenuItem>();
+            if (string.IsNullOrEmpty(CustomMenu)) return result;
+
+            try
+            {
+                var pairs = CustomMenu.Split(':', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var pair in pairs)
+                {
+                    var parts = pair.Split('|');
+                    if (parts.Length >= 2)
+                    {
+                        result.Add(new CustomMenuItem
+                        {
+                            Title = Uri.UnescapeDataString(parts[0]),
+                            Command = Uri.UnescapeDataString(parts[1]),
+                            IsAdmin = parts.Length > 2 && bool.TryParse(parts[2], out bool isAdmin) && isAdmin
+                        });
+                    }
+                }
+            }
+            catch { }
+            return result;
+        }
+
+        public void SetCustomMenuItems(List<CustomMenuItem> items)
+        {
+            if (items == null || items.Count == 0)
+            {
+                CustomMenu = null;
+                return;
+            }
+
+            var builder = new StringBuilder();
+            foreach (var item in items)
+            {
+                if (string.IsNullOrEmpty(item.Command)) continue;
+                if (builder.Length > 0) builder.Append(':');
+                builder.Append(Uri.EscapeDataString(item.Title ?? ""));
+                builder.Append('|');
+                builder.Append(Uri.EscapeDataString(item.Command ?? ""));
+                builder.Append('|');
+                builder.Append(item.IsAdmin.ToString());
+            }
+            CustomMenu = builder.Length > 0 ? builder.ToString() : null;
+        }
+
         [JsonIgnore]
         public bool HasManager => !string.IsNullOrEmpty(MgrPath);
 
@@ -616,6 +673,13 @@ namespace EricGameLauncher
         public string? InstallDir { get; set; }
         public string? Executable { get; set; }
         public string? FullExePath { get; set; }
+    }
+
+    public class CustomMenuItem
+    {
+        public string? Title { get; set; }
+        public string? Command { get; set; }
+        public bool IsAdmin { get; set; }
     }
 
     #endregion
