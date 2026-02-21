@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -25,34 +25,6 @@ namespace EricGameLauncher
 {
     #region Base Infrastructure
 
-    public static class Logger
-    {
-        private static readonly object _lock = new();
-
-        public static void Log(Exception ex, string context = "")
-        {
-            try
-            {
-                string msg = string.IsNullOrEmpty(context) ? ex.ToString() : $"[{context}] {ex}";
-                string path = ConfigService.CurrentDataPath;
-                if (string.IsNullOrEmpty(path))
-                {
-                    path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data");
-                }
-
-                if (!Directory.Exists(path)) Directory.CreateDirectory(path);
-
-                string logFile = Path.Combine(path, "log.log");
-                string content = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {msg}{Environment.NewLine}{Environment.NewLine}";
-
-                lock (_lock)
-                {
-                    File.AppendAllText(logFile, content);
-                }
-            }
-            catch { }
-        }
-    }
 
     /// <summary>
     /// Internationalization support
@@ -83,7 +55,7 @@ namespace EricGameLauncher
                     string json = reader.ReadToEnd();
                     _allTranslations = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(json);
                 }
-                catch (Exception ex) { Logger.Log(ex); }
+                catch (Exception) { }
             }
 
             if (_allTranslations != null && _allTranslations.TryGetValue(langCode, out var dict))
@@ -154,7 +126,7 @@ namespace EricGameLauncher
 
         /// <summary>
         /// Get the display name for a language code.
-        /// Returns "NativeName (LocalizedName)" when UI language differs, e.g. "日本語 (日语)" in Chinese UI.
+        /// Returns "NativeName (LocalizedName)" when UI language differs, e.g. "鏃ユ湰瑾?(鏃ヨ)" in Chinese UI.
         /// </summary>
         public static string GetDisplayName(string langCode)
         {
@@ -246,14 +218,14 @@ namespace EricGameLauncher
                     }
                     if (iconCount > 0)
                     {
-                        try { Directory.Delete(oldIconPath, true); } catch (Exception ex) { Logger.Log(ex); }
+                        try { Directory.Delete(oldIconPath, true); } catch (Exception) { }
                     }
                 }
 
                 CurrentDataPath = newPath;
                 LoadConfigData();
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         public static Task SwitchStorageModeAsync(bool useSystemPath) => Task.Run(() => SwitchStorageMode(useSystemPath));
@@ -316,7 +288,7 @@ namespace EricGameLauncher
                 string jsonString = JsonSerializer.Serialize(_configData, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(jsonPath, jsonString);
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         public static bool CloseAfterLaunch
@@ -685,16 +657,14 @@ namespace EricGameLauncher
                     bitmap.UriSource = new Uri(fileUri, UriKind.Absolute);
                     return bitmap;
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    Logger.Log(ex);
                     bitmap.UriSource = new Uri(path, UriKind.Absolute);
                     return bitmap;
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Logger.Log(ex);
                 return null;
             }
         }
@@ -788,7 +758,7 @@ namespace EricGameLauncher
         public static async Task<string?> GetIconPathAsync(string exePath, string itemId)
         {
             if (string.IsNullOrEmpty(exePath)) return null;
-            if (!exePath.StartsWith("shell:AppsFolder\\") && !File.Exists(exePath)) return null;
+            if (!exePath.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase) && !File.Exists(exePath)) return null;
             
             string iconPath = Path.Combine(CachePath, $"{itemId}.png");
             if (File.Exists(iconPath) && new FileInfo(iconPath).Length > 0) return iconPath;
@@ -800,7 +770,7 @@ namespace EricGameLauncher
             try
             {
                 if (string.IsNullOrEmpty(sourcePath)) return null;
-                bool isStoreApp = sourcePath.StartsWith("shell:AppsFolder\\");
+                bool isStoreApp = sourcePath.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase);
                 if (!isStoreApp && !File.Exists(sourcePath)) return null;
 
                 string targetPath = sourcePath;
@@ -835,7 +805,7 @@ namespace EricGameLauncher
                 Icon? icon = null;
                 if (isStoreApp)
                 {
-                    icon = ExtractStoreAppIcon(sourcePath);
+                    if (ExtractStoreAppIcon(sourcePath, savePath)) return savePath;
                 }
                 else
                 {
@@ -853,36 +823,94 @@ namespace EricGameLauncher
             catch { return null; }
         }
 
-        private static Icon? ExtractStoreAppIcon(string shellPath)
+        private static bool ExtractStoreAppIcon(string shellPath, string savePath)
         {
             try
             {
-                // Use IShellItemImageFactory for virtual items like Store apps
-                Guid guid = new Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b"); // IShellItemImageFactory
-                int hr = SHCreateItemFromParsingName(shellPath, IntPtr.Zero, guid, out IShellItemImageFactory? factory);
+                // First try IShellItemImageFactory (Modern Shell approach)
+                Guid iid = new Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b"); // IShellItemImageFactory
+                int hr = SHCreateItemFromParsingName(shellPath, IntPtr.Zero, iid, out IShellItemImageFactory? factory);
                 
                 if (hr == 0 && factory != null)
                 {
-                    // Size 256x256, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK
-                    hr = factory.GetImage(new SIZE { cx = 256, cy = 256 }, 0x3, out IntPtr hBitmap);
+                    // Try ICONONLY (0x4) | SCALEUP (0x100)
+                    hr = factory.GetImage(new SIZE { cx = 256, cy = 256 }, 0x104, out IntPtr hBitmap);
+                    
+                    if (hr != 0)
+                    {
+                        // Fallback: THUMBNAILONLY (0x8) | SCALEUP (0x100)
+                        hr = factory.GetImage(new SIZE { cx = 256, cy = 256 }, 0x108, out hBitmap);
+                    }
+
                     if (hr == 0 && hBitmap != IntPtr.Zero)
                     {
                         try
                         {
-                            var bmp = System.Drawing.Image.FromHbitmap(hBitmap);
-                            using (var ms = new MemoryStream())
+                            // SHCreateItemFromParsingName GetImage returns an hBitmap (often a DIB section).
+                            // Image.FromHbitmap often discards alpha. We manually create a 32bppArgb bitmap.
+                            using var bmp = CreateBitmapFromHBitmap(hBitmap);
+                            if (bmp != null)
                             {
-                                bmp.Save(ms, ImageFormat.Png);
-                                ms.Position = 0;
-                                return Icon.FromHandle(((Bitmap)bmp).GetHicon());
+                                bmp.Save(savePath, ImageFormat.Png);
+                                return true;
                             }
+                        }
+                        catch (Exception)
+                        {
                         }
                         finally { DeleteObject(hBitmap); }
                     }
                 }
+
+                // Fallback: SHGetFileInfo with PIDL (Classic Shell approach)
+                IntPtr pidl = ILCreateFromPath(shellPath);
+                if (pidl != IntPtr.Zero)
+                {
+                    try
+                    {
+                        SHFILEINFO shfi = new SHFILEINFO();
+                        // 0x100 = SHGFI_ICON, 0x0 = SHGFI_LARGEICON, 0x8 = SHGFI_PIDL
+                        const uint SHGFI_PIDL = 0x000000008;
+                        IntPtr res = SHGetFileInfo(pidl, 0, ref shfi, (uint)Marshal.SizeOf(shfi), 
+                            SHGFI_ICON | SHGFI_LARGEICON | SHGFI_PIDL);
+                        
+                        if (shfi.hIcon != IntPtr.Zero)
+                        {
+                            using (var icon = Icon.FromHandle(shfi.hIcon))
+                            using (var bmp = icon.ToBitmap())
+                            {
+                                bmp.Save(savePath, ImageFormat.Png);
+                                return true;
+                            }
+                        }
+                    }
+                    finally { ILFree(pidl); }
+                }
             }
-            catch (Exception ex) { Logger.Log(ex); }
-            return null;
+            catch (Exception) { }
+            return false;
+        }
+
+        private static Bitmap? CreateBitmapFromHBitmap(IntPtr hBitmap)
+        {
+            if (hBitmap == IntPtr.Zero) return null;
+            
+            BITMAP bm;
+            if (GetObject(hBitmap, Marshal.SizeOf(typeof(BITMAP)), out bm) != 0)
+            {
+                // If it's a 32-bit bitmap, it likely has an alpha channel.
+                // bm.bmBits might be null if it's not a DIB section, but GetImage usually returns a DIB.
+                if (bm.bmBitsPixel == 32 && bm.bmBits != IntPtr.Zero)
+                {
+                    // Create a bitmap that points to the same memory, then clone it to own the data.
+                    using (var temp = new Bitmap(bm.bmWidth, bm.bmHeight, bm.bmWidthBytes, PixelFormat.Format32bppArgb, bm.bmBits))
+                    {
+                        return new Bitmap(temp);
+                    }
+                }
+            }
+            // Fallback for non-32bpp or non-DIB bitmaps
+            return Bitmap.FromHbitmap(hBitmap);
         }
 
         [ComImport]
@@ -901,6 +929,12 @@ namespace EricGameLauncher
             public int cy;
         }
 
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr ILCreateFromPath(string pszPath);
+
+        [DllImport("shell32.dll")]
+        private static extern void ILFree(IntPtr pidl);
+
         [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
         private static extern int SHCreateItemFromParsingName(
             [In, MarshalAs(UnmanagedType.LPWStr)] string pszPath,
@@ -910,6 +944,21 @@ namespace EricGameLauncher
 
         [DllImport("gdi32.dll")]
         private static extern bool DeleteObject(IntPtr hObject);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct BITMAP
+        {
+            public int bmType;
+            public int bmWidth;
+            public int bmHeight;
+            public int bmWidthBytes;
+            public ushort bmPlanes;
+            public ushort bmBitsPixel;
+            public IntPtr bmBits;
+        }
+
+        [DllImport("gdi32.dll", SetLastError = true)]
+        private static extern int GetObject(IntPtr hgdiobj, int cbBuffer, out BITMAP lpvObject);
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
         private struct SHFILEINFO
@@ -925,6 +974,9 @@ namespace EricGameLauncher
 
         [DllImport("shell32.dll", CharSet = CharSet.Auto)]
         private static extern IntPtr SHGetFileInfo(string pszPath, uint dwFileAttributes, ref SHFILEINFO psfi, uint cbFileInfo, uint uFlags);
+
+        [DllImport("shell32.dll", CharSet = CharSet.Auto)]
+        private static extern IntPtr SHGetFileInfo(IntPtr pidl, uint dwFileAttributes, ref SHFILEINFO psfi, uint cbFileInfo, uint uFlags);
 
         private const uint SHGFI_ICON = 0x000000100;
         private const uint SHGFI_LARGEICON = 0x000000000;
@@ -943,7 +995,7 @@ namespace EricGameLauncher
                     }
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
             return null;
         }
 
@@ -952,7 +1004,7 @@ namespace EricGameLauncher
             if (!File.Exists(filePath)) return;
             for (int i = 0; i < 3; i++)
             {
-                try { File.Delete(filePath); return; } catch (Exception ex) { Logger.Log(ex); await Task.Delay(50); }
+                try { File.Delete(filePath); return; } catch (Exception) { await Task.Delay(50); }
             }
         }
     }
@@ -1015,9 +1067,9 @@ namespace EricGameLauncher
                         Marshal.ReleaseComObject(shell);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Logger.Log(ex);
+                // Logger.Log(ex); // Removed
                 return null;
             }
         }
@@ -1055,9 +1107,9 @@ namespace EricGameLauncher
                     IconIndex = iconIndex
                 };
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Logger.Log(ex);
+                // Logger.Log(ex); // Removed
                 return null;
             }
         }
@@ -1086,9 +1138,8 @@ namespace EricGameLauncher
                         Marshal.ReleaseComObject(shell);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Logger.Log(ex);
             }
         }
     }
@@ -1206,14 +1257,14 @@ namespace EricGameLauncher
                                 });
                             }
                         }
-                        catch (Exception ex) { Logger.Log(ex); }
+                        catch (Exception) { }
                     }
                 }
 
                 if (Marshal.IsComObject(shell))
                     Marshal.ReleaseComObject(shell);
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
 
             return items.OrderBy(x => x.Name).ToList();
         }
@@ -1297,7 +1348,7 @@ namespace EricGameLauncher
                     }
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
             return items;
         }
     }
@@ -1357,7 +1408,7 @@ namespace EricGameLauncher
                 if (GetOpenFileNameA(ref ofn))
                     return ofn.lpstrFile.TrimEnd('\0');
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
             return null;
         }
     }
@@ -1426,7 +1477,7 @@ namespace EricGameLauncher
                     if (File.Exists(Path.Combine(normalizedPath, "steam.exe"))) return _cachedSteamPath = normalizedPath;
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
             foreach (var drive in DriveInfo.GetDrives())
             {
                 if (drive.DriveType != DriveType.Fixed) continue;
@@ -1458,7 +1509,7 @@ namespace EricGameLauncher
                     if (Directory.Exists(path) && !folders.Contains(path, StringComparer.OrdinalIgnoreCase)) folders.Add(path);
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
             return _cachedLibraryFolders = folders;
         }
 
@@ -1480,7 +1531,7 @@ namespace EricGameLauncher
                         if (nameMatch.Success) gameName = nameMatch.Groups[1].Value;
                         if (!string.IsNullOrEmpty(installDir)) break;
                     }
-                    catch (Exception ex) { Logger.Log(ex); }
+                    catch (Exception) { }
                 }
             }
             if (string.IsNullOrEmpty(installDir) || string.IsNullOrEmpty(libraryPath)) return null;
@@ -1525,11 +1576,19 @@ namespace EricGameLauncher
                 {
                     uint id = reader.ReadUInt32();
                     if (id == 0) break;
-                    try { reader.ReadUInt32(); reader.ReadUInt32(); reader.ReadUInt32(); reader.ReadUInt64(); reader.ReadBytes(20); reader.ReadUInt32(); string? exe = ParseVdfForExecutable(reader); if (!string.IsNullOrEmpty(exe)) result[(int)id] = exe; } catch (Exception ex) { Logger.Log(ex); break; }
+                    try { reader.ReadUInt32(); reader.ReadUInt32(); reader.ReadUInt32(); reader.ReadUInt64(); reader.ReadBytes(20); reader.ReadUInt32(); string? exe = ParseVdfForExecutable(reader); if (!string.IsNullOrEmpty(exe)) result[(int)id] = exe; } catch (Exception) { break; }
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
             return result;
+        }
+
+        private static string ReadCString(BinaryReader reader)
+        {
+            var bytes = new List<byte>();
+            byte b;
+            while ((b = reader.ReadByte()) != 0) bytes.Add(b);
+            return Encoding.UTF8.GetString(bytes.ToArray());
         }
 
         private static string? ParseVdfForExecutable(BinaryReader reader)
@@ -1553,16 +1612,9 @@ namespace EricGameLauncher
                     }
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); return executable; }
+            catch (Exception) { return executable; }
         }
 
-        private static string ReadCString(BinaryReader reader)
-        {
-            var bytes = new List<byte>();
-            byte b;
-            while ((b = reader.ReadByte()) != 0) bytes.Add(b);
-            return Encoding.UTF8.GetString(bytes.ToArray());
-        }
 
         private static string? FindExecutableInDirectory(string directory, string exeName)
         {
@@ -1572,7 +1624,7 @@ namespace EricGameLauncher
                 if (File.Exists(directPath)) return directPath;
                 foreach (var file in Directory.EnumerateFiles(directory, exeName, SearchOption.AllDirectories)) return file;
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
             return null;
         }
 
@@ -1598,7 +1650,7 @@ namespace EricGameLauncher
                 }
                 return candidates.OrderByDescending(f => new FileInfo(f).Length).FirstOrDefault();
             }
-            catch (Exception ex) { Logger.Log(ex); return null; }
+            catch (Exception) { return null; }
         }
 
         public static void ClearCache() { _cachedSteamPath = null; _cachedLibraryFolders = null; _cachedExecutables = null; }
@@ -1668,10 +1720,10 @@ namespace EricGameLauncher
                             return ExtractExePathFromManifest(content);
                         }
                     }
-                    catch (Exception ex) { Logger.Log(ex); }
+                    catch (Exception) { }
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
             return null;
         }
 
@@ -1691,7 +1743,7 @@ namespace EricGameLauncher
                     if (File.Exists(fullPath)) return fullPath;
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
             return null;
         }
     }

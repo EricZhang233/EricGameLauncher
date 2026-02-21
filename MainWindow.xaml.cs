@@ -107,10 +107,7 @@ namespace EricGameLauncher
                             }
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        Logger.Log(ex);
-                    }
+                    catch (Exception) { }
                 };
             }
 
@@ -138,7 +135,7 @@ namespace EricGameLauncher
                     TitleBarIcon.Source = bitmap;
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
 
             
             var titleBar = this.AppWindow.TitleBar;
@@ -218,9 +215,8 @@ namespace EricGameLauncher
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Logger.Log(ex);
                 this.AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(660, 420));
             }
         }
@@ -244,7 +240,7 @@ namespace EricGameLauncher
                     }
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void SaveWindowState()
@@ -264,7 +260,7 @@ namespace EricGameLauncher
                 ConfigService.SetWindowBounds(position.X, position.Y, size.Width, size.Height);
                 ConfigService.SaveConfig();
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void LoadSettings()
@@ -283,7 +279,7 @@ namespace EricGameLauncher
                     _sizeSlider.Value = ConfigService.IconSize;
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void RefreshView()
@@ -306,7 +302,7 @@ namespace EricGameLauncher
                 
                 EmptyStatePanel.Visibility = Visibility.Collapsed;
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void OnPropertyChanged(string propertyName)
@@ -396,7 +392,7 @@ namespace EricGameLauncher
                                     });
                                 }
                             }
-                            catch (Exception ex) { Logger.Log(ex); }
+                            catch (Exception) { }
                         }));
                     }
                 }
@@ -417,13 +413,13 @@ namespace EricGameLauncher
                                 RefreshView();
                             });
                         }
-                        catch (Exception ex) { Logger.Log(ex); }
+                        catch (Exception) { }
                     });
                 }
                 
                 
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void SaveData()
@@ -432,7 +428,7 @@ namespace EricGameLauncher
             {
                 ConfigService.SaveItems(_allItems.ToList());
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         
@@ -446,7 +442,7 @@ namespace EricGameLauncher
                     LaunchItem(item);
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         
@@ -474,7 +470,7 @@ namespace EricGameLauncher
                     }
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void RunProcess(string path, bool admin)
@@ -537,7 +533,7 @@ namespace EricGameLauncher
                 if (ConfigService.CloseAfterLaunch)
                     Application.Current.Exit();
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         
@@ -603,9 +599,8 @@ namespace EricGameLauncher
             {
                 return (sender as FrameworkElement)?.Tag as AppItem;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Logger.Log(ex);
                 return null;
             }
         }
@@ -620,7 +615,7 @@ namespace EricGameLauncher
                     LaunchItem(item);
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void MenuRunMgr_Click(object sender, RoutedEventArgs e)
@@ -643,7 +638,7 @@ namespace EricGameLauncher
                     }
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void MenuLoc_Click(object sender, RoutedEventArgs e)
@@ -660,7 +655,7 @@ namespace EricGameLauncher
                     }
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void MenuDel_Click(object sender, RoutedEventArgs e)
@@ -675,7 +670,7 @@ namespace EricGameLauncher
                     SaveData();
                 }
             } 
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void MenuProp_Click(object sender, RoutedEventArgs e)
@@ -688,7 +683,7 @@ namespace EricGameLauncher
                     OpenPropertyWindow(item);
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
         
         
@@ -733,7 +728,7 @@ namespace EricGameLauncher
                     PropIcon.Source = null;
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
         
         
@@ -774,7 +769,7 @@ namespace EricGameLauncher
                 {
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
         
         
@@ -828,7 +823,7 @@ namespace EricGameLauncher
                 
                 ShowPropertyPanel();
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void ShowPropertyPanel()
@@ -891,7 +886,7 @@ namespace EricGameLauncher
                 PopulateMenuItems(MenuAlongDesktop, desktopItems, PropAlongsideCommand);
                 PopulateMenuItems(MenuMgrDesktop, desktopItems, PropMgrPath);
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void PopulateMenuItems(MenuFlyoutSubItem parent, List<ShortcutScanner.FileItem> items, TextBox targetTextBox)
@@ -1023,7 +1018,7 @@ namespace EricGameLauncher
                     }
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void HidePropertyPanel()
@@ -1073,7 +1068,7 @@ namespace EricGameLauncher
                 
                 HidePropertyPanel();
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private async void BtnSaveProperty_Click(object sender, RoutedEventArgs e)
@@ -1119,7 +1114,7 @@ namespace EricGameLauncher
                 SaveData();
                 HidePropertyPanel();
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void BtnDeleteProperty_Click(object sender, RoutedEventArgs e)
@@ -1133,7 +1128,7 @@ namespace EricGameLauncher
                 SaveData();
                 HidePropertyPanel();
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private async void BtnChangeIcon_Click(object sender, RoutedEventArgs e)
@@ -1184,7 +1179,7 @@ namespace EricGameLauncher
                     }
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         
@@ -1313,22 +1308,22 @@ namespace EricGameLauncher
                 {
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void BtnBrowseExe_Click(object sender, RoutedEventArgs e)
         {
-            try { BrowseFile(PropExePath); } catch (Exception ex) { Logger.Log(ex); }
+            try { BrowseFile(PropExePath); } catch (Exception) { }
         }
 
         private void BtnBrowseAlt_Click(object sender, RoutedEventArgs e)
         {
-            try { BrowseFile(PropAlternativeLaunchCommand); } catch (Exception ex) { Logger.Log(ex); }
+            try { BrowseFile(PropAlternativeLaunchCommand); } catch (Exception) { }
         }
 
         private void BtnBrowseAlongside_Click(object sender, RoutedEventArgs e)
         {
-            try { BrowseFile(PropAlongsideCommand); } catch (Exception ex) { Logger.Log(ex); }
+            try { BrowseFile(PropAlongsideCommand); } catch (Exception) { }
         }
 
         private void BtnBrowseMgr_Click(object sender, RoutedEventArgs e)
@@ -1337,7 +1332,7 @@ namespace EricGameLauncher
             {
                 BrowseFile(PropMgrPath);
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         
@@ -1348,7 +1343,7 @@ namespace EricGameLauncher
                 
                 SearchBoxFlyout.Focus(FocusState.Programmatic);
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void SearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
@@ -1409,7 +1404,7 @@ namespace EricGameLauncher
                 IsFiltered = !string.IsNullOrEmpty(query);
                 UpdateEmptyState();
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void EditOrderFlyout_Opening(object sender, object e)
@@ -1425,7 +1420,7 @@ namespace EricGameLauncher
                 SortTitle.Text = I18n.T("Sort_Title");
                 SortDescription.Text = I18n.T("Sort_Description");
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void OrderList_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
@@ -1445,7 +1440,7 @@ namespace EricGameLauncher
                     }
                 }
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void BtnEdit_Click(object sender, RoutedEventArgs e)
@@ -1461,7 +1456,7 @@ namespace EricGameLauncher
                 var item = button?.Tag as AppItem;
                 MoveItem(item, -1);
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void BtnMoveDown_Click(object sender, RoutedEventArgs e)
@@ -1472,7 +1467,7 @@ namespace EricGameLauncher
                 var item = button?.Tag as AppItem;
                 MoveItem(item, 1);
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void MoveItem(AppItem? item, int offset)
@@ -1631,7 +1626,7 @@ namespace EricGameLauncher
                 if (!Directory.Exists(startMenuPath)) Directory.CreateDirectory(startMenuPath);
                 ShortcutResolver.CreateShortcut(exePath, startMenuShortcutPath, description);
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         private void MenuUninstall_Click(object sender, RoutedEventArgs e)
@@ -1649,7 +1644,7 @@ namespace EricGameLauncher
                 if (File.Exists(desktopShortcutPath)) File.Delete(desktopShortcutPath);
                 if (File.Exists(startMenuShortcutPath)) File.Delete(startMenuShortcutPath);
             }
-            catch (Exception ex) { Logger.Log(ex); }
+            catch (Exception) { }
         }
 
         
@@ -1869,7 +1864,7 @@ namespace EricGameLauncher
                     if (BtnOpenConfigFolder != null)
                         ToolTipService.SetToolTip(BtnOpenConfigFolder, I18n.T("Settings_OpenConfigFolder"));
                 }
-                catch (Exception ex) { Logger.Log(ex); }
+                catch (Exception) { }
 
                 PropTitleLabel.Text = I18n.T("Property_Title");
                 try
@@ -1878,7 +1873,7 @@ namespace EricGameLauncher
                     if (closeBtn != null)
                         ToolTipService.SetToolTip(closeBtn, I18n.T("Property_Close"));
                 }
-                catch (Exception ex) { Logger.Log(ex); }
+                catch (Exception) { }
 
                 PropDisplayNameLabel.Text = I18n.T("Property_DisplayName");
                 PropMainExePathLabel.Text = I18n.T("Property_MainExePath");
@@ -1914,7 +1909,7 @@ namespace EricGameLauncher
                     if (changeIconBtn != null)
                         ToolTipService.SetToolTip(changeIconBtn, I18n.T("Property_ChangeIcon"));
                 }
-                catch (Exception ex) { Logger.Log(ex); }
+                catch (Exception) { }
 
                 try
                 {
@@ -1926,7 +1921,7 @@ namespace EricGameLauncher
                     if (mgrDropDown != null)
                         ToolTipService.SetToolTip(mgrDropDown, I18n.T("Property_SelectFile"));
                 }
-                catch (Exception ex) { Logger.Log(ex); }
+                catch (Exception) { }
 
                 PropDeleteText.Text = I18n.T("Menu_Delete");
                 ToolTipService.SetToolTip(PropBtnDelete, I18n.T("Property_DeleteItem"));
@@ -1938,13 +1933,12 @@ namespace EricGameLauncher
                     if (saveBtn != null)
                         ToolTipService.SetToolTip(saveBtn, I18n.T("Property_Save"));
                 }
-                catch (Exception ex) { Logger.Log(ex); }
+                catch (Exception) { }
 
                 EmptyStateText.Text = I18n.T("Empty_Description");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Logger.Log(ex);
             }
         }
 
