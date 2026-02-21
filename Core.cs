@@ -1061,6 +1061,36 @@ namespace EricGameLauncher
                 return null;
             }
         }
+
+        public static void CreateShortcut(string targetPath, string shortcutPath, string description = "")
+        {
+            try
+            {
+                Type? shellType = Type.GetTypeFromProgID("WScript.Shell");
+                if (shellType == null) return;
+
+                dynamic? shell = Activator.CreateInstance(shellType);
+                if (shell == null) return;
+
+                try
+                {
+                    dynamic shortcut = shell.CreateShortcut(shortcutPath);
+                    shortcut.TargetPath = targetPath;
+                    shortcut.WorkingDirectory = Path.GetDirectoryName(targetPath);
+                    shortcut.Description = description;
+                    shortcut.Save();
+                }
+                finally
+                {
+                    if (Marshal.IsComObject(shell))
+                        Marshal.ReleaseComObject(shell);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(ex);
+            }
+        }
     }
 
     public static class ShortcutScanner

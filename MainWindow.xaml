@@ -97,6 +97,22 @@
                             <MenuFlyoutSeparator />
                             
                             
+                            <MenuFlyoutSubItem x:Name="MenuSystemIntegrationItem" Text="">
+                                <MenuFlyoutSubItem.Icon>
+                                    <FontIcon Glyph="&#xE71B;"/>
+                                </MenuFlyoutSubItem.Icon>
+                                <MenuFlyoutItem x:Name="MenuInstallItem" Text="" Click="MenuInstall_Click">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE896;"/>
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem x:Name="MenuUninstallItem" Text="" Click="MenuUninstall_Click">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE894;"/>
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                            </MenuFlyoutSubItem>
+
                             <MenuFlyoutItem x:Name="MenuSettingsItem" Text="" Click="MenuSettings_Click">
                                 <MenuFlyoutItem.Icon>
                                     <FontIcon Glyph="&#xE713;"/>
