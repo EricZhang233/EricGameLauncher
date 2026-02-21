@@ -10,6 +10,7 @@
 [![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![WinUI 3](https://img.shields.io/badge/UI-WinUI%203-0078D4?logo=windows)](https://github.com/microsoft/microsoft-ui-xaml)
 [![Windows 11 Ready](https://img.shields.io/badge/Style-Windows%2011-blue?logo=windows11)](https://www.microsoft.com/windows)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?logo=gnu)](https://www.gnu.org/licenses/gpl-3.0.html)
 
 [功能特性](#功能特性) • [技术亮点](#技术亮点) • [快速开始](#快速开始) • [开发指南](#开发指南)
 
@@ -68,7 +69,6 @@
 1.  前往 [Releases](../../releases) 页面下载最新版本。
 2.  解压并运行 `EricGameLauncher.exe`。
 3.  点击右上角 **“更多” -> “添加”**，选择游戏快捷方式或可执行文件。
-4.  *(推荐)* 在设置中开启“便携模式”，体验绿色软件的快乐。
 
 ## 贡献与支持
 
