@@ -496,7 +496,23 @@ namespace EricGameLauncher
                 };
 
                 
-                if (path.Contains("://"))
+                if (path.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (admin)
+                    {
+                        // Some Store apps (like Terminal or packaged Win32) support elevation via PowerShell Start-Process
+                        psi.FileName = "powershell.exe";
+                        psi.Arguments = $"-WindowStyle Hidden -Command \"Start-Process '{path}' -Verb RunAs\"";
+                        psi.UseShellExecute = true;
+                        psi.CreateNoWindow = true;
+                    }
+                    else
+                    {
+                        psi.FileName = "explorer.exe";
+                        psi.Arguments = path;
+                    }
+                }
+                else if (path.Contains("://"))
                 {
                     
                     psi.FileName = path;
@@ -868,31 +884,31 @@ namespace EricGameLauncher
 
         private void PopulateMenuItems(MenuFlyoutSubItem parent, List<ShortcutScanner.FileItem> items, TextBox targetTextBox)
         {
+            // Flat list as requested by user
             foreach (var item in items)
             {
-                if (item.IsFolder && item.Children.Count > 0)
+                if (!item.IsFolder)
                 {
-                    
-                    var subMenu = new MenuFlyoutSubItem { Text = item.Name };
-                    PopulateMenuItems(subMenu, item.Children, targetTextBox);
-                    parent.Items.Add(subMenu);
-                }
-                else if (!item.IsFolder)
-                {
-                    
                     var menuItem = new MenuFlyoutItem { Text = item.Name, Tag = item.FullPath };
-                    menuItem.Click += (s, e) => OnShortcutMenuItemClick(item.FullPath, targetTextBox);
+                    menuItem.Click += (s, e) => OnShortcutMenuItemClick(item.FullPath, targetTextBox, item.Name);
                     parent.Items.Add(menuItem);
+                }
+                else if (item.IsFolder && item.Children.Count > 0)
+                {
+                    // If it is a folder, still flatten its contents into the same menu (optional, but keep it recursive-flattened if needed)
+                    // Given ShortcutScanner now returns flat for Start Menu, this recursive part is mostly for Desktop items
+                    PopulateMenuItems(parent, item.Children, targetTextBox);
                 }
             }
         }
 
-        private async void OnShortcutMenuItemClick(string filePath, TextBox targetTextBox)
+        private async void OnShortcutMenuItemClick(string filePath, TextBox targetTextBox, string? displayName = null)
         {
             try
             {
-                if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
-                    return;
+                if (string.IsNullOrEmpty(filePath)) return;
+                bool isStoreApp = filePath.StartsWith("shell:AppsFolder\\");
+                if (!isStoreApp && !File.Exists(filePath)) return;
 
                 
                 string actualPath = filePath;
@@ -937,7 +953,7 @@ namespace EricGameLauncher
                 {
                     if (string.IsNullOrEmpty(PropTitle.Text))
                     {
-                        PropTitle.Text = Path.GetFileNameWithoutExtension(filePath);
+                        PropTitle.Text = displayName ?? Path.GetFileNameWithoutExtension(filePath);
                     }
 
                     _currentEditingItem!.ExePath = actualPath;

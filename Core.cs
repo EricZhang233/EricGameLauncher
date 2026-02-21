@@ -773,7 +773,9 @@ namespace EricGameLauncher
 
         public static async Task<string?> GetIconPathAsync(string exePath, string itemId)
         {
-            if (string.IsNullOrEmpty(exePath) || !File.Exists(exePath)) return null;
+            if (string.IsNullOrEmpty(exePath)) return null;
+            if (!exePath.StartsWith("shell:AppsFolder\\") && !File.Exists(exePath)) return null;
+            
             string iconPath = Path.Combine(CachePath, $"{itemId}.png");
             if (File.Exists(iconPath) && new FileInfo(iconPath).Length > 0) return iconPath;
             return await ExtractAndSaveIconAsync(exePath, itemId);
@@ -783,31 +785,49 @@ namespace EricGameLauncher
         {
             try
             {
-                if (!File.Exists(sourcePath)) return null;
+                if (string.IsNullOrEmpty(sourcePath)) return null;
+                bool isStoreApp = sourcePath.StartsWith("shell:AppsFolder\\");
+                if (!isStoreApp && !File.Exists(sourcePath)) return null;
+
                 string targetPath = sourcePath;
                 int iconIndex = 0;
-                if (sourcePath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+
+                if (!isStoreApp)
                 {
-                    if (!extractFromLnk)
+                    if (sourcePath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
                     {
-                        string? resolvedPath = ShortcutResolver.GetLnkTarget(sourcePath);
-                        if (!string.IsNullOrEmpty(resolvedPath) && File.Exists(resolvedPath)) targetPath = resolvedPath;
+                        if (!extractFromLnk)
+                        {
+                            string? resolvedPath = ShortcutResolver.GetLnkTarget(sourcePath);
+                            if (!string.IsNullOrEmpty(resolvedPath) && File.Exists(resolvedPath)) targetPath = resolvedPath;
+                        }
+                        else
+                        {
+                            var shortcutInfo = ShortcutResolver.GetShortcutInfo(sourcePath);
+                            if (shortcutInfo != null && !string.IsNullOrEmpty(shortcutInfo.IconPath) && File.Exists(shortcutInfo.IconPath)) { targetPath = shortcutInfo.IconPath; iconIndex = shortcutInfo.IconIndex; }
+                        }
                     }
-                    else
+                    else if (sourcePath.EndsWith(".url", StringComparison.OrdinalIgnoreCase))
                     {
-                        var shortcutInfo = ShortcutResolver.GetShortcutInfo(sourcePath);
-                        if (shortcutInfo != null && !string.IsNullOrEmpty(shortcutInfo.IconPath) && File.Exists(shortcutInfo.IconPath)) { targetPath = shortcutInfo.IconPath; iconIndex = shortcutInfo.IconIndex; }
+                        var urlInfo = ShortcutResolver.GetUrlFileInfo(sourcePath);
+                        if (urlInfo != null && !string.IsNullOrEmpty(urlInfo.IconPath) && File.Exists(urlInfo.IconPath)) { targetPath = urlInfo.IconPath; iconIndex = urlInfo.IconIndex; }
                     }
                 }
-                else if (sourcePath.EndsWith(".url", StringComparison.OrdinalIgnoreCase))
-                {
-                    var urlInfo = ShortcutResolver.GetUrlFileInfo(sourcePath);
-                    if (urlInfo != null && !string.IsNullOrEmpty(urlInfo.IconPath) && File.Exists(urlInfo.IconPath)) { targetPath = urlInfo.IconPath; iconIndex = urlInfo.IconIndex; }
-                }
+
                 if (!Directory.Exists(CachePath)) Directory.CreateDirectory(CachePath);
                 string savePath = Path.Combine(CachePath, $"{itemId}.png");
                 await ForceDeleteFileAsync(savePath);
-                Icon? icon = ExtractLargestIcon(targetPath, iconIndex) ?? Icon.ExtractAssociatedIcon(targetPath);
+
+                Icon? icon = null;
+                if (isStoreApp)
+                {
+                    icon = ExtractStoreAppIcon(sourcePath);
+                }
+                else
+                {
+                    icon = ExtractLargestIcon(targetPath, iconIndex) ?? Icon.ExtractAssociatedIcon(targetPath);
+                }
+
                 if (icon != null)
                 {
                     try { using var bmp = icon.ToBitmap(); bmp.Save(savePath, ImageFormat.Png); } finally { icon.Dispose(); }
@@ -818,6 +838,41 @@ namespace EricGameLauncher
             }
             catch { return null; }
         }
+
+        private static Icon? ExtractStoreAppIcon(string shellPath)
+        {
+            try
+            {
+                // shellPath is like "shell:AppsFolder\AUMID"
+                // Using Shell.Application to get the icon is one way, but SHGetFileInfo with SHGSI_ICON is easier
+                SHFILEINFO sfi = new SHFILEINFO();
+                IntPtr hSuccess = SHGetFileInfo(shellPath, 0, ref sfi, (uint)Marshal.SizeOf(sfi), SHGFI_ICON | SHGFI_LARGEICON);
+                if (hSuccess != IntPtr.Zero && sfi.hIcon != IntPtr.Zero)
+                {
+                    try { return (Icon)Icon.FromHandle(sfi.hIcon).Clone(); } finally { DestroyIcon(sfi.hIcon); }
+                }
+            }
+            catch (Exception ex) { Logger.Log(ex); }
+            return null;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        private struct SHFILEINFO
+        {
+            public IntPtr hIcon;
+            public int iIcon;
+            public uint dwAttributes;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+            public string szDisplayName;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)]
+            public string szTypeName;
+        }
+
+        [DllImport("shell32.dll", CharSet = CharSet.Auto)]
+        private static extern IntPtr SHGetFileInfo(string pszPath, uint dwFileAttributes, ref SHFILEINFO psfi, uint cbFileInfo, uint uFlags);
+
+        private const uint SHGFI_ICON = 0x000000100;
+        private const uint SHGFI_LARGEICON = 0x000000000;
 
         private static Icon? ExtractLargestIcon(string filePath, int iconIndex = 0)
         {
@@ -965,18 +1020,116 @@ namespace EricGameLauncher
 
         private static readonly string[] SupportedExtensions = [".lnk", ".url", ".exe"];
 
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr ILCreateFromPath(string pszPath);
+
+        [DllImport("shell32.dll")]
+        private static extern void ILFree(IntPtr pidl);
+
+        [ComImport]
+        [Guid("000214E6-0000-0000-C000-000000000046")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IShellFolder
+        {
+            void ParseDisplayName(IntPtr hwnd, IntPtr pbc, [MarshalAs(UnmanagedType.LPWStr)] string pszDisplayName, out uint pchEaten, out IntPtr ppidl, ref uint pdwAttributes);
+            void EnumObjects(IntPtr hwnd, uint grfFlags, out IntPtr ppenumIDList);
+            void BindToObject(IntPtr pidl, IntPtr pbc, [In] ref Guid riid, out IntPtr ppv);
+            void BindToStorage(IntPtr pidl, IntPtr pbc, [In] ref Guid riid, out IntPtr ppv);
+            void CompareIDs(IntPtr lParam, IntPtr pidl1, IntPtr pidl2);
+            void CreateViewObject(IntPtr hwnd, [In] ref Guid riid, out IntPtr ppv);
+            void GetAttributesOf(uint cidl, [MarshalAs(UnmanagedType.LPArray)] IntPtr[] apidl, ref uint rgfInOut);
+            void GetUIObjectOf(IntPtr hwnd, uint cidl, [MarshalAs(UnmanagedType.LPArray)] IntPtr[] apidl, [In] ref Guid riid, IntPtr prgfInOut, out IntPtr ppv);
+            void GetDisplayNameOf(IntPtr pidl, uint uFlags, out STRRET pName);
+            void SetNameOf(IntPtr hwnd, IntPtr pidl, [MarshalAs(UnmanagedType.LPWStr)] string pszName, uint uFlags, out IntPtr ppidlOut);
+        }
+
+        [StructLayout(LayoutKind.Sequential, Size = 272)]
+        private struct STRRET
+        {
+            public uint uType;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 260)]
+            public byte[] data;
+        }
+
+        [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
+        private static extern int StrRetToBuf(ref STRRET pstr, IntPtr pidl, StringBuilder pszBuf, uint cchBuf);
+
         public static List<FileItem> GetStartMenuItems()
         {
             var items = new List<FileItem>();
-            string userPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Start Menu\Programs");
-            string systemPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), @"Microsoft\Windows\Start Menu\Programs");
+            try
+            {
+                Type? shellType = Type.GetTypeFromProgID("Shell.Application");
+                if (shellType == null) return items;
 
-            if (Directory.Exists(userPath))
-                items.AddRange(ScanDirectory(userPath));
-            if (Directory.Exists(systemPath))
-                items.AddRange(ScanDirectory(systemPath));
+                dynamic? shell = Activator.CreateInstance(shellType);
+                if (shell == null) return items;
 
-            return MergeItems(items);
+                // shell:AppsFolder is a virtual folder containing all apps
+                var appsFolder = shell.NameSpace("shell:AppsFolder");
+                if (appsFolder != null)
+                {
+                    foreach (var item in appsFolder.Items())
+                    {
+                        try
+                        {
+                            string name = item.Name;
+                            string path = item.Path; 
+
+                            // Try to resolve to a physical path if it's a Win32 app
+                            string finalPath = path;
+                            bool isPhysical = File.Exists(path) || Directory.Exists(path);
+                            
+                            if (!isPhysical)
+                            {
+                                try
+                                {
+                                    // Try extended properties for MSI/other shell links
+                                    // System.Link.TargetParsingPath (canonical name: PKEY_Link_TargetParsingPath)
+                                    var targetProperty = item.ExtendedProperty("System.Link.TargetParsingPath");
+                                    if (targetProperty != null)
+                                    {
+                                        string tPath = targetProperty.ToString() ?? "";
+                                        if (!string.IsNullOrEmpty(tPath) && (File.Exists(tPath) || Directory.Exists(tPath)))
+                                        {
+                                            finalPath = tPath;
+                                            isPhysical = true;
+                                        }
+                                    }
+
+                                    if (!isPhysical && item.IsLink)
+                                    {
+                                        var link = item.GetLink;
+                                        if (link != null && !string.IsNullOrEmpty(link.Path) && (File.Exists(link.Path) || Directory.Exists(link.Path)))
+                                        {
+                                            finalPath = link.Path;
+                                            isPhysical = true;
+                                        }
+                                    }
+                                }
+                                catch { /* Ignore resolution errors */ }
+                            }
+
+                            if (!string.IsNullOrEmpty(name))
+                            {
+                                items.Add(new FileItem
+                                {
+                                    Name = name,
+                                    FullPath = (!isPhysical && (path.Contains("!") || !path.Contains("\\"))) ? $"shell:AppsFolder\\{path}" : finalPath,
+                                    IsFolder = false
+                                });
+                            }
+                        }
+                        catch (Exception ex) { Logger.Log(ex); }
+                    }
+                }
+
+                if (Marshal.IsComObject(shell))
+                    Marshal.ReleaseComObject(shell);
+            }
+            catch (Exception ex) { Logger.Log(ex); }
+
+            return items.OrderBy(x => x.Name).ToList();
         }
 
         public static List<FileItem> GetDesktopItems()
