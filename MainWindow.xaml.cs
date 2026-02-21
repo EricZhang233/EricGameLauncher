@@ -1585,6 +1585,7 @@ namespace EricGameLauncher
             EditOrderFlyout.ShowAt(BtnMore);
         }
 
+
         private void MenuSettings_Click(object sender, RoutedEventArgs e)
         {
             UpdateStorageModeUI();
@@ -1600,6 +1601,55 @@ namespace EricGameLauncher
             }
             
             SettingsFlyout.ShowAt(BtnMore);
+        }
+
+        private void MenuInstall_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string exePath = Process.GetCurrentProcess().MainModule?.FileName ?? "";
+                if (string.IsNullOrEmpty(exePath)) return;
+
+                string appName = "EricGameLauncher";
+                string description = "Eric Game Launcher";
+
+                // Paths
+                string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                string desktopShortcutPath = Path.Combine(desktopPath, $"{appName}.lnk");
+                
+                string appDataRoaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                string startMenuPath = Path.Combine(appDataRoaming, @"Microsoft\Windows\Start Menu\Programs");
+                string startMenuShortcutPath = Path.Combine(startMenuPath, $"{appName}.lnk");
+
+                // 1. Remove old shortcuts if they exist
+                if (File.Exists(desktopShortcutPath)) File.Delete(desktopShortcutPath);
+                if (File.Exists(startMenuShortcutPath)) File.Delete(startMenuShortcutPath);
+
+                // 2. Create new shortcuts
+                ShortcutResolver.CreateShortcut(exePath, desktopShortcutPath, description);
+                
+                if (!Directory.Exists(startMenuPath)) Directory.CreateDirectory(startMenuPath);
+                ShortcutResolver.CreateShortcut(exePath, startMenuShortcutPath, description);
+            }
+            catch (Exception ex) { Logger.Log(ex); }
+        }
+
+        private void MenuUninstall_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string appName = "EricGameLauncher";
+                
+                string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                string desktopShortcutPath = Path.Combine(desktopPath, $"{appName}.lnk");
+                
+                string appDataRoaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                string startMenuShortcutPath = Path.Combine(appDataRoaming, @"Microsoft\Windows\Start Menu\Programs", $"{appName}.lnk");
+
+                if (File.Exists(desktopShortcutPath)) File.Delete(desktopShortcutPath);
+                if (File.Exists(startMenuShortcutPath)) File.Delete(startMenuShortcutPath);
+            }
+            catch (Exception ex) { Logger.Log(ex); }
         }
 
         
@@ -1778,6 +1828,9 @@ namespace EricGameLauncher
                 MenuAddItem.Text = I18n.T("Menu_Add");
                 MenuSortItem.Text = I18n.T("Menu_Sort");
                 MenuSettingsItem.Text = I18n.T("Menu_Settings");
+                MenuSystemIntegrationItem.Text = I18n.T("Menu_SystemIntegration");
+                MenuInstallItem.Text = I18n.T("Menu_Install");
+                MenuUninstallItem.Text = I18n.T("Menu_Uninstall");
                 SizeFlyoutTitle.Text = I18n.T("Menu_IconSize");
                 SortTitle.Text = I18n.T("Sort_Title");
                 SortDescription.Text = I18n.T("Sort_Description");
