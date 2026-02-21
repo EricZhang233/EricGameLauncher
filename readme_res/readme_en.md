@@ -47,14 +47,21 @@ Whether your games are from Steam, Epic, or independent exe files, this is their
 ## Features
 
 ### Built for Gamers
+*   **Full-Link Execution Support**:
+    *   **Multi-Dimensional Launching**: Complete life-cycle management covering "Main Program", "Manager", "Alternative Launch", "Alongside Execution", and "Custom Context Menu".
+    *   **Full-Type Run Support**:
+        *   **Web Support**: Directly supports web links, enabling one-click access to guides or official sites.
+        *   **Native EXE/LNK**: Supports long paths with spaces, featuring a built-in smart argument splitting engine.
+        *   **URL Protocol**: Perfectly matches `steam://`, `epic://`, `starward://`, etc., for platform-level interaction.
+        *   **Windows Store Apps**: Supports launching apps via `shell:AppsFolder\` with optional elevation.
+        *   **Environment Variables**: All paths support automatic expansion of variables like `%AppData%`.
 *   **Ultra-Lightweight**: Start as needed, leave when done. No background services, zero ads, and system resource usage is nearly zero.
 *   **Efficient Search**: Supports English initial matching, space-separated first letters, and CamelCase matching. Want to play "League of Legends"? Just type "LOL" for instant results.
 *   **Professional-Grade Property Control**: This isn't just a basic shortcut.
     *   **Run as Administrator**: Separately configure elevation for the "Game Main Program" and "Game Manager" (e.g., Steam/Epic), solving issues where insufficient permissions prevent startup.
     *   **Run Manager**: Supports configuring the manager path to ensure the game not only starts but also correctly triggers platform services.
-    *   **Full Parameter Support**: All paths for the main program, manager, alternative startup, and companion programs support **command-line arguments** or **URL Protocols**.
+    *   **Full Parameter Support**: All configured execution targets have end-to-end execution support.
     *   **Replace Main Executable**: Check this to use a custom command (e.g., `starward://`) to completely replace the original EXE's startup logic.
-        > 💡 **Pro Tip**: Keep the game cover in EGL, but actually call an external tool (like Starward) to launch the game and track playtime.
     *   **Execute Simultaneously on Startup**: Want to automatically open a translator, timer, or performance monitor when playing? Configure this for one-click dual launch.
     *   **Change Icon**: Supports manual image uploads for covers—a savior for those with OCD.
     *   **Custom Context Menu**: Add up to 10 custom menu items for each project.
@@ -62,8 +69,8 @@ Whether your games are from Steam, Epic, or independent exe files, this is their
         *   Toggle "Run as Administrator" for each custom item.
         *   **Smart Shifting**: Subsequent items automatically shift up when an intermediate item is deleted to keep the list compact.
     *   **Icon Size**: From compact lists to immersive large grids, customize as you wish.
-
-### Designed for Geeks
+ 
+ ### Designed for Geeks
 *   **Fully Portable Mode**: Supports storing all data (configurations, cached icons) in the program directory. Put it on a USB drive, carry your game library with you, and run it on any computer.
 *   **Seamless Data Migration**: Want to switch from system installation mode to portable mode? One-click migration automatically moves all configurations and icons without reconfiguration.
 *   **Smart Icon Extraction**: Automatically parses `.exe`, `.lnk`, and even Steam/Epic URL protocols to extract and cache high-definition icons.
