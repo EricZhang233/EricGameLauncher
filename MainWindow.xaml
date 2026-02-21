@@ -314,7 +314,8 @@
                                             <TextBlock x:Name="SwitchStorageModeText" Text="" VerticalAlignment="Center" FontSize="12"/>
                                         </StackPanel>
                                     </Button>
-                                    <Button Grid.Column="4"
+                                    <Button x:Name="BtnOpenConfigFolder"
+                                            Grid.Column="4"
                                             Click="BtnOpenFolder_Click"
                                             Padding="8,4"
                                             ToolTipService.ToolTip="">
@@ -507,9 +508,19 @@
                                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
                                     Padding="12" 
                                     CornerRadius="8">
-                            <TextBlock x:Name="PropMainExePathLabel" Text="" 
-                                       FontSize="14"
-                                       FontWeight="SemiBold"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock x:Name="PropMainExePathLabel" Text="" 
+                                           FontSize="14"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                    <TextBlock x:Name="PropAdminLabel1" Text="" 
+                                               FontSize="12" 
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               VerticalAlignment="Center"/>
+                                    <CheckBox x:Name="PropIsAdmin" MinWidth="0" Padding="0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Grid>
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBox x:Name="PropExePath" IsSpellCheckEnabled="False" 
                                          Grid.Column="0"
@@ -542,15 +553,116 @@
                             </Grid>
                         </StackPanel>
 
-                        
+                        <!-- 代替启动 -->
                         <StackPanel Spacing="8" 
                                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
                                     Padding="12" 
                                     CornerRadius="8">
-                            <CheckBox x:Name="PropUseAlternativeLaunch" 
-                                      Content=""/>
-                            <TextBox x:Name="PropAlternativeLaunchCommand" IsSpellCheckEnabled="False" 
-                                     InputScope="Default"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <CheckBox x:Name="PropUseAlternativeLaunch" 
+                                              Content=""
+                                              MinWidth="0"
+                                              VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="PropSubstituteExeLabel" Text="" 
+                                               FontSize="14"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                    <TextBlock x:Name="PropAdminLabel2" Text="" 
+                                               FontSize="12" 
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               VerticalAlignment="Center"/>
+                                    <CheckBox x:Name="PropIsAltAdmin" MinWidth="0" Padding="0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBox x:Name="PropAlternativeLaunchCommand" IsSpellCheckEnabled="False" 
+                                         Grid.Column="0"
+                                         InputScope="Default"/>
+                                <DropDownButton Grid.Column="1" 
+                                                Margin="8,0,0,0" 
+                                                ToolTipService.ToolTip="">
+                                    <FontIcon Glyph="&#xE8DA;" FontSize="16"/>
+                                    <DropDownButton.Flyout>
+                                        <MenuFlyout>
+                                            <MenuFlyoutSubItem x:Name="MenuAltStartMenu" Text="">
+                                                <MenuFlyoutSubItem.Icon>
+                                                    <FontIcon Glyph="&#xE700;"/>
+                                                </MenuFlyoutSubItem.Icon>
+                                            </MenuFlyoutSubItem>
+                                            <MenuFlyoutSubItem x:Name="MenuAltDesktop" Text="">
+                                                <MenuFlyoutSubItem.Icon>
+                                                    <FontIcon Glyph="&#xE8FC;"/>
+                                                </MenuFlyoutSubItem.Icon>
+                                            </MenuFlyoutSubItem>
+                                            <MenuFlyoutSeparator/>
+                                            <MenuFlyoutItem x:Name="MenuAltBrowse" Text="" Click="BtnBrowseAlt_Click">
+                                                <MenuFlyoutItem.Icon>
+                                                    <FontIcon Glyph="&#xE8E5;"/>
+                                                </MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                        </MenuFlyout>
+                                    </DropDownButton.Flyout>
+                                </DropDownButton>
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- 同时启动 -->
+                        <StackPanel Spacing="8" 
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
+                                    Padding="12" 
+                                    CornerRadius="8">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <CheckBox x:Name="PropRunAlongside" 
+                                              Content=""
+                                              MinWidth="0"
+                                              VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="PropRunAtLaunchLabel" Text="" 
+                                               FontSize="14"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                    <TextBlock x:Name="PropAdminLabel3" Text="" 
+                                               FontSize="12" 
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               VerticalAlignment="Center"/>
+                                    <CheckBox x:Name="PropIsAlongsideAdmin" MinWidth="0" Padding="0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBox x:Name="PropAlongsideCommand" IsSpellCheckEnabled="False" 
+                                         Grid.Column="0"
+                                         InputScope="Default"/>
+                                <DropDownButton Grid.Column="1" 
+                                                Margin="8,0,0,0" 
+                                                ToolTipService.ToolTip="">
+                                    <FontIcon Glyph="&#xE8DA;" FontSize="16"/>
+                                    <DropDownButton.Flyout>
+                                        <MenuFlyout>
+                                            <MenuFlyoutSubItem x:Name="MenuAlongStartMenu" Text="">
+                                                <MenuFlyoutSubItem.Icon>
+                                                    <FontIcon Glyph="&#xE700;"/>
+                                                </MenuFlyoutSubItem.Icon>
+                                            </MenuFlyoutSubItem>
+                                            <MenuFlyoutSubItem x:Name="MenuAlongDesktop" Text="">
+                                                <MenuFlyoutSubItem.Icon>
+                                                    <FontIcon Glyph="&#xE8FC;"/>
+                                                </MenuFlyoutSubItem.Icon>
+                                            </MenuFlyoutSubItem>
+                                            <MenuFlyoutSeparator/>
+                                            <MenuFlyoutItem x:Name="MenuAlongBrowse" Text="" Click="BtnBrowseAlongside_Click">
+                                                <MenuFlyoutItem.Icon>
+                                                    <FontIcon Glyph="&#xE8E5;"/>
+                                                </MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                        </MenuFlyout>
+                                    </DropDownButton.Flyout>
+                                </DropDownButton>
+                            </Grid>
                         </StackPanel>
 
                         
@@ -558,27 +670,25 @@
                                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
                                     Padding="12" 
                                     CornerRadius="8">
-                            <CheckBox x:Name="PropRunAlongside" 
-                                      Content=""/>
-                            <TextBox x:Name="PropAlongsideCommand" IsSpellCheckEnabled="False" 
-                                     InputScope="Default"/>
-                        </StackPanel>
-
-                        
-                        <StackPanel Spacing="8" 
-                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
-                                    Padding="12" 
-                                    CornerRadius="8">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock x:Name="PropManagerPathLabel" Text="" 
-                                           FontSize="14"
-                                           FontWeight="SemiBold"
-                                           VerticalAlignment="Center"/>
-                                <TextBlock x:Name="PropOptionalLabel" Text=""
-                                           Style="{ThemeResource CaptionTextBlockStyle}"
-                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                           VerticalAlignment="Center"/>
-                            </StackPanel>
+                            <Grid ColumnDefinitions="*,Auto,Auto">
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <TextBlock x:Name="PropManagerPathLabel" Text="" 
+                                               FontSize="14"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="PropOptionalLabel" Text=""
+                                               Style="{ThemeResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+                                    <TextBlock x:Name="PropAdminLabel4" Text="" 
+                                               FontSize="12" 
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               VerticalAlignment="Center"/>
+                                    <CheckBox x:Name="PropIsMgrAdmin" MinWidth="0" Padding="0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Grid>
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBox x:Name="PropMgrPath" IsSpellCheckEnabled="False" 
                                          Grid.Column="0" 
@@ -612,22 +722,6 @@
                         </StackPanel>
 
                         
-                        <StackPanel Spacing="0" 
-                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
-                                    Padding="12" 
-                                    CornerRadius="8"
-                                    Orientation="Horizontal">
-                            <TextBlock x:Name="PropRunAsAdminLabel" Text="" 
-                                       VerticalAlignment="Center"/>
-                            <CheckBox x:Name="PropIsAdmin" 
-                                      Content=""
-                                      MinWidth="0"
-                                      Margin="4,0,0,0"/>
-                            <CheckBox x:Name="PropIsMgrAdmin" 
-                                      Content=""
-                                      MinWidth="0"
-                                      Margin="16,0,0,0"/>
-                        </StackPanel>
                     </StackPanel>
                 
 

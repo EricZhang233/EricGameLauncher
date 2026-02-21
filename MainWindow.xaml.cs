@@ -460,7 +460,7 @@ namespace EricGameLauncher
                 if (item.UseAlternativeLaunch && !string.IsNullOrEmpty(item.AlternativeLaunchCommand))
                 {
                     
-                    RunProcess(item.AlternativeLaunchCommand, false);
+                    RunProcess(item.AlternativeLaunchCommand, item.IsAltAdmin);
                 }
                 else if (!string.IsNullOrEmpty(item.ExePath))
                 {
@@ -470,7 +470,7 @@ namespace EricGameLauncher
                     
                     if (item.RunAlongside && !string.IsNullOrEmpty(item.AlongsideCommand))
                     {
-                        RunProcess(item.AlongsideCommand, false);
+                        RunProcess(item.AlongsideCommand, item.IsAlongsideAdmin);
                     }
                 }
             }
@@ -705,8 +705,10 @@ namespace EricGameLauncher
                 
                 PropUseAlternativeLaunch.IsChecked = _currentEditingItem.UseAlternativeLaunch;
                 PropAlternativeLaunchCommand.Text = _currentEditingItem.AlternativeLaunchCommand ?? "";
+                PropIsAltAdmin.IsChecked = _currentEditingItem.IsAltAdmin;
                 PropRunAlongside.IsChecked = _currentEditingItem.RunAlongside;
                 PropAlongsideCommand.Text = _currentEditingItem.AlongsideCommand ?? "";
+                PropIsAlongsideAdmin.IsChecked = _currentEditingItem.IsAlongsideAdmin;
 
                 
                 if (!string.IsNullOrEmpty(_currentEditingItem.IconPath) && File.Exists(_currentEditingItem.IconPath))
@@ -753,8 +755,10 @@ namespace EricGameLauncher
                 }
                 
                 _currentEditingItem.IsAdmin = PropIsAdmin.IsChecked ?? false;
-                _currentEditingItem.MgrPath = PropMgrPath.Text?.Trim() ?? "";
+                _currentEditingItem.IsAltAdmin = PropIsAltAdmin.IsChecked ?? false;
+                _currentEditingItem.IsAlongsideAdmin = PropIsAlongsideAdmin.IsChecked ?? false;
                 _currentEditingItem.IsMgrAdmin = PropIsMgrAdmin.IsChecked ?? false;
+                _currentEditingItem.MgrPath = PropMgrPath.Text?.Trim() ?? "";
                 
                 
                 _currentEditingItem.UseAlternativeLaunch = PropUseAlternativeLaunch.IsChecked ?? false;
@@ -864,6 +868,10 @@ namespace EricGameLauncher
                 
                 MenuExeStartMenu.Items.Clear();
                 MenuExeDesktop.Items.Clear();
+                MenuAltStartMenu.Items.Clear();
+                MenuAltDesktop.Items.Clear();
+                MenuAlongStartMenu.Items.Clear();
+                MenuAlongDesktop.Items.Clear();
                 MenuMgrStartMenu.Items.Clear();
                 MenuMgrDesktop.Items.Clear();
 
@@ -873,10 +881,14 @@ namespace EricGameLauncher
 
                 
                 PopulateMenuItems(MenuExeStartMenu, startMenuItems, PropExePath);
+                PopulateMenuItems(MenuAltStartMenu, startMenuItems, PropAlternativeLaunchCommand);
+                PopulateMenuItems(MenuAlongStartMenu, startMenuItems, PropAlongsideCommand);
                 PopulateMenuItems(MenuMgrStartMenu, startMenuItems, PropMgrPath);
 
                 
                 PopulateMenuItems(MenuExeDesktop, desktopItems, PropExePath);
+                PopulateMenuItems(MenuAltDesktop, desktopItems, PropAlternativeLaunchCommand);
+                PopulateMenuItems(MenuAlongDesktop, desktopItems, PropAlongsideCommand);
                 PopulateMenuItems(MenuMgrDesktop, desktopItems, PropMgrPath);
             }
             catch (Exception ex) { Logger.Log(ex); }
@@ -1306,11 +1318,17 @@ namespace EricGameLauncher
 
         private void BtnBrowseExe_Click(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                BrowseFile(PropExePath);
-            }
-            catch (Exception ex) { Logger.Log(ex); }
+            try { BrowseFile(PropExePath); } catch (Exception ex) { Logger.Log(ex); }
+        }
+
+        private void BtnBrowseAlt_Click(object sender, RoutedEventArgs e)
+        {
+            try { BrowseFile(PropAlternativeLaunchCommand); } catch (Exception ex) { Logger.Log(ex); }
+        }
+
+        private void BtnBrowseAlongside_Click(object sender, RoutedEventArgs e)
+        {
+            try { BrowseFile(PropAlongsideCommand); } catch (Exception ex) { Logger.Log(ex); }
         }
 
         private void BtnBrowseMgr_Click(object sender, RoutedEventArgs e)
@@ -1791,13 +1809,12 @@ namespace EricGameLauncher
 
                 try
                 {
-                    var grid = BtnSwitchStorageMode.Parent as Grid;
-                    if (grid != null && grid.Children.Count > 4)
-                    {
-                        var openFolderBtn = grid.Children[4] as Button;
-                        if (openFolderBtn != null)
-                            ToolTipService.SetToolTip(openFolderBtn, I18n.T("Settings_OpenConfigFolder"));
-                    }
+                    // Remove erroneous tooltip from migration button
+                    ToolTipService.SetToolTip(BtnSwitchStorageMode, null);
+                    
+                    // Set correct tooltip for folder button
+                    if (BtnOpenConfigFolder != null)
+                        ToolTipService.SetToolTip(BtnOpenConfigFolder, I18n.T("Settings_OpenConfigFolder"));
                 }
                 catch (Exception ex) { Logger.Log(ex); }
 
@@ -1815,16 +1832,28 @@ namespace EricGameLauncher
                 MenuExeStartMenu.Text = I18n.T("Source_StartMenu");
                 MenuExeDesktop.Text = I18n.T("Source_Desktop");
                 MenuExeBrowse.Text = I18n.T("Property_BrowseFile");
+                
+                MenuAltStartMenu.Text = I18n.T("Source_StartMenu");
+                MenuAltDesktop.Text = I18n.T("Source_Desktop");
+                MenuAltBrowse.Text = I18n.T("Property_BrowseFile");
+
+                MenuAlongStartMenu.Text = I18n.T("Source_StartMenu");
+                MenuAlongDesktop.Text = I18n.T("Source_Desktop");
+                MenuAlongBrowse.Text = I18n.T("Property_BrowseFile");
+
                 MenuMgrStartMenu.Text = I18n.T("Source_StartMenu");
                 MenuMgrDesktop.Text = I18n.T("Source_Desktop");
                 MenuMgrBrowse.Text = I18n.T("Property_BrowseFile");
-                PropUseAlternativeLaunch.Content = I18n.T("Property_SubstituteExe");
-                PropRunAlongside.Content = I18n.T("Property_RunAtLaunch");
+                PropSubstituteExeLabel.Text = I18n.T("Property_SubstituteExe");
+                PropRunAtLaunchLabel.Text = I18n.T("Property_RunAtLaunch");
                 PropManagerPathLabel.Text = I18n.T("Property_ManagerPath");
                 PropOptionalLabel.Text = I18n.T("Property_Optional");
-                PropRunAsAdminLabel.Text = I18n.T("Property_RunAsAdmin");
-                PropIsAdmin.Content = I18n.T("Property_MainExe");
-                PropIsMgrAdmin.Content = I18n.T("Property_Manager");
+                
+                string adminText = I18n.T("Property_Admin");
+                PropAdminLabel1.Text = adminText;
+                PropAdminLabel2.Text = adminText;
+                PropAdminLabel3.Text = adminText;
+                PropAdminLabel4.Text = adminText;
                 try
                 {
                     var iconGrid = PropIcon?.Parent as Border;
