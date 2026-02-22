@@ -56,9 +56,9 @@ Whether your games are from Steam, Epic, or independent exe files, this is their
         *   **Windows Store Apps**: Supports launching apps via `shell:AppsFolder\` with optional elevation.
         *   **Environment Variables**: All paths support automatic expansion of variables like `%AppData%`.
 *   **Ultra-Lightweight**: Start as needed, leave when done. No background services, zero ads, and system resource usage is nearly zero.
-*   **Efficient Search**: Supports English initial matching, space-separated first letters, and CamelCase matching. Want to play "League of Legends"? Just type "LOL" for instant results.
+*   **Efficient Search**: Supports full Pinyin, Pinyin initials, English initials, space-separated initials, and uppercase letter matching search.  
 *   **Professional-Grade Property Control**: This isn't just a basic shortcut.
-    *   **Run as Administrator**: Separately configure elevation for the "Game Main Program" and "Game Manager" (e.g., Steam/Epic), solving issues where insufficient permissions prevent startup.
+    *   **Run as Administrator**: Separately configure elevation for the "Game Main Program" and "Game Manager", solving issues where insufficient permissions prevent startup.
     *   **Run Manager**: Supports configuring the manager path to ensure the game not only starts but also correctly triggers platform services.
     *   **Full Parameter Support**: All configured execution targets have end-to-end execution support.
     *   **Replace Main Executable**: Check this to use a custom command (e.g., `starward://`) to completely replace the original EXE's startup logic.
@@ -69,7 +69,11 @@ Whether your games are from Steam, Epic, or independent exe files, this is their
         *   Toggle "Run as Administrator" for each custom item.
         *   **Smart Shifting**: Subsequent items automatically shift up when an intermediate item is deleted to keep the list compact.
     *   **Icon Size**: From compact lists to immersive large grids, customize as you wish.
- 
+*   **Automatic Update Support**：
+    *   **Built-in Update Check**: Automatically checks GitHub Releases on startup to ensure you are always using the latest version.  
+    *   **Silent Notification**: When an update is available, the version number in the top-right corner turns red and displays an update icon — no intrusive pop-up alerts.  
+    *   **One-Click Download**: New version detected? Download and install with a single click, no manual steps required.  
+
  ### Designed for Geeks
 *   **Fully Portable Mode**: Supports storing all data (configurations, cached icons) in the program directory. Put it on a USB drive, carry your game library with you, and run it on any computer.
 *   **Seamless Data Migration**: Want to switch from system installation mode to portable mode? One-click migration automatically moves all configurations and icons without reconfiguration.
