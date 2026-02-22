@@ -16,6 +16,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Net.Http.Json;
+using System.Reflection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -1819,6 +1821,116 @@ namespace EricGameLauncher
         }
 
         public static bool VerifyPathHash(string path, string hash) => GetPathHash(path) == hash;
+    }
+
+    #endregion
+
+    #region Update System
+
+    public class UpdateService
+    {
+        private static readonly HttpClient client = new HttpClient();
+        private const string GitHubApiUrl = "https://api.github.com/repos/EricZhang233/EricGameLauncher/releases/latest";
+        private const string MirrorPrefix = "https://ghproxy.com/"; 
+
+        public class ReleaseInfo
+        {
+            public string tag_name { get; set; } = "";
+            public string name { get; set; } = "";
+            public string html_url { get; set; } = "";
+            public string body { get; set; } = "";
+            public List<Asset> assets { get; set; } = new List<Asset>();
+        }
+
+        public class Asset
+        {
+            public string name { get; set; } = "";
+            public string browser_download_url { get; set; } = "";
+            public long size { get; set; }
+        }
+
+        /// <summary>
+        /// 检查是否需要更新（每次启动均执行）
+        /// </summary>
+        public static async Task<ReleaseInfo?> CheckForUpdateAsync()
+        {
+            try
+            {
+                if (!client.DefaultRequestHeaders.Contains("User-Agent"))
+                    client.DefaultRequestHeaders.Add("User-Agent", "EricGameLauncher-Updater");
+
+                var release = await client.GetFromJsonAsync<ReleaseInfo>(GitHubApiUrl);
+                if (release == null || string.IsNullOrEmpty(release.tag_name)) return null;
+
+                var match = System.Text.RegularExpressions.Regex.Match(release.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
+                if (!match.Success) return null;
+
+                Version latestVersion = new Version(match.Value);
+                Version currentVersion = new Version(AppVersion.Version);
+
+                return latestVersion > currentVersion ? release : null;
+            }
+            catch { return null; }
+        }
+
+        public static async Task<ReleaseInfo?> GetLatestReleaseAsync()
+        {
+            try
+            {
+                client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "EricGameLauncher-Updater");
+                return await client.GetFromJsonAsync<ReleaseInfo>(GitHubApiUrl);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 启动更新程序
+        /// </summary>
+        public static void StartUpdater(string downloadUrl)
+        {
+            try
+            {
+                string tempDir = Path.Combine(Path.GetTempPath(), "EricGameLauncher");
+                if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
+
+                string updaterPath = Path.Combine(tempDir, "Updater.exe");
+                
+                // 1. 释放嵌入的 Updater.exe
+                var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+                using (var stream = assembly.GetManifestResourceStream("EricGameLauncher.Updater.exe"))
+                {
+                    if (stream == null) throw new Exception("Updater resource not found.");
+                    using (var fileStream = new FileStream(updaterPath, FileMode.Create, FileAccess.Write))
+                    {
+                        stream.CopyTo(fileStream);
+                    }
+                }
+
+                // 2. 准备启动参数 (转交下载职责)
+                string installDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
+                string args = $"\"{installDir}\" \"{downloadUrl}\"";
+
+                // 3. 启动更新器
+                ProcessStartInfo psi = new ProcessStartInfo
+                {
+                    FileName = updaterPath,
+                    Arguments = args,
+                    UseShellExecute = true
+                };
+
+                Process.Start(psi);
+                
+                // 4. 退出当前主程序
+                Application.Current.Exit();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Failed to start updater: " + ex.Message);
+            }
+        }
     }
 
     #endregion

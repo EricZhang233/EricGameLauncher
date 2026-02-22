@@ -63,7 +63,14 @@
 		"Property_CustomMenu": "自定义右键菜单",
 		"Property_CustomTitlePlaceholder": "菜单标题",
 		"Property_CustomCommandPlaceholder": "执行路径或参数",
-		"Property_CustomItem": "自定义项"
+		"Property_CustomItem": "自定义项",
+		"Menu_CheckUpdate": "检查更新",
+		"Update_DialogTitle": "发现新版本",
+		"Update_DialogContent": "是否立即下载并更新？更新过程中程序将自动重启。",
+		"Update_DialogConfirm": "立即更新",
+		"Update_DialogCancel": "以后再说",
+		"Update_NoUpdateTitle": "检查更新",
+		"Update_NoUpdateContent": "您当前使用的是最新版本。"
 	},
 	"EN": {
 		"_LangName": "English",
@@ -129,7 +136,14 @@
 		"Property_CustomMenu": "Custom Context Menu",
 		"Property_CustomTitlePlaceholder": "Title",
 		"Property_CustomCommandPlaceholder": "Path or Arguments",
-		"Property_CustomItem": "Custom Item"
+		"Property_CustomItem": "Custom Item",
+		"Menu_CheckUpdate": "Check for Updates",
+		"Update_DialogTitle": "New Version Found",
+		"Update_DialogContent": "Would you like to download and update now? The app will relaunch automatically.",
+		"Update_DialogConfirm": "Update Now",
+		"Update_DialogCancel": "Later",
+		"Update_NoUpdateTitle": "Check for Updates",
+		"Update_NoUpdateContent": "You are already using the latest version."
 	},
 	"Zh-TW": {
 		"_LangName": "繁體中文",
@@ -194,8 +208,9 @@
 		"Empty_Description": "點擊右上角「更多」按鈕新增遊戲",
 		"Property_CustomMenu": "自定義右鍵選單",
 		"Property_CustomTitlePlaceholder": "選單標題",
-		"Property_CustomCommandPlaceholder": "執行路徑或參數",
-		"Property_CustomItem": "自定義項"
+		"Property_CustomCommandPlaceholder": "执行路径或參數",
+		"Property_CustomItem": "自定義項",
+		"Menu_CheckUpdate": "檢查更新"
 	},
 	"JA": {
 		"_LangName": "日本語",
@@ -258,7 +273,8 @@
 		"Property_CustomMenu": "カスタム右クリックメニュー",
 		"Property_CustomTitlePlaceholder": "メニュータイトル",
 		"Property_CustomCommandPlaceholder": "実行パスまたは引数",
-		"Property_CustomItem": "カスタム項目"
+		"Property_CustomItem": "カスタム項目",
+		"Menu_CheckUpdate": "アップデートを確認"
 	},
 	"KO": {
 		"_LangName": "한국어",
@@ -316,7 +332,8 @@
 		"Property_CustomMenu": "사용자 지정 우클릭 메뉴",
 		"Property_CustomTitlePlaceholder": "메뉴 제목",
 		"Property_CustomCommandPlaceholder": "실행 경로 또는 인수",
-		"Property_CustomItem": "사용자 지정 항목"
+		"Property_CustomItem": "사용자 지정 항목",
+		"Menu_CheckUpdate": "업데이트 확인"
 	},
 	"FR": {
 		"_LangName": "Français",

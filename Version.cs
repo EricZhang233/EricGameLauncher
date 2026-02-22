@@ -2,7 +2,7 @@
 {
     public static class AppVersion
     {
-        public const string Version = "1.0.6";
+        public const string Version = "1.0.9999";
         public static string DisplayVersion => $"Ver.{Version}";
     }
 }
