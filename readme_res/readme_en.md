@@ -2,7 +2,7 @@
  readme编写规范：
   1. 所有readme都需要保留本说明且不可做任何翻译修改。主readme(中文版)是本说明的唯一源头(Source of Truth)，禁止将非中文版本中被修改的说明同步回主readme。非中文版的此说明需始终保持与主readme单向同步更新。
   2. 非中文版本的readme必须保留主readme(中文版)的所有视觉元素、HTML 标签、图标路径和排版格式，非中文版本的readme是中文版的完整对应精准同步翻译版，翻译不可笼统，不可修改原意，不可增减内容。
-  3. 针对目标语言环境进行功能描述的本土化：英文版需强调符合英语使用习惯的搜索匹配方式（如首字母、空格分隔首字母 and CamelCase 匹配）。
+  3. 针对目标语言环境进行功能描述的本土化。
   4. 非中文版本的readme需要合理修改指向资源的路径，确保资源能够正确显示。
   5. 非中文版本的readme都需要保留并置顶本说明
   6. 非中文版本的readme都需要置顶以下元素，可以替换为相应的翻译版本但必须保留原意：
@@ -22,16 +22,15 @@
 
 **Bring Game Launching Back to Purity and Speed**
 
-[![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
+[![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![WinUI 3](https://img.shields.io/badge/UI-WinUI%203-0078D4?logo=windows)](https://github.com/microsoft/microsoft-ui-xaml)
-[![Windows 11 Ready](https://img.shields.io/badge/Style-Windows%2011-blue?logo=windows11)](https://www.microsoft.com/windows)
+[![Windows 11 25H2+](https://img.shields.io/badge/Windows-11%2025H2%2B-0078D4?logo=windows11)](https://www.microsoft.com/windows)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?logo=gnu)](https://www.gnu.org/licenses/gpl-3.0.html)
 
-[Features](#features) • [Technical Highlights](#technical-highlights) • [Quick Start](#quick-start) • [Contribution & Support](#contribution--support)
+[Introduction](#introduction) • [Features](#features) • [Technical Highlights](#technical-highlights) • [Quick Start](#quick-start) • [Known Issues](#known-issues) • [Contribution & Support](#contribution--support) • [Special Thanks](#special-thanks--links)
 
 <div align="center">
-  <img src="readmescrsoot1.png" width="100%" />
-  <img src="readmescrsoot2.png" width="100%" />
+  <img src="readme.overview.gif" width="100%" />
 </div>
 
 </div>
@@ -40,9 +39,12 @@
 
 ## Introduction
 
-**Eric Game Launcher** is a next-generation game launcher built for minimalists. It discards the bloat of traditional platforms, leveraging the power of **WinUI 3** and **.NET 8** to provide millisecond-level startup experiences and native Windows 11 visual enjoyment.
+**Eric Game Launcher** is a next-generation game launcher built for minimalists. It discards the bloat of traditional platforms, leveraging the power of **WinUI 3** and **.NET 10** to provide millisecond-level startup experiences and native Windows 11 visual enjoyment.
 
 Whether your games are from Steam, Epic, or independent exe files, this is their unified home.
+
+> [!IMPORTANT]
+> **System Requirements**: This application only supports **Windows 11 25H2** and above.
 
 ## Features
 
@@ -56,7 +58,7 @@ Whether your games are from Steam, Epic, or independent exe files, this is their
         *   **Windows Store Apps**: Supports launching apps via `shell:AppsFolder\` with optional elevation.
         *   **Environment Variables**: All paths support automatic expansion of variables like `%AppData%`.
 *   **Ultra-Lightweight**: Start as needed, leave when done. No background services, zero ads, and system resource usage is nearly zero.
-*   **Efficient Search**: Supports full Pinyin, Pinyin initials, English initials, space-separated initials, and uppercase letter matching search.  
+*   **Efficient Search**: Supports full Pinyin, Pinyin initials, English initials, space-separated initials, CamelCase, and uppercase letter matching search.  
 *   **Professional-Grade Property Control**: This isn't just a basic shortcut.
     *   **Run as Administrator**: Separately configure elevation for the "Game Main Program" and "Game Manager", solving issues where insufficient permissions prevent startup.
     *   **Run Manager**: Supports configuring the manager path to ensure the game not only starts but also correctly triggers platform services.
@@ -83,7 +85,7 @@ Whether your games are from Steam, Epic, or independent exe files, this is their
 
 For developers, Eric Game Launcher demonstrates how to build modern Windows desktop applications with minimal code:
 
-*   **Cutting-Edge Stack**: Built on the latest **Windows App SDK (1.6+)** and **.NET 8**, showcasing the great potential of WinUI 3 in desktop applications.
+*   **Cutting-Edge Stack**: Built on the latest **Windows App SDK (1.6+)** and **.NET 10**, showcasing the great potential of WinUI 3 in desktop applications.
 *   **Native Performance**:
     *   Utilizes `P/Invoke` (User32.dll) for efficient system-level icon extraction.
     *   Uses `System.Text.Json` for high-performance, low-memory data serialization.
@@ -96,9 +98,12 @@ For developers, Eric Game Launcher demonstrates how to build modern Windows desk
 ## Quick Start
 
 ### Users
-1.  Go to the [Releases](../../releases) page and download the latest version.
+1.  Go to the [GitHub Releases](https://github.com/EricZhang233/EricGameLauncher/releases) page and download the latest version.
 2.  Extract and run `EricGameLauncher.exe`.
 3.  Click **"More" -> "Add"** in the top right corner, then select a game shortcut or executable.
+
+## Known Issues:
+1. **IME Incompatibility**: Due to the underlying input channel characteristics of the WinUI 3 framework, some input methods (e.g., WeChat IME) may not display the candidate box correctly. **It is recommended to use the native Microsoft IME** or other mainstream input methods. WinUI 3 has removed the traditional child window handle (HWND) in favor of a pure TSF (Text Services Framework) architecture. In WinUI 3's **Unpackaged mode**, some input methods like WeChat IME fail to correctly parse and retrieve the physical screen coordinates of the cursor due to incomplete underlying adaptation, causing them to silently give up drawing the candidate window. This compatibility defect also exists in other unpackaged WinUI 3 applications. This is a low-level adaptation issue on the input method side and is unrelated to Eric Game Launcher.
 
 ## Contribution & Support
 

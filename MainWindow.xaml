@@ -392,7 +392,7 @@
                   ContainerContentChanging="AppGrid_ContainerContentChanging">
             <GridView.ItemTemplate>
                 <DataTemplate x:DataType="models:AppItem">
-                    <StackPanel x:Name="ItemPanel" Width="118" Margin="4">
+                    <StackPanel x:Name="ItemPanel" Width="118" Margin="4" Tag="{Binding}">
                         
                         
                         <Grid x:Name="IconGrid" Width="118" Height="118" Margin="0,0,0,2">
@@ -543,10 +543,25 @@
                                     Padding="12" 
                                     CornerRadius="8">
                             <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock x:Name="PropMainExePathLabel" Text="" 
-                                           FontSize="14"
-                                           FontWeight="SemiBold"
-                                           VerticalAlignment="Center"/>
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <TextBlock x:Name="PropMainExePathLabel" Text="" 
+                                               FontSize="14"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Center"/>
+                                    <Border x:Name="PropPlatformBadgeContainer" 
+                                            Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                            Padding="6,1"
+                                            CornerRadius="4"
+                                            VerticalAlignment="Center"
+                                            Visibility="Collapsed">
+                                        <TextBlock x:Name="PropPlatformBadge" 
+                                                   Text="" 
+                                                   FontSize="10" 
+                                                   Foreground="White"
+                                                   FontWeight="Bold"
+                                                   VerticalAlignment="Center"/>
+                                    </Border>
+                                </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
                                     <TextBlock x:Name="PropAdminLabel1" Text="" 
                                                FontSize="12" 
@@ -988,6 +1003,28 @@
                 </Grid>
             </Grid>
         </Grid>
+
+        <!-- 配置迁移遮罩 -->
+        <Grid x:Name="MigrationOverlay"
+              Grid.RowSpan="2"
+              Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+              Visibility="Collapsed"
+              Canvas.ZIndex="2000">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="24">
+                <ProgressRing Width="64" Height="64" IsActive="True"/>
+                <StackPanel Spacing="8">
+                    <TextBlock x:Name="MigrationTitle" 
+                               Text="正在升级配置引擎..." 
+                               FontSize="20" 
+                               FontWeight="SemiBold" 
+                               HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="MigrationSubTitle" 
+                               Text="这可能需要几秒钟，完成后应用将自动重启。" 
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               HorizontalAlignment="Center"/>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
     </Grid>
-</Window> 
+</Window>
 

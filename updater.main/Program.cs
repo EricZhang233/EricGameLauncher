@@ -7,13 +7,16 @@ using System.Threading.Tasks;
 using System.Linq;
 using System.Security.Principal;
 
-namespace Updater
+using System.Runtime.Versioning;
+
+namespace MainUpdater
 {
     class Program
     {
+        [SupportedOSPlatform("windows")]
         static async Task Main(string[] args)
         {
-            Console.Title = "Eric Game Launcher - Updater";
+            Console.Title = "Eric Game Launcher - MainUpdater";
             Console.WriteLine("========================================");
             Console.WriteLine("    Eric Game Launcher Update System    ");
             Console.WriteLine("========================================");
@@ -41,7 +44,9 @@ namespace Updater
                         ProcessStartInfo psi = new ProcessStartInfo
                         {
                             FileName = Process.GetCurrentProcess().MainModule?.FileName,
-                            Arguments = string.Join(" ", args.Select(a => $"\"{a}\"")),
+                            // O3: escape any embedded double-quotes in each argument to prevent
+                            // command-line parsing errors when paths contain quote characters.
+                            Arguments = string.Join(" ", args.Select(a => $"\"{a.Replace("\"", "\\\"")}\"")),
                             UseShellExecute = true,
                             Verb = "runas"
                         };
@@ -67,14 +72,17 @@ namespace Updater
             {
                 // Step 1: Download with Progress
                 Console.WriteLine($"[1/4] Downloading update package...");
-                using (var client = new HttpClient())
+                // L2: set a generous timeout so the download can never hang indefinitely
+                // on a broken connection. 30 minutes covers even very large packages on
+                // a slow connection while still ensuring eventual cleanup.
+                using (var client = new HttpClient { Timeout = TimeSpan.FromMinutes(30) })
                 {
                     client.DefaultRequestHeaders.Add("User-Agent", "EricGameLauncher-Updater");
-                    
+
                     using (var response = await client.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead))
                     {
                         response.EnsureSuccessStatusCode();
-                        
+
                         var totalBytes = response.Content.Headers.ContentLength ?? -1L;
                         var canReportProgress = totalBytes != -1;
 
@@ -94,13 +102,13 @@ namespace Updater
 
                                 var now = DateTime.Now;
                                 var elapsedSinceReport = (now - lastReportTime).TotalMilliseconds;
-                                
+
                                 // Update every 200ms or at completion
                                 if (elapsedSinceReport > 200 || totalRead == totalBytes)
                                 {
                                     lastReportTime = now;
                                     double speed = (totalRead / 1024.0 / 1024.0) / (now - startTime).TotalSeconds;
-                                    
+
                                     string progressText;
                                     if (canReportProgress)
                                     {
@@ -158,7 +166,7 @@ namespace Updater
                         string destDir = Path.GetDirectoryName(destinationPath)!;
 
                         if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
-                        
+
                         // Don't overwrite data folder content if it somehow exists in zip
                         if (entry.FullName.ToLower().StartsWith("data/")) continue;
 
@@ -210,6 +218,7 @@ namespace Updater
             catch { return false; }
         }
 
+        [SupportedOSPlatform("windows")]
         private static bool IsAdministrator()
         {
             try

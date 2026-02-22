@@ -2,12 +2,12 @@
  readme编写规范：
   1. 所有readme都需要保留本说明且不可做任何翻译修改。主readme(中文版)是本说明的唯一源头(Source of Truth)，禁止将非中文版本中被修改的说明同步回主readme。非中文版的此说明需始终保持与主readme单向同步更新。
   2. 非中文版本的readme必须保留主readme(中文版)的所有视觉元素、HTML 标签、图标路径和排版格式，非中文版本的readme是中文版的完整对应精准同步翻译版，翻译不可笼统，不可修改原意，不可增减内容。
-  3. 针对目标语言环境进行功能描述的本土化：英文版需强调符合英语使用习惯的搜索匹配方式（如首字母、空格分隔首字母 and CamelCase 匹配）。
+  3. 针对目标语言环境进行功能描述的本土化。
   4. 非中文版本的readme需要合理修改指向资源的路径，确保资源能够正确显示。
   5. 非中文版本的readme都需要保留并置顶本说明
   6. 非中文版本的readme都需要置顶以下元素，可以替换为相应的翻译版本但必须保留原意：
 	    <div align="right">
-	    <a href="../readme.md">最新のアップデートについては、中国語版のREADMEを参照してください。</a>
+	    <a href="../readme.md">For the latest updates, please refer to the Chinese README.</a>
 	    </div>
   7. 任何关于项目内容的更新，必须首先在主readme(中文版)中完成。在主版确认无误后，再根据本规范同步至其他语言版本。
   8. 非中文版本的readme顶部的语言切换器仅保留指向主readme(中文版)的链接，不互相跳转。非中文版本的入口仅在主readme中统一显示。
@@ -22,16 +22,15 @@
 
 **ゲーム起動を純粋かつ超高速に**
 
-[![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
+[![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![WinUI 3](https://img.shields.io/badge/UI-WinUI%203-0078D4?logo=windows)](https://github.com/microsoft/microsoft-ui-xaml)
-[![Windows 11 Ready](https://img.shields.io/badge/Style-Windows%2011-blue?logo=windows11)](https://www.microsoft.com/windows)
+[![Windows 11 25H2+](https://img.shields.io/badge/Windows-11%2025H2%2B-0078D4?logo=windows11)](https://www.microsoft.com/windows)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?logo=gnu)](https://www.gnu.org/licenses/gpl-3.0.html)
 
-[機能特性](#機能特性) • [技術的なハイライト](#技术的なハイライト) • [クイックスタート](#クイックスタート) • [開発ガイド](#開発ガイド)
+[はじめに](#はじめに) • [機能特性](#機能特性) • [技術的なハイライト](#技術的なハイライト) • [クイックスタート](#クイックスタート) • [既知の問題](#既知の問題) • [貢献とサポート](#貢献とサポート) • [特別な感謝](#特別な感謝--関連リンク)
 
 <div align="center">
-  <img src="readmescrsoot1.png" width="100%" />
-  <img src="readmescrsoot2.png" width="100%" />
+  <img src="readme.overview.gif" width="100%" />
 </div>
 
 </div>
@@ -40,9 +39,12 @@
 
 ## はじめに
 
-**Eric Game Launcher** は、ミニマリストのために作られた次世代のゲームランチャーです。従来のプラットフォームの肥大化を排除し、**WinUI 3** と **.NET 8** の強力なパフォーマンスを活用することで、ミリ秒単位の起動体験と Windows 11 ネイティブの視覚的な楽しみを提供します。
+**Eric Game Launcher** は、ミニマリストのために作られた次世代のゲームランチャーです。従来のプラットフォームの肥大化を排除し、**WinUI 3** と **.NET 10** の強力なパフォーマンスを活用することで、ミリ秒単位の起動体験と Windows 11 ネイティブの視覚的な楽しみを提供します。
 
 ゲームが Steam、Epic、または独立した exe ファイルであっても、ここがそれらの統一された拠点となります。
+
+> [!IMPORTANT]
+> **動作環境要求**: 本プログラムは **Windows 11 25H2** 以降のバージョンのみをサポートしています。
 
 ## 機能特性
 
@@ -83,7 +85,7 @@
 
 開発者にとって、Eric Game Launcher は最小限のコードでいかに現代的な Windows デスクトップアプリを構築するかを示しています。
 
-*   **最先端の技術スタック**：最新の **Windows App SDK (1.6+)** と **.NET 8** に基づいて構築されており、デスクトップアプリにおける WinUI 3 の大きな可能性を示しています。
+*   **最先端の技術スタック**：最新の **Windows App SDK (1.6+)** と **.NET 10** に基づいて構築されており、デスクトップアプリにおける WinUI 3 の大きな可能性を示しています。
 *   **ネイティブパフォーマンス**：
     *   `P/Invoke` (User32.dll) を利用して、効率的なシステムレベルのアイコン抽出を実現。
     *   `System.Text.Json` を使用して、高性能でメモリ使用量の少ないデータシリアル化を実現。
@@ -96,9 +98,12 @@
 ## クイックスタート
 
 ### ユーザー
-1.  [Releases](../../releases) ページから最新バージョンをダウンロードします。
+1.  [GitHub Releases](https://github.com/EricZhang233/EricGameLauncher/releases) ページから最新バージョンをダウンロードします。
 2.  解凍して `EricGameLauncher.exe` を実行します。
 3.  右上の **「もっと見る」 -> 「追加」** をクリックし、ゲームのショートカットまたは実行ファイルを選択します。
+
+## 既知の問題：
+1. **一部の入力法との不互換性**: WinUI 3 フレームワークの低レベル入力チャネルの特性により、一部の入力法（WeChat 入力法など）で候補ウィンドウが正常に表示されない場合があります。**システム標準の Microsoft 入力法の使用を推奨します**、または他の主要な入力法。WinUI 3 は従来の小窓ハンドル (HWND) を廃止し、純粋な TSF (Text Services Framework) アーキテクチャを採用しました。WinUI 3 の**未パッケージ (Unpackaged) モード**では、WeChat 入力法などの一部の入力法が、基盤となる適応が不完全なためにカーソルの物理画面座標を正しく解析・取得できず、候補ウィンドウの描画をサイレントに断念します。この互换性の欠陥は、他の未パッケージの WinUI 3 アプリケーションにも存在します。これは入力法側の低レベルな適応不足によるものであり、Eric Game Launcher とは関係ありません。
 
 ## 貢献とサポート
 
