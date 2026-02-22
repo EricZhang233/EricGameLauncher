@@ -1,8 +1,8 @@
-﻿<!--
+<!--
  readme编写规范：
   1. 所有readme都需要保留本说明且不可做任何翻译修改。主readme(中文版)是本说明的唯一源头(Source of Truth)，禁止将非中文版本中被修改的说明同步回主readme。非中文版的此说明需始终保持与主readme单向同步更新。
   2. 非中文版本的readme必须保留主readme(中文版)的所有视觉元素、HTML 标签、图标路径和排版格式，非中文版本的readme是中文版的完整对应精准同步翻译版，翻译不可笼统，不可修改原意，不可增减内容。
-  3. 针对目标语言环境进行功能描述的本土化：英文版需强调符合英语使用习惯的搜索匹配方式（如首字母、空格分隔首字母和 CamelCase 匹配）。
+  3. 针对目标语言环境进行功能描述的本土化。
   4. 非中文版本的readme需要合理修改指向资源的路径，确保资源能够正确显示。
   5. 非中文版本的readme都需要保留并置顶本说明
   6. 非中文版本的readme都需要置顶以下元素，可以替换为相应的翻译版本但必须保留原意：
@@ -23,16 +23,15 @@
 
 **让游戏启动回归纯粹与极速**
 
-[![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
+[![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![WinUI 3](https://img.shields.io/badge/UI-WinUI%203-0078D4?logo=windows)](https://github.com/microsoft/microsoft-ui-xaml)
-[![Windows 11 Ready](https://img.shields.io/badge/Style-Windows%2011-blue?logo=windows11)](https://www.microsoft.com/windows)
+[![Windows 11 25H2+](https://img.shields.io/badge/Windows-11%2025H2%2B-0078D4?logo=windows11)](https://www.microsoft.com/windows)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?logo=gnu)](https://www.gnu.org/licenses/gpl-3.0.html)
 
-[功能特性](#功能特性) • [技术亮点](#技术亮点) • [快速开始](#快速开始) • [开发指南](#开发指南)
+[简介](#简介) • [功能特性](#功能特性) • [技术亮点](#技术亮点) • [快速开始](#快速开始) • [已知问题](#已知问题) • [贡献与支持](#贡献与支持) • [特别致谢](#特别致谢--友情链接)
 
 <div align="center">
-  <img src="readme_res/readmescrsoot1.png" width="100%" />
-  <img src="readme_res/readmescrsoot2.png" width="100%" />
+  <img src="readme_res/readme.overview.gif" width="100%" />
 </div>
 
 </div>
@@ -41,9 +40,12 @@
 
 ## 简介
 
-**Eric Game Launcher** 是一款专为极简主义者打造的下一代游戏启动器。它摒弃了传统平台的臃肿，利用 **WinUI 3** 和 **.NET 8** 的强大性能，为您提供毫秒级的启动体验和原生的 Windows 11 视觉享受。
+**Eric Game Launcher** 是一款专为极简主义者打造的下一代 game launcher。它摒弃了传统平台的臃肿，利用 **WinUI 3** 和 **.NET 10** 的强大性能，为您提供毫秒级的启动体验和原生的 Windows 11 视觉享受。
 
 无论您的游戏来自 Steam、Epic，还是独立的 exe，这里都是它们统一的家。
+
+> [!IMPORTANT]
+> **运行环境要求**：本程序仅支持 **Windows 11 25H2** 及以上版本。
 
 ## 功能特性
 
@@ -84,7 +86,7 @@
 
 对于开发者而言，Eric Game Launcher 展示了如何用最精简的代码构建现代化的 Windows 桌面应用：
 
-*   **前沿技术栈**：基于最新的 **Windows App SDK (1.6+)** 和 **.NET 8** 构建，展示了 WinUI 3 在桌面应用中的强大潜力。
+*   **前沿技术栈**：基于最新的 **Windows App SDK (1.6+)** 和 **.NET 10** 构建，展示了 WinUI 3 在桌面应用中的强大潜力。
 *   **原生性能**：
     *   利用 `P/Invoke` (User32.dll) 进行高效的系统级图标提取。
     *   使用 `System.Text.Json` 实现高性能、低内存占用的数据序列化。
@@ -97,9 +99,13 @@
 ## 快速开始
 
 ### 用户
-1.  前往 [Releases](../../releases) 页面下载最新版本。
+1.  前往 [GitHub Releases](https://github.com/EricZhang233/EricGameLauncher/releases) 页面下载最新版本。
 2.  解压并运行 `EricGameLauncher.exe`。
 3.  点击右上角 **“更多” -> “添加”**，选择游戏快捷方式或可执行文件。
+
+## 已知问题：
+1.  **部分输入法不兼容**：由于 WinUI 3 框架的底层输入通道特性，部分输入法（如微信输入法）可能无法正常显示候选框，**推荐使用系统原生微软输入法**或其他主流输入法。WinUI 3 移除了传统子窗口句柄 (HWND)，转而采用纯 TSF (Text Services Framework) 架构。在 WinUI 3 的未打包 (Unpackaged) 模式下，微信输入法等部分输入法因底层适配不完善，无法正确解析和获取光标的物理屏幕坐标，导致其静默放弃绘制候选窗。此兼容性缺陷同样存在于其他未打包的 WinUI 3 应用中。这是输入法端的底层适配缺陷，与 Eric Game Launcher 无关。
+
 
 ## 贡献与支持
 

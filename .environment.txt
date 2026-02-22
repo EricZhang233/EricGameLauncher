@@ -1,0 +1,16 @@
+DEVELOPMENT ENVIRONMENT REQUIREMENTS (WINDOWS 11 25H2 & .NET 10)
+
+1. SYSTEM REQUIREMENTS
+- OS: Windows 11 Insider Preview (Build 26200 or higher)
+- IDE: Visual Studio
+
+2. VISUAL STUDIO WORKLOADS
+- .NET Desktop Development
+- Desktop development with C++ (Required for WinUI 3 build tools)
+- Universal Windows Platform development
+
+3. INDIVIDUAL COMPONENTS
+- .NET 10.0 SDK
+- Windows 11 SDK (10.0.26100.0)
+- Windows 11 Insider SDK (10.0.26200.0) (Download from Microsoft Insider website)
+- Single-project MSIX Packaging Tools

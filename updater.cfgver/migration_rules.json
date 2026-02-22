@@ -1,0 +1,42 @@
+[
+    {
+        "From": 1,
+        "To": 2,
+        "Transformations": [
+            {
+                "Type": "MoveAndGroup",
+                "Target": "MainAction",
+                "SourceFields": {
+                    "Path": "ExePath",
+                    "IsAdmin": "IsAdmin"
+                }
+            },
+            {
+                "Type": "MoveAndGroup",
+                "Target": "ManagerAction",
+                "SourceFields": {
+                    "Path": "MgrPath",
+                    "IsAdmin": "IsMgrAdmin"
+                }
+            },
+            {
+                "Type": "MoveAndGroup",
+                "Target": "AltAction",
+                "SourceFields": {
+                    "Enabled": "UseAlternativeLaunch",
+                    "Path": "AlternativeLaunchCommand",
+                    "IsAdmin": "IsAltAdmin"
+                }
+            },
+            {
+                "Type": "MoveAndGroup",
+                "Target": "AlongsideAction",
+                "SourceFields": {
+                    "Enabled": "RunAlongside",
+                    "Path": "AlongsideCommand",
+                    "IsAdmin": "IsAlongsideAdmin"
+                }
+            }
+        ]
+    }
+]
