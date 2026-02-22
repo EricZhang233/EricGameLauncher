@@ -1,4 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 1. 全局配置与元数据 (Global Metadata) -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.26100</TargetFramework>
@@ -19,46 +21,82 @@
     <ApplicationIcon>ico.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
 
-    <!-- 自定义输出路径逻辑开始 -->
-    <VersionFileContent>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\Version.cs'))</VersionFileContent>
-    <ExtractedVersion>$([System.Text.RegularExpressions.Regex]::Match($(VersionFileContent), `Version\s*=\s*"([^"]+)"`).Groups[1].Value)</ExtractedVersion>
-    
-    <!-- Debug 使用标准路径，Release 使用版本号路径 -->
-    <OutputPath Condition="'$(Configuration)' != 'Release'">bin\$(Configuration)\</OutputPath>
-    <OutputPath Condition="'$(Configuration)' == 'Release'">output\$(ExtractedVersion)\release\</OutputPath>
-    
-    <!-- 仅在 Release 模式下禁用框架文件夹追加，以保持输出目录整洁 -->
-    <!-- 注意：Debug 模式必须保留追加，否则 WinUI 3 的调试启动会因找不到依赖项而失败 (0xe0434352) -->
-    <AppendTargetFrameworkToOutputPath Condition="'$(Configuration)' == 'Release'">false</AppendTargetFrameworkToOutputPath>
-    <AppendRuntimeIdentifierToOutputPath Condition="'$(Configuration)' == 'Release'">false</AppendRuntimeIdentifierToOutputPath>
-    <!-- 自定义输出路径逻辑结束 -->
+    <!-- 彻底排除源码与中间产物，防止递归扫描 -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);Updater\**;output\**;updater_payload\**</DefaultItemExcludes>
   </PropertyGroup>
 
+  <!-- 2. 自动化版本计算 (Version Calculus) -->
+  <PropertyGroup>
+    <!-- 从 Version.cs 中实时提取版本号，供构建系统全局调用 -->
+    <VersionFileContent>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\Version.cs'))</VersionFileContent>
+    <ExtractedVersion>$([System.Text.RegularExpressions.Regex]::Match($(VersionFileContent), `Version\s*=\s*"([^"]+)"`).Groups[1].Value)</ExtractedVersion>
+  </PropertyGroup>
+
+  <!-- 3. 构建生命周期管理：构建前阶段 (Pre-Build Context) -->
+  
+  <!-- 同步版本号至程序集属性 -->
   <Target Name="SyncVersion" BeforeTargets="BeforeBuild">
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File SyncVersion.ps1" ConsoleToMSBuild="true" StandardOutputImportance="Low">
-      <Output TaskParameter="ConsoleOutput" PropertyName="RawExtractedVersion" />
-    </Exec>
-    <PropertyGroup Condition="'$(RawExtractedVersion)' != ''">
-      <Version>$(RawExtractedVersion)</Version>
-      <AssemblyVersion>$(RawExtractedVersion)</AssemblyVersion>
-      <FileVersion>$(RawExtractedVersion)</FileVersion>
+    <PropertyGroup Condition="'$(ExtractedVersion)' != ''">
+      <Version>$(ExtractedVersion)</Version>
+      <AssemblyVersion>$(ExtractedVersion)</AssemblyVersion>
+      <FileVersion>$(ExtractedVersion)</FileVersion>
     </PropertyGroup>
-    <Message Importance="High" Text="Synced Version from Version.cs: $(RawExtractedVersion)" />
+    <Message Importance="High" Text="Synced Version from Version.cs: $(ExtractedVersion) (Native)" />
   </Target>
 
+  <!-- 强制预编译并发布 Updater 影子组件 -->
+  <Target Name="BuildUpdater" BeforeTargets="BeforeBuild;PrepareResources">
+    <Message Importance="High" Text="Publishing Updater ($(Configuration)) to intermediate directory..." />
+    <MSBuild Projects="Updater\Updater.csproj" 
+             Targets="Restore;Publish" 
+             Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=true;PublishDir=$(MSBuildProjectDirectory)\updater_payload\" />
+  </Target>
+
+  <!-- 4. 构建生命周期管理：构建后阶段 (Post-Build & Cleanup) -->
+
+  <!-- 任何模式下的构建后即时清理 -->
+  <Target Name="PostBuildCleanup" AfterTargets="Build">
+    <RemoveDir Directories="updater_payload" />
+    <Message Importance="High" Text="Post-build cleanup: intermediate updater payload removed." />
+  </Target>
+
+  <!-- Release 自动化打包流 -->
   <Target Name="ZipReleaseBuild" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
-    <Message Importance="High" Text="正在将 Release 产物打包为 EricGameLauncher_$(ExtractedVersion).zip..." />
-    <MakeDir Directories="output\$(ExtractedVersion)" />
+    <Message Importance="High" Text="Zipping Release artifacts to EricGameLauncher_$(ExtractedVersion).zip..." />
+    <MakeDir Directories="output" />
     <ZipDirectory SourceDirectory="$(OutputPath)" 
-                  DestinationFile="output\$(ExtractedVersion)\EricGameLauncher_$(ExtractedVersion).zip" 
+                  DestinationFile="output\EricGameLauncher_$(ExtractedVersion).zip" 
                   Overwrite="true" />
   </Target>
 
+  <!-- 极致 Release 清理：压缩包生成后物理抹除所有项目缓存 -->
+  <Target Name="ReleasePostClean" AfterTargets="ZipReleaseBuild" Condition="'$(Configuration)' == 'Release'">
+    <RemoveDir Directories="bin" />
+    <RemoveDir Directories="obj" />
+    <RemoveDir Directories="Updater\bin" />
+    <RemoveDir Directories="Updater\obj" />
+    <RemoveDir Directories="updater_payload" />
+    <Message Importance="High" Text="Release post-build cleanup: Physically removed all 'bin' and 'obj' directories across the solution." />
+  </Target>
+
+  <!-- 5. 全量硬核 Clean 操作集成 (Hard Clean Integration) -->
+  <Target Name="CleanUpdater" AfterTargets="Clean">
+    <RemoveDir Directories="bin" />
+    <RemoveDir Directories="obj" />
+    <RemoveDir Directories="Updater\bin" />
+    <RemoveDir Directories="Updater\obj" />
+    <RemoveDir Directories="updater_payload" />
+    <Message Importance="High" Text="Hard Clean: Physically removed all 'bin' and 'obj' directories across the solution." />
+  </Target>
+
+  <!-- 6. 依赖与资源管理 (Dependencies & Resources) -->
+  
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260101001" />
     <PackageReference Include="WinUIEx" Version="2.4.0" />
     <PackageReference Include="System.Drawing.Common" Version="8.0.8" />
     <PackageReference Include="TinyPinyin.Net" Version="1.0.2" />
+    <PackageReference Include="CommunityToolkit.WinUI.UI.Controls.Markdown" Version="7.1.2" />
   </ItemGroup>
 
   <ItemGroup>
@@ -67,12 +105,18 @@
     <EmbeddedResource Include="i18n.json" />
   </ItemGroup>
 
+  <!-- 额外资源排除规则 -->
   <ItemGroup>
     <Content Remove="readme_res\**" />
     <Compile Remove="readme_res\**" />
     <EmbeddedResource Remove="readme_res\**" />
-    <None Remove="readme_res\**" />
-    <Page Remove="readme_res\**" />
+  </ItemGroup>
+
+  <!-- Updater 影子分发配置 -->
+  <ItemGroup>
+    <None Remove="updater_payload\**" />
+    <Content Remove="updater_payload\**" />
+    <EmbeddedResource Include="updater_payload\Updater.exe" LogicalName="EricGameLauncher.Updater.exe" />
   </ItemGroup>
 
 </Project>

@@ -30,7 +30,7 @@ jobs:
       - name: Check Zip File Existence
         if: steps.get_version.outputs.VERSION != ''
         run: |
-          ZIP_PATH="output/${{ steps.get_version.outputs.VERSION }}/EricGameLauncher_${{ steps.get_version.outputs.VERSION }}.zip"
+          ZIP_PATH="output/EricGameLauncher_${{ steps.get_version.outputs.VERSION }}.zip"
           if [ ! -f "$ZIP_PATH" ]; then
             echo "❌ Error: Could not find zip file at $ZIP_PATH"
             exit 1
@@ -44,4 +44,4 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           body_path: .releasenote.md
-          files: output/${{ steps.get_version.outputs.VERSION }}/EricGameLauncher_${{ steps.get_version.outputs.VERSION }}.zip
+          files: output/EricGameLauncher_${{ steps.get_version.outputs.VERSION }}.zip

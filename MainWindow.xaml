@@ -5,7 +5,8 @@
     xmlns:models="using:EricGameLauncher"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    mc:Ignorable="d">
+    mc:Ignorable="d"
+    x:Name="RootWindow">
 
     <Grid Background="Transparent">
         <Grid.RowDefinitions>
@@ -116,6 +117,12 @@
                             <MenuFlyoutItem x:Name="MenuSettingsItem" Text="" Click="MenuSettings_Click">
                                 <MenuFlyoutItem.Icon>
                                     <FontIcon Glyph="&#xE713;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+
+                            <MenuFlyoutItem x:Name="MenuCheckUpdateItem" Text="" Click="MenuCheckUpdate_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE895;"/>
                                 </MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
                             
@@ -356,14 +363,24 @@
             </Button>
             
             
-            <TextBlock Grid.Column="2"
-                       x:Name="VersionText"
-                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                       FontSize="10"
-                       VerticalAlignment="Bottom"
-                       HorizontalAlignment="Right"
-                       Margin="0,0,8,4"
-                       Opacity="0.6"/>
+            <StackPanel Grid.Column="2" 
+                        Orientation="Horizontal" 
+                        VerticalAlignment="Bottom" 
+                        HorizontalAlignment="Right"
+                        Margin="0,0,8,4" 
+                        Spacing="4"
+                        Opacity="0.6">
+                <FontIcon x:Name="UpdateSyncIcon"
+                          Glyph="&#xE117;" 
+                          FontSize="10" 
+                          Foreground="{Binding UpdateIndicatorColor, ElementName=RootWindow}"
+                          Visibility="{Binding HasUpdate, ElementName=RootWindow, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                <TextBlock x:Name="VersionText"
+                           Foreground="{Binding UpdateIndicatorColor, ElementName=RootWindow}"
+                           FontSize="10"
+                           VerticalAlignment="Center"
+                           PointerPressed="VersionText_PointerPressed"/>
+            </StackPanel>
         </Grid>
 
         <GridView x:Name="AppGrid" Grid.Row="1" 

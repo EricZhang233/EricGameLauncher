@@ -81,6 +81,22 @@ namespace EricGameLauncher
             }
         }
 
+        private Brush _updateIndicatorColor = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+        public Brush UpdateIndicatorColor
+        {
+            get => _updateIndicatorColor;
+            set { if (_updateIndicatorColor != value) { _updateIndicatorColor = value; OnPropertyChanged(nameof(UpdateIndicatorColor)); } }
+        }
+
+        private bool _hasUpdate;
+        public bool HasUpdate
+        {
+            get => _hasUpdate;
+            set { if (_hasUpdate != value) { _hasUpdate = value; OnPropertyChanged(nameof(HasUpdate)); } }
+        }
+
+        private UpdateService.ReleaseInfo? _pendingUpdate;
+
         public event PropertyChangedEventHandler? PropertyChanged;
 
         public MainWindow()
@@ -205,6 +221,62 @@ namespace EricGameLauncher
             _oldWndProc = SetWindowLongPtr(_hWnd, GWLP_WNDPROC, Marshal.GetFunctionPointerForDelegate(_wndProcDelegate = new WndProc(WindowProcess)));
 
             _ = LoadData();
+
+            // 启动在线更新静默检查
+            _ = CheckForUpdatesQuietlyAsync();
+        }
+
+        private async Task CheckForUpdatesQuietlyAsync()
+        {
+            try
+            {
+                // 等待 3 秒，确保系统资源优先分配给主界面图标加载
+                await Task.Delay(3000);
+
+                var release = await UpdateService.CheckForUpdateAsync();
+                if (release != null)
+                {
+                    _pendingUpdate = release;
+
+                    // 使用低优先级更新 UI，避免干扰用户交互和渲染
+                    DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+                    {
+                        HasUpdate = true;
+                        UpdateIndicatorColor = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 0, 0)); // 红色提醒
+                    });
+                }
+            }
+            catch { }
+        }
+
+        private async void MenuCheckUpdate_Click(object sender, RoutedEventArgs e)
+        {
+            var release = await UpdateService.CheckForUpdateAsync();
+            if (release != null)
+            {
+                _pendingUpdate = release;
+                
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    HasUpdate = true;
+                    UpdateIndicatorColor = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 0, 0));
+                });
+
+                // 直接进入更新确认流程
+                await StartUpdateFlowAsync(release);
+            }
+            else
+            {
+                // 已经是最新版本，弹出提示
+                ContentDialog noUpdateDialog = new ContentDialog
+                {
+                    Title = I18n.T("Update_NoUpdateTitle"),
+                    Content = I18n.T("Update_NoUpdateContent"),
+                    CloseButtonText = "OK",
+                    XamlRoot = this.Content.XamlRoot
+                };
+                await noUpdateDialog.ShowAsync();
+            }
         }
 
         #region Win32 Message Interception
@@ -2061,6 +2133,7 @@ namespace EricGameLauncher
                 MenuAddItem.Text = I18n.T("Menu_Add");
                 MenuSortItem.Text = I18n.T("Menu_Sort");
                 MenuSettingsItem.Text = I18n.T("Menu_Settings");
+                MenuCheckUpdateItem.Text = I18n.T("Menu_CheckUpdate");
                 MenuSystemIntegrationItem.Text = I18n.T("Menu_SystemIntegration");
                 MenuInstallItem.Text = I18n.T("Menu_Install");
                 MenuUninstallItem.Text = I18n.T("Menu_Uninstall");
@@ -2229,6 +2302,61 @@ namespace EricGameLauncher
                     bool prevHasValue = !string.IsNullOrEmpty(_customCommands[i - 1].Text?.Trim());
                     _customSections[i].Visibility = prevHasValue ? Visibility.Visible : Visibility.Collapsed;
                 }
+            }
+        }
+        private async Task StartUpdateFlowAsync(UpdateService.ReleaseInfo release)
+        {
+            try
+            {
+                string downloadUrl = release.assets.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.browser_download_url ?? "";
+                if (string.IsNullOrEmpty(downloadUrl)) return;
+
+                // 1. 准备原生 Markdown 控件 (彻底摆脱 WebView2 缓存文件夹)
+                var markdownText = new CommunityToolkit.WinUI.UI.Controls.MarkdownTextBlock
+                {
+                    Text = $"# {release.name}\n\n{release.body}",
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    Margin = new Thickness(0, 0, 10, 0),
+                    Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent)
+                };
+
+                // 设置原生样式以适配应用主题
+                markdownText.Header1FontSize = 22;
+                markdownText.Header2FontSize = 18;
+                markdownText.Header1FontWeight = Microsoft.UI.Text.FontWeights.Bold;
+                markdownText.Header2FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+                markdownText.ParagraphMargin = new Thickness(0, 5, 0, 10);
+
+                var scrollViewer = new ScrollViewer
+                {
+                    Height = 400,
+                    Content = markdownText,
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                    Margin = new Thickness(10)
+                };
+
+                ContentDialog confirmDialog = new ContentDialog
+                {
+                    Title = I18n.T("Update_DialogTitle"),
+                    Content = scrollViewer,
+                    PrimaryButtonText = I18n.T("Update_DialogConfirm"),
+                    CloseButtonText = I18n.T("Update_DialogCancel"),
+                    XamlRoot = this.Content.XamlRoot
+                };
+
+                if (await confirmDialog.ShowAsync() != ContentDialogResult.Primary) return;
+
+                // 2. 启动外部更新器 (由更新器独立负责下载、进度展示与覆盖)
+                UpdateService.StartUpdater(downloadUrl);
+            }
+            catch { }
+        }
+        private async void VersionText_PointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            if (HasUpdate && _pendingUpdate != null)
+            {
+                await StartUpdateFlowAsync(_pendingUpdate);
             }
         }
     }
