@@ -525,10 +525,10 @@ namespace EricGameLauncher
                     {
                         string tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "EricGameLauncher");
                         if (!System.IO.Directory.Exists(tempDir)) System.IO.Directory.CreateDirectory(tempDir);
-                        string cfgUpdaterPath = System.IO.Path.Combine(tempDir, "CfgUpdater.exe");
+                        string cfgUpdaterPath = System.IO.Path.Combine(tempDir, "updater.cfgver.exe");
 
                         var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-                        string[] resources = { "CfgUpdater.exe", "CfgUpdater.dll", "CfgUpdater.runtimeconfig.json" };
+                        string[] resources = { "updater.cfgver.exe", "updater.cfgver.dll", "updater.cfgver.runtimeconfig.json" };
                         foreach (var res in resources)
                         {
                             string resName = $"EricGameLauncher.{res}";
