@@ -2488,11 +2488,11 @@ namespace EricGameLauncher
                 string tempDir = Path.Combine(Path.GetTempPath(), "EricGameLauncher");
                 if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
 
-                string mainUpdaterPath = Path.Combine(tempDir, "MainUpdater.exe");
+                string mainUpdaterPath = Path.Combine(tempDir, "updater.main.exe");
 
                 // 1. 释放嵌入的 MainUpdater 三件套 (非单文件模式)
                 var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-                string[] resources = { "MainUpdater.exe", "MainUpdater.dll", "MainUpdater.runtimeconfig.json" };
+                string[] resources = { "updater.main.exe", "updater.main.dll", "updater.main.runtimeconfig.json" };
                 foreach (var res in resources)
                 {
                     string resName = $"EricGameLauncher.{res}";

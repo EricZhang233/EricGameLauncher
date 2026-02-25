@@ -51,18 +51,18 @@
   <Target Name="BuildMainUpdater" BeforeTargets="BeforeBuild">
     <Message Importance="High"
       Text="Publishing MainUpdater ($(Configuration)) to intermediate directory..." />
-    <MSBuild Projects="updater.main\MainUpdater.csproj"
+    <MSBuild Projects="updater.main\updater.main.csproj"
       Targets="Restore;Publish"
-      Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=false;PublishDir=$(MSBuildProjectDirectory)\payload\mainupdater\" />
+      Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=false;PublishDir=$(MSBuildProjectDirectory)\payload\updater.main\" />
   </Target>
 
   <!-- 强制预编译并发布 CfgUpdater 影子组件 -->
   <Target Name="BuildCfgUpdater" BeforeTargets="BeforeBuild">
     <Message Importance="High"
       Text="Publishing CfgUpdater ($(Configuration)) to intermediate directory..." />
-    <MSBuild Projects="updater.cfgver\CfgUpdater.csproj"
+    <MSBuild Projects="updater.cfgver\updater.cfgver.csproj"
       Targets="Restore;Publish"
-      Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=false;PublishDir=$(MSBuildProjectDirectory)\payload\cfgupdater\" />
+      Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=false;PublishDir=$(MSBuildProjectDirectory)\payload\updater.cfgver\" />
   </Target>
 
   <!-- 4. 构建生命周期管理：构建后阶段 (Post-Build & Cleanup) -->
@@ -134,26 +134,26 @@
 
   <!-- MainUpdater 影子分发配置 (非单文件) -->
   <ItemGroup>
-    <None Remove="payload\mainupdater\**" />
-    <Content Remove="payload\mainupdater\**" />
-    <EmbeddedResource Include="payload\mainupdater\MainUpdater.exe"
-      LogicalName="EricGameLauncher.MainUpdater.exe" />
-    <EmbeddedResource Include="payload\mainupdater\MainUpdater.dll"
-      LogicalName="EricGameLauncher.MainUpdater.dll" />
-    <EmbeddedResource Include="payload\mainupdater\MainUpdater.runtimeconfig.json"
-      LogicalName="EricGameLauncher.MainUpdater.runtimeconfig.json" />
+    <None Remove="payload\updater.main\**" />
+    <Content Remove="payload\updater.main\**" />
+    <EmbeddedResource Include="payload\updater.main\updater.main.exe"
+      LogicalName="EricGameLauncher.updater.main.exe" />
+    <EmbeddedResource Include="payload\updater.main\updater.main.dll"
+      LogicalName="EricGameLauncher.updater.main.dll" />
+    <EmbeddedResource Include="payload\updater.main\updater.main.runtimeconfig.json"
+      LogicalName="EricGameLauncher.updater.main.runtimeconfig.json" />
   </ItemGroup>
 
   <!-- CfgUpdater 影子分发配置 (非单文件) -->
   <ItemGroup>
-    <None Remove="payload\cfgupdater\**" />
-    <Content Remove="payload\cfgupdater\**" />
-    <EmbeddedResource Include="payload\cfgupdater\CfgUpdater.exe"
-      LogicalName="EricGameLauncher.CfgUpdater.exe" />
-    <EmbeddedResource Include="payload\cfgupdater\CfgUpdater.dll"
-      LogicalName="EricGameLauncher.CfgUpdater.dll" />
-    <EmbeddedResource Include="payload\cfgupdater\CfgUpdater.runtimeconfig.json"
-      LogicalName="EricGameLauncher.CfgUpdater.runtimeconfig.json" />
+    <None Remove="payload\updater.cfgver\**" />
+    <Content Remove="payload\updater.cfgver\**" />
+    <EmbeddedResource Include="payload\updater.cfgver\updater.cfgver.exe"
+      LogicalName="EricGameLauncher.updater.cfgver.exe" />
+    <EmbeddedResource Include="payload\updater.cfgver\updater.cfgver.dll"
+      LogicalName="EricGameLauncher.updater.cfgver.dll" />
+    <EmbeddedResource Include="payload\updater.cfgver\updater.cfgver.runtimeconfig.json"
+      LogicalName="EricGameLauncher.updater.cfgver.runtimeconfig.json" />
   </ItemGroup>
 
 </Project>

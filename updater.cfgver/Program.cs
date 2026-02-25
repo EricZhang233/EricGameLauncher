@@ -5,7 +5,7 @@ using System.Text.Json.Nodes;
 
 using System.Runtime.Versioning;
 
-namespace CfgUpdater
+namespace updater.cfgver
 {
     class Program
     {
@@ -14,7 +14,7 @@ namespace CfgUpdater
         {
             if (args.Length == 0)
             {
-                Console.WriteLine("Usage: CfgUpdater.exe <config_path>");
+                Console.WriteLine("Usage: updater.cfgver.exe <config_path>");
                 return;
             }
 
@@ -35,7 +35,7 @@ namespace CfgUpdater
             try
             {
                 var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-                using var stream = assembly.GetManifestResourceStream("CfgUpdater.migration_rules.json");
+                using var stream = assembly.GetManifestResourceStream("updater.cfgver.migration_rules.json");
                 if (stream != null)
                 {
                     using var reader = new StreamReader(stream);

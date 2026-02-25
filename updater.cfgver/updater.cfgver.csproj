@@ -4,8 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <RootNamespace>CfgUpdater</RootNamespace>
-    <AssemblyName>CfgUpdater</AssemblyName>
+    <RootNamespace>updater.cfgver</RootNamespace>
+    <AssemblyName>updater.cfgver</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>

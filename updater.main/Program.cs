@@ -9,7 +9,7 @@ using System.Security.Principal;
 
 using System.Runtime.Versioning;
 
-namespace MainUpdater
+namespace updater.main
 {
     class Program
     {
@@ -24,7 +24,7 @@ namespace MainUpdater
 
             if (args.Length < 2)
             {
-                Console.WriteLine("Usage: Updater.exe <install_dir> <download_url>");
+                Console.WriteLine("Usage: updater.main.exe <install_dir> <download_url>");
                 await Task.Delay(3000);
                 return;
             }
