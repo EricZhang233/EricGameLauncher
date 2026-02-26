@@ -71,6 +71,9 @@ Whether your games are from Steam, Epic, or independent exe files, this is their
         *   Toggle "Run as Administrator" for each custom item.
         *   **Smart Shifting**: Subsequent items automatically shift up when an intermediate item is deleted to keep the list compact.
     *   **Icon Size**: From compact lists to immersive large grids, customize as you wish.
+*   **Intelligent Scan & Import**:
+    -   **Automated Scanning**: Native support for automatic recognition, path extraction, and icon fetching for games installed on Steam, Epic Games, and Xbox (UWP).
+    -   **One-Click Import All**: Supports batch importing all recognized local games with a single click after scanning, eliminating tedious manual additions.
 *   **Automatic Update Support**：
     *   **Built-in Update Check**: Automatically checks GitHub Releases on startup to ensure you are always using the latest version.  
     *   **Silent Notification**: When an update is available, the version number in the top-right corner turns red and displays an update icon — no intrusive pop-up alerts.  
@@ -100,7 +103,7 @@ For developers, Eric Game Launcher demonstrates how to build modern Windows desk
 ### Users
 1.  Go to the [GitHub Releases](https://github.com/EricZhang233/EricGameLauncher/releases) page and download the latest version.
 2.  Extract and run `EricGameLauncher.exe`.
-3.  Click **"More" -> "Add"** in the top right corner, then select a game shortcut or executable.
+3.  Click **"More" -> "Scan"** in the top right corner to automatically search and import local games, or use **"Add"** to manually select a game shortcut or executable.
 
 ## Known Issues:
 1. **IME Incompatibility**: Due to the underlying input channel characteristics of the WinUI 3 framework, some input methods (e.g., WeChat IME) may not display the candidate box correctly. **It is recommended to use the native Microsoft IME** or other mainstream input methods. WinUI 3 has removed the traditional child window handle (HWND) in favor of a pure TSF (Text Services Framework) architecture. In WinUI 3's **Unpackaged mode**, some input methods like WeChat IME fail to correctly parse and retrieve the physical screen coordinates of the cursor due to incomplete underlying adaptation, causing them to silently give up drawing the candidate window. This compatibility defect also exists in other unpackaged WinUI 3 applications. This is a low-level adaptation issue on the input method side and is unrelated to Eric Game Launcher.

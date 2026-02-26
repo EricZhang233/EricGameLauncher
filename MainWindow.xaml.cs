@@ -25,6 +25,7 @@ namespace EricGameLauncher
         private ObservableCollection<AppItem> _viewItems = new();
         private AppItem? _currentEditingItem = null;
         private bool _isNewItemMode = false;
+        private ObservableCollection<AppItem>? _tempOrderCollection;
 
 
         private ToggleSwitch? _toggleCloseAfterLaunch;
@@ -101,6 +102,9 @@ namespace EricGameLauncher
         }
 
         private UpdateService.ReleaseInfo? _pendingUpdate;
+        private bool _isUserInteracting = false;
+        private bool _isRefreshPending = false;
+        private Microsoft.UI.Input.InputNonClientPointerSource? _inputSource;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -219,14 +223,17 @@ namespace EricGameLauncher
 
             ConfigService.Initialize();
 
-            // Initialize localization
             I18n.Load(ConfigService.Language);
             I18n.LanguageChanged += () =>
             {
                 DispatcherQueue.TryEnqueue(() => ApplyLocalization());
             };
 
-            IconSize = ConfigService.IconSize;
+            ConfigService.IconSize = ConfigService.IconSize;
+            ConfigService.DataChanged += () =>
+            {
+                DispatcherQueue.TryEnqueue(() => RefreshView());
+            };
 
 
             RestoreWindowState();
@@ -318,14 +325,26 @@ namespace EricGameLauncher
         private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
         private const int GWLP_WNDPROC = -4;
+        private const uint WM_ENTERSIZEMOVE = 0x0231;
         private const uint WM_EXITSIZEMOVE = 0x0232;
 
         private IntPtr WindowProcess(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
         {
-            if (msg == WM_EXITSIZEMOVE)
+            if (msg == WM_ENTERSIZEMOVE)
+            {
+                _isUserInteracting = true;
+            }
+            else if (msg == WM_EXITSIZEMOVE)
             {
                 // User finished resizing or moving the window
+                _isUserInteracting = false;
                 SaveWindowState(null);
+
+                // Trigger pending refresh if any occurred during movement
+                if (_isRefreshPending)
+                {
+                    RefreshView();
+                }
             }
             return CallWindowProc(_oldWndProc, hWnd, msg, wParam, lParam);
         }
@@ -338,10 +357,17 @@ namespace EricGameLauncher
 
             if (args.DidSizeChange && this.AppWindow != null)
             {
-                // Update hit test region if size changed
-                var inputNonClientPointerSource = Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(this.AppWindow.Id);
-                inputNonClientPointerSource.SetRegionRects(Microsoft.UI.Input.NonClientRegionKind.Caption, new Windows.Graphics.RectInt32[] {
-                    new Windows.Graphics.RectInt32(0, 0, this.AppWindow.Size.Width, 48)
+                // Update hit test region if size changed.
+                // Cache InputNonClientPointerSource to avoid frequent GetForWindowId overhead.
+                _inputSource ??= Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(this.AppWindow.Id);
+
+                // Use Pixels (AppWindow.Size) for consistency with WinUI 3 SetRegionRects.
+                // Logical height 48 is scaled to pixels via RasterizationScale.
+                double scale = this.Content.XamlRoot?.RasterizationScale ?? 1.0;
+                int scaledHeight = (int)(48 * scale);
+
+                _inputSource.SetRegionRects(Microsoft.UI.Input.NonClientRegionKind.Caption, new Windows.Graphics.RectInt32[] {
+                    new Windows.Graphics.RectInt32(0, 0, this.AppWindow.Size.Width, scaledHeight)
                 });
             }
         }
@@ -458,7 +484,7 @@ namespace EricGameLauncher
                 if (changed)
                 {
                     ConfigService.SetWindowBounds(x, y, width, height);
-                    ConfigService.SaveConfig();
+                    _ = Task.Run(() => ConfigService.SaveConfig());
                 }
             }
             catch (Exception) { }
@@ -485,10 +511,18 @@ namespace EricGameLauncher
 
         private void RefreshView()
         {
+            if (_isUserInteracting)
+            {
+                _isRefreshPending = true;
+                return;
+            }
+            _isRefreshPending = false;
+
+            var items = ConfigService.LoadItems();
+            _allItems = new ObservableCollection<AppItem>(items);
             _viewItems = new ObservableCollection<AppItem>(_allItems);
             AppGrid.ItemsSource = _viewItems;
             UpdateEmptyState();
-
 
             this.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
             {
@@ -517,8 +551,9 @@ namespace EricGameLauncher
             {
                 if (ConfigService.RequiresMigration)
                 {
+                    // ... (migration logic unchanged)
                     MigrationOverlay.Visibility = Visibility.Visible;
-                    await Task.Delay(200); // 确保遮罩层渲染
+                    await Task.Delay(200);
 
                     string configPath = System.IO.Path.Combine(ConfigService.CurrentDataPath, "config.json");
                     try
@@ -556,12 +591,8 @@ namespace EricGameLauncher
                             await process.WaitForExitAsync();
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"Silent Migration Failed: {ex.Message}");
-                    }
+                    catch { }
 
-                    // 自动重启应用以载入新版本配置
                     try
                     {
                         string? currentExe = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
@@ -580,136 +611,10 @@ namespace EricGameLauncher
                     return;
                 }
 
-                var items = ConfigService.LoadItems();
-                _allItems = new ObservableCollection<AppItem>(items);
+                // Simplified LoadData: Just trigger the global refresh in Core
+                await ConfigService.RefreshGlobalAsync();
 
-
-                RefreshView();
-
-
-                var rebuildTasks = new List<Task>();
-                bool anyRebuildNeeded = false;
-
-                foreach (var item in _allItems)
-                {
-                    if (string.IsNullOrEmpty(item.IconPath) || !File.Exists(item.IconPath))
-                    {
-                        anyRebuildNeeded = true;
-                        rebuildTasks.Add(Task.Run(async () =>
-                        {
-                            try
-                            {
-                                string? sourcePath = item.ExePath;
-                                string? resolvedPath = null;
-
-                                if (SteamHelper.ExtractAppIdFromUrl(item.ExePath!) is int)
-                                {
-                                    resolvedPath = SteamHelper.GetExecutableFromSteamUrl(item.ExePath!);
-                                }
-                                else if (GamePlatformHelper.DetectPlatform(item.ExePath!)?.PlatformName == "Epic Games")
-                                {
-                                    resolvedPath = EpicGamesHelper.GetExecutableFromEpicUrl(item.ExePath!);
-                                }
-                                else if (!string.IsNullOrEmpty(item.ExePath) &&
-                                         (item.ExePath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) ||
-                                          item.ExePath.EndsWith(".url", StringComparison.OrdinalIgnoreCase)))
-                                {
-                                    if (File.Exists(item.ExePath))
-                                    {
-                                        if (item.ExePath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
-                                        {
-                                            var info = ShortcutResolver.GetShortcutInfo(item.ExePath);
-                                            if (info != null && !string.IsNullOrEmpty(info.TargetPath))
-                                                resolvedPath = info.TargetPath;
-                                        }
-                                        else if (item.ExePath.EndsWith(".url", StringComparison.OrdinalIgnoreCase))
-                                        {
-                                            var info = ShortcutResolver.GetUrlFileInfo(item.ExePath);
-                                            if (info != null && !string.IsNullOrEmpty(info.TargetPath))
-                                                resolvedPath = info.TargetPath;
-                                        }
-                                    }
-                                }
-                                else
-                                {
-                                    resolvedPath = item.ExePath;
-                                }
-
-                                string? iconPath = null;
-                                if (!string.IsNullOrEmpty(resolvedPath) && File.Exists(resolvedPath))
-                                {
-                                    iconPath = await IconHelper.GetIconPathAsync(resolvedPath, item.Id);
-                                    if (string.IsNullOrEmpty(iconPath) && !string.IsNullOrEmpty(sourcePath) && File.Exists(sourcePath) && sourcePath != resolvedPath)
-                                    {
-                                        iconPath = await IconHelper.GetIconPathAsync(sourcePath, item.Id);
-                                    }
-                                }
-                                else if (!string.IsNullOrEmpty(sourcePath) && File.Exists(sourcePath))
-                                {
-                                    iconPath = await IconHelper.GetIconPathAsync(sourcePath, item.Id);
-                                }
-
-                                if (!string.IsNullOrEmpty(iconPath))
-                                {
-                                    DispatcherQueue.TryEnqueue(() =>
-                                    {
-                                        item.IconPath = iconPath;
-                                    });
-                                }
-                            }
-                            catch (Exception) { }
-                        }));
-                    }
-                }
-
-                if (anyRebuildNeeded)
-                {
-                    // R3: use Task.WhenAll so we save only after ALL icons have been
-                    // extracted to disk, eliminating the prior 200ms race condition.
-                    _ = Task.WhenAll(rebuildTasks).ContinueWith(_ =>
-                    {
-                        // Each rebuild task has already called DispatcherQueue.TryEnqueue
-                        // to update item.IconPath. Because the DispatcherQueue is FIFO,
-                        // this save request will execute AFTER those updates.
-                        DispatcherQueue.TryEnqueue(() =>
-                        {
-                            ConfigService.SaveItems(_allItems.ToList());
-                            RefreshView();
-                        });
-                    }, TaskScheduler.Default);
-                }
-
-
-
-                // 3. Reconstruct missing config items (like 'platform') in background
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await Task.Delay(1000); // 稍微延迟，避开启动高峰
-                        await ConfigService.ReconstructMissingConfigAsync();
-
-                        // M2 fix: ReconstructMissingConfigAsync updates DTOs (AppItemDto) in
-                        // _configData.Items, but _allItems holds separate ViewModel objects.
-                        // We must sync the reconstructed Platform field back to live ViewModels
-                        // before calling RefreshView, otherwise badges won't appear.
-                        DispatcherQueue.TryEnqueue(() =>
-                        {
-                            var updated = ConfigService.LoadItems();
-                            foreach (var upd in updated)
-                            {
-                                var vm = _allItems?.FirstOrDefault(x => x.Id == upd.Id);
-                                if (vm != null && vm.Platform != upd.Platform)
-                                    vm.Platform = upd.Platform;
-                            }
-                            RefreshView();
-                        });
-                    }
-                    catch (Exception) { }
-                });
-
-                // P1: Preload shortcut sources in background so they are ready when
-                // the user opens the property panel for the first time.
+                // Preload tasks remain
                 _preloadedStartMenuTask = Task.Run(() => ShortcutScanner.GetStartMenuItems());
                 _preloadedDesktopTask = Task.Run(() => ShortcutScanner.GetDesktopItems());
             }
@@ -1097,7 +1002,6 @@ namespace EricGameLauncher
                 if (item != null)
                 {
                     _allItems.Remove(item);
-                    _viewItems.Remove(item);
                     SaveData();
                 }
             }
@@ -1113,6 +1017,124 @@ namespace EricGameLauncher
                 {
                     OpenPropertyWindow(item);
                 }
+            }
+            catch (Exception) { }
+        }
+
+        private async void MenuScan_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                ScannerResultPanel.Visibility = Visibility.Collapsed;
+                ScannerLoadingPanel.Visibility = Visibility.Visible;
+                ScannerNewGamesList.ItemsSource = null;
+                ScannerExistingGamesList.ItemsSource = null;
+
+                // Show dialog early
+                var dialogTask = ScannerDialog.ShowAsync();
+
+                // Run scans in background
+                var scannedGames = await Task.Run(async () =>
+                {
+                    var games = new List<ScannedGame>();
+                    games.AddRange(SteamHelper.GetAllInstalledGames());
+                    games.AddRange(EpicGamesHelper.GetAllInstalledGames());
+                    games.AddRange(await StoreHelper.GetAllInstalledGamesAsync());
+                    return games;
+                });
+
+                // Differentiate new and existing
+                var existingGames = new List<ScannedGame>();
+                var newGames = new List<ScannedGame>();
+
+                foreach (var game in scannedGames)
+                {
+                    // For UWP, check AUMID segment. For others, full or partial path check.
+                    bool exists = false;
+
+                    if (game.PlatformBadge == "Xbox")
+                    {
+                        string gameId = game.ExePath.Replace(LauncherConstants.UwpAppsFolderPrefix, "");
+                        exists = _allItems.Any(a => !string.IsNullOrEmpty(a.ExePath) && a.ExePath.Contains(gameId, StringComparison.OrdinalIgnoreCase));
+                    }
+                    else
+                    {
+                        // Some basic matching by ExePath or Title (we could refine this)
+                        exists = _allItems.Any(a =>
+                            (!string.IsNullOrEmpty(a.ExePath) && a.ExePath.Equals(game.ExePath, StringComparison.OrdinalIgnoreCase)) ||
+                            string.Equals(a.Title, game.Title, StringComparison.OrdinalIgnoreCase)
+                        );
+                    }
+
+                    if (exists) existingGames.Add(game);
+                    else newGames.Add(game);
+                }
+
+                // Update UI and visibility
+                ScannerNewGamesList.ItemsSource = new ObservableCollection<ScannedGame>(newGames);
+                ScannerExistingGamesList.ItemsSource = new ObservableCollection<ScannedGame>(existingGames);
+
+                ScannerNewGamesHeader.Text = string.Format(I18n.T("Scanner_NewGames"), newGames.Count);
+                ScannerExistingGamesHeader.Text = string.Format(I18n.T("Scanner_ExistingGames"), existingGames.Count);
+
+                ScannerNewGamesSection.Visibility = newGames.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+                ScannerExistingGamesSection.Visibility = existingGames.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+                ScannerLoadingPanel.Visibility = Visibility.Collapsed;
+                ScannerResultPanel.Visibility = Visibility.Visible;
+            }
+            catch (Exception) { }
+        }
+
+        private void ScannerDialog_PrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+        {
+            try
+            {
+                var selectedItems = ScannerNewGamesList.SelectedItems.Cast<ScannedGame>().ToList();
+                if (selectedItems.Count == 0) return;
+                ImportScannedGames(selectedItems);
+            }
+            catch (Exception) { }
+        }
+
+        private void ScannerDialog_SecondaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+        {
+            try
+            {
+                var allNewItems = ScannerNewGamesList.ItemsSource as ObservableCollection<ScannedGame>;
+                if (allNewItems == null || allNewItems.Count == 0) return;
+                ImportScannedGames(allNewItems.ToList());
+            }
+            catch (Exception) { }
+        }
+
+        private void ImportScannedGames(List<ScannedGame> games)
+        {
+            try
+            {
+                int sortOrder = _allItems.Count > 0 ? _allItems.Max(x => x.SortOrder) + 1 : 0;
+
+                // Add all to collection
+                var newAppItems = new List<AppItem>();
+                foreach (var game in games)
+                {
+                    var newItem = new AppItem
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        Title = game.Title,
+                        ExePath = game.ExePath,
+                        Platform = game.PlatformBadge,
+                        SortOrder = sortOrder++
+                    };
+
+                    newAppItems.Add(newItem);
+                    _allItems.Add(newItem);
+                }
+
+                ConfigService.SaveItems(_allItems.ToList());
+
+                // Trigger global refresh in Core which handles icon extraction and final notification
+                _ = ConfigService.RefreshGlobalAsync();
             }
             catch (Exception) { }
         }
@@ -1669,7 +1691,6 @@ namespace EricGameLauncher
                 if (_isNewItemMode)
                 {
                     _allItems.Add(_currentEditingItem);
-                    _viewItems.Add(_currentEditingItem);
                 }
                 else
                 {
@@ -1688,7 +1709,6 @@ namespace EricGameLauncher
                 if (_currentEditingItem == null) return;
 
                 _allItems.Remove(_currentEditingItem);
-                _viewItems.Remove(_currentEditingItem);
                 SaveData();
                 HidePropertyPanel();
             }
@@ -1951,9 +1971,9 @@ namespace EricGameLauncher
         {
             try
             {
-
-                OrderItemsControl.ItemsSource = null;
-                OrderItemsControl.ItemsSource = _allItems;
+                // 用当前项目的克隆建立临时集合，避免即时更新主视图
+                _tempOrderCollection = new ObservableCollection<AppItem>(_allItems);
+                OrderItemsControl.ItemsSource = _tempOrderCollection;
                 _orderItemsControl = OrderItemsControl as ListView;
 
                 // Localize sort flyout text
@@ -2022,19 +2042,33 @@ namespace EricGameLauncher
             catch (Exception) { }
         }
 
+        private void EditOrderFlyout_Closed(object sender, object e)
+        {
+            try
+            {
+                if (_tempOrderCollection != null)
+                {
+                    // 飞层关闭时，一次性保存数据并刷新全局视图
+                    ConfigService.SaveItems(_tempOrderCollection.ToList());
+                    RefreshView();
+                    _tempOrderCollection = null;
+                }
+            }
+            catch (Exception) { }
+        }
+
         private void MoveItem(AppItem? item, int offset)
         {
-            if (item == null) return;
+            if (item == null || _tempOrderCollection == null) return;
 
-            int index = _allItems.IndexOf(item);
+            int index = _tempOrderCollection.IndexOf(item);
+            if (index == -1) return; // 防崩保护：如果项目不在集合中，直接返回
+
             int newIndex = index + offset;
 
-            if (newIndex >= 0 && newIndex < _allItems.Count)
+            if (newIndex >= 0 && newIndex < _tempOrderCollection.Count)
             {
-                _allItems.Move(index, newIndex);
-
-                RefreshView();
-                SaveData();
+                _tempOrderCollection.Move(index, newIndex);
 
                 if (_orderItemsControl != null)
                 {
@@ -2261,16 +2295,10 @@ namespace EricGameLauncher
 
         private async void BtnSwitchStorageMode_Click(object sender, RoutedEventArgs e)
         {
-
             bool switchToSystemMode = !ConfigService.IsSystemMode;
-
             await ConfigService.SwitchStorageModeAsync(switchToSystemMode);
-
-
             UpdateStorageModeUI();
-
-
-            await LoadData();
+            await ConfigService.RefreshGlobalAsync();
         }
 
 
@@ -2362,6 +2390,16 @@ namespace EricGameLauncher
                 ToolTipService.SetToolTip(BtnMore, I18n.T("TitleBar_More"));
                 MenuIconSizeItem.Text = I18n.T("Menu_IconSize");
                 MenuAddItem.Text = I18n.T("Menu_Add");
+                if (MenuScanItem != null) MenuScanItem.Text = I18n.T("Menu_Scan");
+                if (ScannerDialog != null)
+                {
+                    ScannerDialog.Title = I18n.T("Scanner_Title");
+                    ScannerDialog.PrimaryButtonText = I18n.T("Scanner_ImportSelected");
+                    ScannerDialog.SecondaryButtonText = I18n.T("Scanner_ImportAll");
+                    ScannerDialog.CloseButtonText = I18n.T("Scanner_Cancel");
+                    if (ScannerLoadingText != null) ScannerLoadingText.Text = I18n.T("Scanner_Loading");
+                    if (ScannerDescriptionText != null) ScannerDescriptionText.Text = I18n.T("Scanner_Description");
+                }
                 MenuSortItem.Text = I18n.T("Menu_Sort");
                 MenuSettingsItem.Text = I18n.T("Menu_Settings");
                 MenuCheckUpdateItem.Text = I18n.T("Menu_CheckUpdate");
@@ -2497,6 +2535,9 @@ namespace EricGameLauncher
                     ToolTipService.SetToolTip(_customAdmins[i], adminTooltip);
                     _customAdminLabels[i].Text = adminTooltip;
                 }
+
+                if (MigrationTitle != null) MigrationTitle.Text = I18n.T("Migration_OverlayTitle");
+                if (MigrationSubTitle != null) MigrationSubTitle.Text = I18n.T("Migration_OverlaySubTitle");
             }
             catch (Exception)
             {

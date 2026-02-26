@@ -88,6 +88,12 @@
                                 </MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
                             
+                            <MenuFlyoutItem x:Name="MenuScanItem" Text="" Click="MenuScan_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE149;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            
                             
                             <MenuFlyoutItem x:Name="MenuSortItem" Text="" Click="MenuSort_Click">
                                 <MenuFlyoutItem.Icon>
@@ -215,7 +221,8 @@
                 <Button.Flyout>
                     <Flyout x:Name="EditOrderFlyout" 
                             Placement="Bottom"
-                            Opening="EditOrderFlyout_Opening">
+                            Opening="EditOrderFlyout_Opening"
+                            Closed="EditOrderFlyout_Closed">
                         <Flyout.FlyoutPresenterStyle>
                             <Style TargetType="FlyoutPresenter">
                                 <Setter Property="Padding" Value="0"/>
@@ -602,7 +609,6 @@
                             </Grid>
                         </StackPanel>
 
-                        <!-- 代替启动 -->
                         <StackPanel Spacing="8" 
                                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
                                     Padding="12" 
@@ -658,7 +664,6 @@
                             </Grid>
                         </StackPanel>
 
-                        <!-- 同时启动 -->
                         <StackPanel Spacing="8" 
                                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
                                     Padding="12" 
@@ -770,7 +775,6 @@
                             </Grid>
                         </StackPanel>
 
-                        <!-- 自定义右键菜单 -->
                         <TextBlock x:Name="PropCustomMenuLabel" Text="" 
                                    FontSize="14" FontWeight="SemiBold" Margin="0,8,0,-8"/>
                         
@@ -1004,7 +1008,6 @@
             </Grid>
         </Grid>
 
-        <!-- 配置迁移遮罩 -->
         <Grid x:Name="MigrationOverlay"
               Grid.RowSpan="2"
               Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
@@ -1014,17 +1017,86 @@
                 <ProgressRing Width="64" Height="64" IsActive="True"/>
                 <StackPanel Spacing="8">
                     <TextBlock x:Name="MigrationTitle" 
-                               Text="正在升级配置引擎..." 
+                               Text="" 
                                FontSize="20" 
                                FontWeight="SemiBold" 
                                HorizontalAlignment="Center"/>
                     <TextBlock x:Name="MigrationSubTitle" 
-                               Text="这可能需要几秒钟，完成后应用将自动重启。" 
+                               Text="" 
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                HorizontalAlignment="Center"/>
                 </StackPanel>
             </StackPanel>
         </Grid>
+        
+        <ContentDialog x:Name="ScannerDialog" 
+                       Grid.RowSpan="2"
+                       PrimaryButtonText="导入选中的项目" 
+                       SecondaryButtonText="导入全部新增项目" 
+                       CloseButtonText="取消"
+                       PrimaryButtonClick="ScannerDialog_PrimaryButtonClick"
+                       SecondaryButtonClick="ScannerDialog_SecondaryButtonClick">
+            <Grid MinWidth="450" MinHeight="350">
+                <Grid x:Name="ScannerLoadingPanel" VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <StackPanel Spacing="16">
+                        <ProgressRing Width="48" Height="48" IsActive="True"/>
+                        <TextBlock x:Name="ScannerLoadingText" Text="正在扫描本地游戏..." HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                </Grid>
+                
+                <ScrollViewer x:Name="ScannerResultPanel" Visibility="Collapsed" MaxHeight="450">
+                    <StackPanel Spacing="24" Margin="0,0,12,0">
+                        <TextBlock x:Name="ScannerDescriptionText" 
+                                   Text="" 
+                                   Style="{ThemeResource CaptionTextBlockStyle}" 
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap"/>
+                        
+                        <StackPanel x:Name="ScannerNewGamesSection">
+                            <TextBlock x:Name="ScannerNewGamesHeader" Text="新增" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <ListView x:Name="ScannerNewGamesList" SelectionMode="Multiple" ScrollViewer.VerticalScrollMode="Disabled" ItemContainerStyle="{StaticResource DefaultListViewItemStyle}">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="models:ScannedGame">
+                                        <Grid Margin="0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{x:Bind Title}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                            <Border Grid.Column="1" Background="{ThemeResource AccentFillColorDefaultBrush}" Padding="6,2" CornerRadius="4" Margin="12,0,0,0">
+                                                <TextBlock Text="{x:Bind PlatformBadge}" FontSize="10" Foreground="White" FontWeight="Bold"/>
+                                            </Border>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </StackPanel>
+                        
+                        <StackPanel x:Name="ScannerExistingGamesSection">
+                            <TextBlock x:Name="ScannerExistingGamesHeader" Text="已存在" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <ListView x:Name="ScannerExistingGamesList" SelectionMode="None" ScrollViewer.VerticalScrollMode="Disabled" Opacity="0.6">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="models:ScannedGame">
+                                        <Grid Margin="0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{x:Bind Title}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                            <Border Grid.Column="1" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="6,2" CornerRadius="4" Margin="12,0,0,0">
+                                                <TextBlock Text="{x:Bind PlatformBadge}" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontWeight="SemiBold"/>
+                                            </Border>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+                
+
+            </Grid>
+        </ContentDialog>
     </Grid>
 </Window>
 
