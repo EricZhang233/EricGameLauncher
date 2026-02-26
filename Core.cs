@@ -1,4 +1,5 @@
-﻿using System;
+﻿//using System;
+using System.Threading;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -39,7 +40,6 @@ namespace EricGameLauncher
 
     #region Base Infrastructure
 
-    /// Internationalization support
     public static class I18n
     {
         private static Dictionary<string, string> _strings = new();
@@ -77,13 +77,11 @@ namespace EricGameLauncher
             LanguageChanged?.Invoke();
         }
 
-        /// Get a translated string by key.
         public static string T(string key)
         {
             return _strings.TryGetValue(key, out var value) ? value : key;
         }
 
-        /// Get the list of available languages.
         public static List<string> GetAvailableLanguages()
         {
             if (_allTranslations == null)
@@ -99,7 +97,6 @@ namespace EricGameLauncher
             return new List<string> { "Zh-CN", "EN" };
         }
 
-        /// Detect the system language.
         public static string DetectSystemLanguage()
         {
             try
@@ -128,10 +125,8 @@ namespace EricGameLauncher
             catch { return "EN"; }
         }
 
-        /// Get the display name for a language code.
         public static string GetDisplayName(string langCode)
         {
-            // Native name from the target language itself
             string nativeName = langCode;
             if (_allTranslations != null &&
                 _allTranslations.TryGetValue(langCode, out var dict) &&
@@ -139,7 +134,6 @@ namespace EricGameLauncher
                 !string.IsNullOrEmpty(native))
                 nativeName = native;
 
-            // Localized name from the current UI language
             string localizedKey = "LangName_" + langCode;
             if (_strings.TryGetValue(localizedKey, out var localized) &&
                 !string.IsNullOrEmpty(localized) &&
@@ -150,18 +144,16 @@ namespace EricGameLauncher
         }
     }
 
-
-    /// Configuration management service.
     public static class ConfigService
     {
         private const string AppFolderName = "EricGameLauncher";
         private const string DataFileName = "config.json";
         private const string IconFolderName = "ico";
 
-        public const int CurrentConfigVersion = 2; // 当前期望的配置版本
+        public const int CurrentConfigVersion = 2;
 
         public static bool RequiresMigration { get; private set; } = false;
-        private static bool _blockSaving = false; // 用于阻止配置被覆盖保护旧数据
+        private static bool _blockSaving = false;
 
         private static string SystemBasePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "eric", AppFolderName);
         private static string PortableBasePath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data");
@@ -169,6 +161,8 @@ namespace EricGameLauncher
         public static string FixedCachePath => Path.Combine(CurrentDataPath, IconFolderName);
         public static string CurrentDataPath { get; private set; } = "";
         private static ConfigData? _configData;
+        private static readonly SemaphoreSlim _saveSemaphore = new(1, 1);
+        public static event Action? DataChanged;
 
         public static void Initialize()
         {
@@ -213,20 +207,16 @@ namespace EricGameLauncher
 
                 if (Directory.Exists(oldIconPath))
                 {
-                    // R4: copy ALL cached assets, not just *.png
                     foreach (var iconFile in Directory.GetFiles(oldIconPath))
                     {
                         string fileName = Path.GetFileName(iconFile);
                         string destFile = Path.Combine(newIconPath, fileName);
                         File.Copy(iconFile, destFile, true);
                     }
-                    // M4: always attempt to remove the old icon directory (even if it was
-                    // empty), so no stale folders linger after a storage-mode switch.
                     try { Directory.Delete(oldIconPath, true); } catch (Exception) { }
                 }
 
                 CurrentDataPath = newPath;
-                // P4: clear Steam/platform caches to prevent cross-mode data pollution
                 SteamHelper.ClearCache();
                 LoadConfigData();
             }
@@ -235,17 +225,19 @@ namespace EricGameLauncher
 
         public static Task SwitchStorageModeAsync(bool useSystemPath) => Task.Run(() => SwitchStorageMode(useSystemPath));
 
-        public static void SaveItems(List<AppItem> items)
+        public static void SaveItems(List<AppItem> items, bool triggerEvent = true)
         {
             if (_configData == null) return;
-            // M2: map ViewModel → DTO so the JSON layer is fully decoupled.
-            _configData.Items = items.Select(AppItemDto.FromViewModel).ToList();
-            SaveConfigData();
+            lock (_configData)
+            {
+                _configData.Items = items.Select(AppItemDto.FromViewModel).ToList();
+            }
+            SaveConfig();
+            if (triggerEvent) DataChanged?.Invoke();
         }
 
         public static List<AppItem> LoadItems()
         {
-            // M2: map DTO → ViewModel; resolve relative icon filenames to full cache paths.
             var dtos = _configData?.Items ?? [];
             return dtos.Select(dto => dto.ToViewModel(FixedCachePath)).ToList();
         }
@@ -260,10 +252,9 @@ namespace EricGameLauncher
 
                 string jsonString = File.ReadAllText(jsonPath);
 
-                // 初步检测是否为低版本（或没有版本字段的旧版）
                 using (var doc = JsonDocument.Parse(jsonString))
                 {
-                    int version = 1; // 默认 V1 扁平结构
+                    int version = 1;
                     if (doc.RootElement.TryGetProperty("Version", out var versionElement))
                     {
                         version = versionElement.TryGetInt32(out int v) ? v : 1;
@@ -272,8 +263,8 @@ namespace EricGameLauncher
                     if (version < CurrentConfigVersion)
                     {
                         RequiresMigration = true;
-                        _blockSaving = true; // 锁定保存，保护原生数据
-                        _configData = new ConfigData(); // 必须返回空列表以免应用抛出其他异常，后续由 UI 阻断
+                        _blockSaving = true;
+                        _configData = new ConfigData();
                         return;
                     }
                 }
@@ -291,21 +282,35 @@ namespace EricGameLauncher
 
         private static void SaveConfigData()
         {
-            if (_blockSaving) return; // 配置被写保护时拒绝任何保存请求
+            if (_blockSaving) return;
 
-            try
+            _ = Task.Run(async () =>
             {
-                if (string.IsNullOrEmpty(CurrentDataPath) || _configData == null) return;
-                string jsonPath = Path.Combine(CurrentDataPath, DataFileName);
-                if (!Directory.Exists(CurrentDataPath)) Directory.CreateDirectory(CurrentDataPath);
-                string jsonString = JsonSerializer.Serialize(_configData, new JsonSerializerOptions
+                await _saveSemaphore.WaitAsync();
+                try
                 {
-                    WriteIndented = true,
-                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-                });
-                File.WriteAllText(jsonPath, jsonString);
-            }
-            catch (Exception ex) { Debug.WriteLine($"[SaveConfigData] Write failed: {ex.Message}"); }
+                    if (string.IsNullOrEmpty(CurrentDataPath) || _configData == null) return;
+                    string jsonPath = Path.Combine(CurrentDataPath, DataFileName);
+
+                    string jsonString;
+                    lock (_configData)
+                    {
+                        jsonString = JsonSerializer.Serialize(_configData, new JsonSerializerOptions
+                        {
+                            WriteIndented = true,
+                            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                        });
+                    }
+
+                    if (!Directory.Exists(CurrentDataPath)) Directory.CreateDirectory(CurrentDataPath);
+                    await File.WriteAllTextAsync(jsonPath, jsonString);
+                }
+                catch (Exception ex) { Debug.WriteLine($"[SaveConfigData] Async write failed: {ex.Message}"); }
+                finally
+                {
+                    _saveSemaphore.Release();
+                }
+            });
         }
 
         public static bool CloseAfterLaunch
@@ -341,21 +346,15 @@ namespace EricGameLauncher
 
         public static bool IsSystemMode => CurrentDataPath == SystemBasePath;
 
-        /// <summary>
-        /// Background reconstruction of missing or outdated configuration items.
-        /// This ensures items from older versions get new metadata like 'Platform'.
-        /// </summary>
-        public static async Task ReconstructMissingConfigAsync()
+        public static async Task<bool> ReconstructMissingConfigAsync()
         {
-            if (_configData == null || _configData.Items == null || _configData.Items.Count == 0) return;
+            if (_configData == null || _configData.Items == null || _configData.Items.Count == 0) return false;
 
             bool modified = false;
             foreach (var item in _configData.Items)
             {
                 bool itemChanged = false;
 
-                // 1. Reconstruct 'Platform' field if missing
-                // M2: item is now AppItemDto; executable path lives in MainAction.Path
                 string? exePath = item.MainAction?.Path;
                 if (string.IsNullOrEmpty(item.Platform) && !string.IsNullOrEmpty(exePath))
                 {
@@ -376,17 +375,102 @@ namespace EricGameLauncher
                 }
 
                 if (itemChanged) modified = true;
-
-                // Future reconstruction logic (e.g. ID migration, legacy path cleanup) can be added here
             }
 
             if (modified)
             {
                 SaveConfigData();
             }
+            return modified;
         }
 
         public static void SaveConfig() => SaveConfigData();
+
+        public static async Task RefreshGlobalAsync()
+        {
+            // 1. Icon Reconstruction
+            var items = LoadItems();
+            var rebuildTasks = new List<Task>();
+            int successfulRebuilds = 0;
+
+            foreach (var item in items)
+            {
+                if (string.IsNullOrEmpty(item.IconPath) || !File.Exists(item.IconPath))
+                {
+                    rebuildTasks.Add(Task.Run(async () =>
+                    {
+                        try
+                        {
+                            string? sourcePath = item.ExePath;
+                            string? resolvedPath = null;
+
+                            // Resolve protocols
+                            if (SteamHelper.ExtractAppIdFromUrl(item.ExePath!) is int)
+                                resolvedPath = SteamHelper.GetExecutableFromSteamUrl(item.ExePath!);
+                            else if (GamePlatformHelper.DetectPlatform(item.ExePath!)?.PlatformName == "Epic Games")
+                                resolvedPath = EpicGamesHelper.GetExecutableFromEpicUrl(item.ExePath!);
+                            else if (!string.IsNullOrEmpty(item.ExePath) &&
+                                     (item.ExePath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) ||
+                                      item.ExePath.EndsWith(".url", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                if (File.Exists(item.ExePath))
+                                {
+                                    if (item.ExePath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        var info = ShortcutResolver.GetShortcutInfo(item.ExePath);
+                                        if (info != null && !string.IsNullOrEmpty(info.TargetPath))
+                                            resolvedPath = info.TargetPath;
+                                    }
+                                    else if (item.ExePath.EndsWith(".url", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        var info = ShortcutResolver.GetUrlFileInfo(item.ExePath);
+                                        if (info != null && !string.IsNullOrEmpty(info.TargetPath))
+                                            resolvedPath = info.TargetPath;
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                resolvedPath = item.ExePath;
+                            }
+
+                            string? iconPath = null;
+                            if (!string.IsNullOrEmpty(resolvedPath) && File.Exists(resolvedPath))
+                            {
+                                iconPath = await IconHelper.GetIconPathAsync(resolvedPath, item.Id);
+                                if (string.IsNullOrEmpty(iconPath) && !string.IsNullOrEmpty(sourcePath) && File.Exists(sourcePath) && sourcePath != resolvedPath)
+                                    iconPath = await IconHelper.GetIconPathAsync(sourcePath, item.Id);
+                            }
+                            else if (!string.IsNullOrEmpty(sourcePath) && File.Exists(sourcePath))
+                                iconPath = await IconHelper.GetIconPathAsync(sourcePath, item.Id);
+
+                            if (!string.IsNullOrEmpty(iconPath))
+                            {
+                                Interlocked.Increment(ref successfulRebuilds);
+                                item.IconPath = iconPath;
+                            }
+                        }
+                        catch { }
+                    }));
+                }
+            }
+
+            if (rebuildTasks.Any())
+            {
+                await Task.WhenAll(rebuildTasks);
+                if (successfulRebuilds > 0)
+                {
+                    // Pass false to avoid double event trigger
+                    SaveItems(items, false);
+                }
+            }
+
+            // 2. Platform Reconstruction
+            await ReconstructMissingConfigAsync();
+
+            // 3. Notify UI (One stop shop)
+            DataChanged?.Invoke();
+        }
 
         public static (int X, int Y, int Width, int Height) GetWindowBounds()
         {
@@ -406,18 +490,8 @@ namespace EricGameLauncher
 
     #region Data Models & DTOs
 
-    // M2: AppItemDto — pure POCO for JSON persistence only.
-    // AppItem (ViewModel) remains focused on UI binding (INotifyPropertyChanged).
-    // This boundary means adding a new persisted field requires changes only to
-    // AppItemDto + the two mapping methods below, not to AppItem itself.
-    //
-    // IMPORTANT: JSON property names below MUST match the original AppItem serialization
-    // to preserve backward compatibility with existing config.json files.
-    // Original AppItem used default PascalCase (no [JsonPropertyName]) for most fields,
-    // except Platform which had [JsonPropertyName("platform")].
     public class AppItemDto
     {
-        // No [JsonPropertyName] → serializes as "Id", matching original AppItem.Id
         public string Id { get; set; } = string.Empty;
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Title { get; set; }
@@ -428,13 +502,10 @@ namespace EricGameLauncher
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? CustomMenu { get; set; }
 
-        // Original AppItem had [JsonPropertyName("platform")] → keep lowercase
         [JsonPropertyName("platform")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Platform { get; set; }
 
-        // Nested action objects. Property names match original RunActionBase /
-        // AlternativeRunAction / AlongsideRunAction serialization (PascalCase).
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public ActionDto? MainAction { get; set; }
 
@@ -447,12 +518,10 @@ namespace EricGameLauncher
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public AlongActionDto? AlongsideAction { get; set; }
 
-        // ── Mapping: ViewModel → DTO ──────────────────────────────────────────
         public static AppItemDto FromViewModel(AppItem vm) => new AppItemDto
         {
             Id = vm.Id,
             Title = vm.Title,
-            // Store only the filename; full cache path is rebuilt in ToViewModel().
             IconPath = !string.IsNullOrEmpty(vm.IconPath) ? Path.GetFileName(vm.IconPath) : null,
             CustomMenu = vm.CustomMenu,
             Platform = vm.Platform,
@@ -467,21 +536,12 @@ namespace EricGameLauncher
                 : null,
         };
 
-        // ── Mapping: DTO → ViewModel ──────────────────────────────────────────
         public AppItem ToViewModel(string iconCachePath) => new AppItem
         {
-            // Bug fix: set ExePath BEFORE Id.
-            // AppItem.ExePath setter computes Id = PathHashHelper.GetPathHash(value),
-            // which would overwrite a DTO Id that differs from the hash (or generate a
-            // random Guid when ExePath is null/empty). Setting Id AFTER ExePath restores
-            // the authoritative value that was stored in the JSON.
             ExePath = MainAction?.Path,
             IsAdmin = MainAction?.IsAdmin ?? false,
-            Id = Id,       // ← must come after ExePath to avoid being overwritten
+            Id = Id,
             Title = Title,
-            // Resolve relative filename back to absolute path in the icon cache.
-            // M4: Enhanced check to ensure we only combine if it's strictly a filename (no root, no slashes).
-            // Also handle cases where the path might start with 'ico\' or 'ico/' (legacy/portable artifacts).
             IconPath = (string.IsNullOrEmpty(IconPath) || Path.IsPathRooted(IconPath))
                          ? IconPath
                          : (IconPath.StartsWith("ico\\", StringComparison.OrdinalIgnoreCase) || IconPath.StartsWith("ico/", StringComparison.OrdinalIgnoreCase))
@@ -501,8 +561,6 @@ namespace EricGameLauncher
             IsAlongsideAdmin = AlongsideAction?.IsAdmin ?? false,
         };
 
-        // Nested DTO types. Property names MUST stay PascalCase to match original
-        // RunActionBase / AlternativeRunAction / AlongsideRunAction serialization.
         public class ActionDto
         {
             [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -525,6 +583,13 @@ namespace EricGameLauncher
             public string? Path { get; set; }
             public bool IsAdmin { get; set; }
         }
+    }
+
+    public class ScannedGame
+    {
+        public string Title { get; set; } = string.Empty;
+        public string ExePath { get; set; } = string.Empty;
+        public string PlatformBadge { get; set; } = string.Empty;
     }
 
     public class AppItem : INotifyPropertyChanged
@@ -563,6 +628,19 @@ namespace EricGameLauncher
                 {
                     OnPropertyChanged(nameof(MgrPath));
                     OnPropertyChanged(nameof(IsMgrAdmin));
+                }
+            }
+        }
+
+        private int _sortOrder = 0;
+        public int SortOrder
+        {
+            get => _sortOrder;
+            set
+            {
+                if (SetProperty(ref _sortOrder, value))
+                {
+                    OnPropertyChanged(nameof(SortOrder));
                 }
             }
         }
@@ -917,7 +995,6 @@ namespace EricGameLauncher
                 if (builder.Length > 0) builder.Append(':');
                 builder.Append(Uri.EscapeDataString(item.Title ?? ""));
                 builder.Append('|');
-                // R5: explicitly ensure ':' (outer delimiter) is always percent-encoded inside values
                 string encodedCmd = Uri.EscapeDataString(item.Command ?? "");
                 if (encodedCmd.Contains(':')) encodedCmd = encodedCmd.Replace(":", "%3A");
                 builder.Append(encodedCmd);
@@ -935,8 +1012,6 @@ namespace EricGameLauncher
         [JsonIgnore]
         public bool IsPlatformUrl => !string.IsNullOrEmpty(ExePath) && GamePlatformHelper.IsSupportedPlatformUrl(ExePath);
 
-        // M5: [JsonPropertyName] removed — AppItem no longer serialises to JSON directly
-        // after the M2 DTO split. AppItemDto.Platform carries [JsonPropertyName("platform")].
         public string? Platform
         {
             get => _platform;
@@ -988,8 +1063,6 @@ namespace EricGameLauncher
         [JsonPropertyName("settings")]
         public AppSettings Settings { get; set; } = new();
 
-        // M2: Items is now List<AppItemDto> to cleanly separate the JSON layer
-        // from the AppItem ViewModel used by the UI.
         [JsonPropertyName("items")]
         public List<AppItemDto> Items { get; set; } = [];
     }
@@ -1050,8 +1123,6 @@ namespace EricGameLauncher
                 bitmap.DecodePixelWidth = 256;
                 bitmap.DecodePixelHeight = 256;
 
-                // P2: use file modification time as cache-bust key so unchanged icons
-                // can be reused from the bitmap cache instead of being re-decoded every refresh.
                 long cacheKey = new FileInfo(path).LastWriteTime.Ticks;
                 string fileUri = $"file:///{path.Replace("\\", "/")}?t={cacheKey}";
 
@@ -1230,18 +1301,15 @@ namespace EricGameLauncher
         {
             try
             {
-                // First try IShellItemImageFactory (Modern Shell approach)
-                Guid iid = new Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b"); // IShellItemImageFactory
+                Guid iid = new Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b");
                 int hr = SHCreateItemFromParsingName(shellPath, IntPtr.Zero, iid, out IShellItemImageFactory? factory);
 
                 if (hr == 0 && factory != null)
                 {
-                    // Try ICONONLY (0x4) | SCALEUP (0x100)
                     hr = factory.GetImage(new SIZE { cx = 256, cy = 256 }, 0x104, out IntPtr hBitmap);
 
                     if (hr != 0)
                     {
-                        // Fallback: THUMBNAILONLY (0x8) | SCALEUP (0x100)
                         hr = factory.GetImage(new SIZE { cx = 256, cy = 256 }, 0x108, out hBitmap);
                     }
 
@@ -1249,8 +1317,6 @@ namespace EricGameLauncher
                     {
                         try
                         {
-                            // SHCreateItemFromParsingName GetImage returns an hBitmap (often a DIB section).
-                            // Image.FromHbitmap often discards alpha. We manually create a 32bppArgb bitmap.
                             using var bmp = CreateBitmapFromHBitmap(hBitmap, true);
                             if (bmp != null)
                             {
@@ -1265,14 +1331,12 @@ namespace EricGameLauncher
                     }
                 }
 
-                // Fallback: SHGetFileInfo with PIDL (Classic Shell approach)
                 IntPtr pidl = ILCreateFromPath(shellPath);
                 if (pidl != IntPtr.Zero)
                 {
                     try
                     {
                         SHFILEINFO shfi = new SHFILEINFO();
-                        // 0x100 = SHGFI_ICON, 0x0 = SHGFI_LARGEICON, 0x8 = SHGFI_PIDL
                         const uint SHGFI_PIDL = 0x000000008;
                         IntPtr res = SHGetFileInfo(pidl, 0, ref shfi, (uint)Marshal.SizeOf(shfi),
                             SHGFI_ICON | SHGFI_LARGEICON | SHGFI_PIDL);
@@ -1301,11 +1365,8 @@ namespace EricGameLauncher
             BITMAP bm;
             if (GetObject(hBitmap, Marshal.SizeOf(typeof(BITMAP)), out bm) != 0)
             {
-                // If it's a 32-bit bitmap, it likely has an alpha channel.
-                // bm.bmBits might be null if it's not a DIB section, but GetImage usually returns a DIB.
                 if (bm.bmBitsPixel == 32 && bm.bmBits != IntPtr.Zero)
                 {
-                    // Create a bitmap that points to the same memory, then clone it to own the data.
                     using (var temp = new Bitmap(bm.bmWidth, bm.bmHeight, bm.bmWidthBytes, PixelFormat.Format32bppArgb, bm.bmBits))
                     {
                         var result = new Bitmap(temp);
@@ -1314,7 +1375,6 @@ namespace EricGameLauncher
                     }
                 }
             }
-            // Fallback for non-32bpp or non-DIB bitmaps
             return Bitmap.FromHbitmap(hBitmap);
         }
 
@@ -1409,7 +1469,7 @@ namespace EricGameLauncher
             if (!File.Exists(filePath)) return;
             for (int i = 0; i < 3; i++)
             {
-                try { File.Delete(filePath); return; } catch (Exception) { await Task.Delay(50); }
+                try { await Task.Run(() => File.Delete(filePath)); return; } catch (Exception) { await Task.Delay(50); }
             }
         }
     }
@@ -1439,7 +1499,6 @@ namespace EricGameLauncher
 
             try
             {
-                // Core: WScript.Shell for basic info
                 Type? wshType = Type.GetTypeFromProgID("WScript.Shell");
                 if (wshType == null) return null;
 
@@ -1458,7 +1517,6 @@ namespace EricGameLauncher
                         IconPath = link.IconLocation as string
                     };
 
-                    // Pro: Shell.Application for AUMID
                     try
                     {
                         Type? shellAppType = Type.GetTypeFromProgID("Shell.Application");
@@ -1475,18 +1533,15 @@ namespace EricGameLauncher
                                     var folderItem = folder?.ParseName(file);
                                     if (folderItem != null)
                                     {
-                                        // AUMID
                                         var aumidProp = folderItem.ExtendedProperty("System.AppUserModel.ID");
                                         if (aumidProp != null) info.AUMID = aumidProp.ToString();
 
-                                        // If TargetPath is empty (common for UWP), try ParsingPath
                                         if (string.IsNullOrEmpty(info.TargetPath))
                                         {
                                             var parsingPath = folderItem.ExtendedProperty("System.Link.TargetParsingPath");
                                             if (parsingPath != null) info.TargetPath = parsingPath.ToString();
                                         }
 
-                                        // Heuristic: if TargetPath looks like AUMID but isn't prefixed
                                         if (string.IsNullOrEmpty(info.AUMID) && !string.IsNullOrEmpty(info.TargetPath))
                                         {
                                             string tPath = info.TargetPath;
@@ -1565,7 +1620,6 @@ namespace EricGameLauncher
             }
             catch (Exception)
             {
-                // Logger.Log(ex); // Removed
                 return null;
             }
         }
@@ -1611,9 +1665,6 @@ namespace EricGameLauncher
         }
 
         private static readonly string[] SupportedExtensions = [".lnk", ".url", ".exe"];
-        // O5: Removed unused ILCreateFromPath/ILFree/IShellFolder/STRRET/StrRetToBuf P/Invoke declarations.
-        // The Start Menu enumeration uses Shell.Application COM (GetStartMenuItems) and no longer
-        // needs these legacy shell namespace interop APIs.
 
         public static List<FileItem> GetStartMenuItems()
         {
@@ -1626,7 +1677,6 @@ namespace EricGameLauncher
                 dynamic? shell = Activator.CreateInstance(shellType);
                 if (shell == null) return items;
 
-                // shell:AppsFolder is a virtual folder containing all apps
                 var appsFolder = shell.NameSpace("shell:AppsFolder");
                 if (appsFolder != null)
                 {
@@ -1637,7 +1687,6 @@ namespace EricGameLauncher
                             string name = item.Name;
                             string path = item.Path;
 
-                            // Try to resolve to a physical path if it's a Win32 app
                             string finalPath = path;
                             bool isPhysical = File.Exists(path) || Directory.Exists(path);
 
@@ -1645,8 +1694,6 @@ namespace EricGameLauncher
                             {
                                 try
                                 {
-                                    // Try extended properties for MSI/other shell links
-                                    // System.Link.TargetParsingPath (canonical name: PKEY_Link_TargetParsingPath)
                                     var targetProperty = item.ExtendedProperty("System.Link.TargetParsingPath");
                                     if (targetProperty != null)
                                     {
@@ -1669,7 +1716,7 @@ namespace EricGameLauncher
                                         }
                                     }
                                 }
-                                catch { /* Ignore resolution errors */ }
+                                catch { }
                             }
 
                             if (!string.IsNullOrEmpty(name))
@@ -1782,7 +1829,6 @@ namespace EricGameLauncher
 
     public static class Win32FileDialog
     {
-        // S5: Use Unicode (W) version to correctly handle non-Latin paths (e.g. Chinese).
         [DllImport("comdlg32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
         private static extern bool GetOpenFileNameW(ref OpenFileName ofn);
 
@@ -1823,9 +1869,6 @@ namespace EricGameLauncher
                 hwndOwner = hwnd,
                 lpstrTitle = title,
                 lpstrFilter = filter,
-                // M3: lpstrFile is the receive buffer for the selected path.
-                // nMaxFile is the buffer capacity measured in TCHAR (Unicode chars), not bytes.
-                // 520 chars gives headroom beyond MAX_PATH (260) for multi-select or long paths.
                 lpstrFile = new string('\0', 520),
                 nMaxFile = 520,
                 lpstrFileTitle = new string('\0', 128),
@@ -1871,7 +1914,7 @@ namespace EricGameLauncher
         {
             if (string.IsNullOrEmpty(url)) return null;
 
-            // Precise 24H2/25H2 Identification
+
             if (url.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 if (await StoreHelper.IsGameAsync(url))
@@ -1883,7 +1926,7 @@ namespace EricGameLauncher
                         DefaultLauncherPath = LauncherConstants.XboxProtocol
                     };
                 }
-                return null; // As requested, remove generic store platform binding
+                return null;
             }
 
             var platform = DetectPlatform(url);
@@ -1897,16 +1940,10 @@ namespace EricGameLauncher
             if (!string.IsNullOrEmpty(mgrPath)) return mgrPath;
             if (string.IsNullOrEmpty(exePath)) return null;
 
-            // Handle UWP/Xbox case synchronously (prefix check)
             if (exePath.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase))
             {
-                // Note: We assume full platform detection happened at addition time,
-                // but for runtime we allow binding to xbox:// if identified as Xbox.
-                var cachedPlatform = DetectPlatform(exePath); // This checks normal registry
+                var cachedPlatform = DetectPlatform(exePath);
                 if (cachedPlatform != null) return cachedPlatform.DefaultLauncherPath;
-
-                // For shell:AppsFolder, we might want to return xbox:// IF it was identified as a game.
-                // For simplicity at runtime, we return null if unknown, or xbox:// if verified.
                 return null;
             }
 
@@ -2005,16 +2042,22 @@ namespace EricGameLauncher
             }
             if (string.IsNullOrEmpty(installDir) || string.IsNullOrEmpty(libraryPath)) return null;
             string gameDir = Path.Combine(libraryPath, "steamapps", "common", installDir);
-            if (!Directory.Exists(gameDir)) return null;
-            string? executable = GetExecutableFromAppInfo(appId);
-            string? fullExePath = null;
-            if (!string.IsNullOrEmpty(executable))
+
+            // 优化：不再使用不稳定的可执行文件探测逻辑，直接进行启发式扫描
+            string? fullExePath = FindMainExecutable(gameDir, gameName);
+
+            // 增加兜底方案：如果找不到 EXE（或 DLL），则使用 Steam 本地缓存的图标
+            if (string.IsNullOrEmpty(fullExePath) || !File.Exists(fullExePath))
             {
-                fullExePath = Path.Combine(gameDir, executable);
-                if (!File.Exists(fullExePath)) fullExePath = FindExecutableInDirectory(gameDir, executable);
+                string? steamPath = DetectSteamPath();
+                if (!string.IsNullOrEmpty(steamPath))
+                {
+                    string backupIcon = Path.Combine(steamPath, "appcache", "librarycache", $"{appId}_icon.jpg");
+                    if (File.Exists(backupIcon)) fullExePath = backupIcon;
+                }
             }
-            if (string.IsNullOrEmpty(fullExePath) || !File.Exists(fullExePath)) fullExePath = FindMainExecutable(gameDir, gameName);
-            return (string.IsNullOrEmpty(fullExePath) || !File.Exists(fullExePath)) ? null : new SteamGameInfo { AppId = appId, Name = gameName, InstallDir = installDir, Executable = executable, FullExePath = fullExePath };
+
+            return new SteamGameInfo { AppId = appId, Name = gameName, InstallDir = installDir, Executable = Path.GetFileName(fullExePath), FullExePath = fullExePath };
         }
 
         public static string? GetExecutableFromSteamUrl(string steamUrl)
@@ -2023,48 +2066,8 @@ namespace EricGameLauncher
             return appId == null ? null : GetGameInfo(appId.Value)?.FullExePath;
         }
 
-        private static string? GetExecutableFromAppInfo(int appId)
-        {
-            _cachedExecutables ??= ParseAppInfoExecutables();
-            return _cachedExecutables.TryGetValue(appId, out string? exe) ? exe : null;
-        }
-
-        private static Dictionary<int, string> ParseAppInfoExecutables()
-        {
-            var result = new Dictionary<int, string>();
-            string? steamPath = DetectSteamPath();
-            if (string.IsNullOrEmpty(steamPath)) return result;
-            string appInfoPath = Path.Combine(steamPath, "appcache", "appinfo.vdf");
-            if (!File.Exists(appInfoPath)) return result;
-            try
-            {
-                using var stream = new FileStream(appInfoPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                using var reader = new BinaryReader(stream);
-                // R2: Validate appinfo.vdf magic number before parsing.
-                // Known values: 0x27444607 (current), 0x27444601 (older). If Steam
-                // changes this, we bail out cleanly rather than reading garbage data.
-                uint magic = reader.ReadUInt32();
-                if (magic != 0x27444607 && magic != 0x27444601 && magic != 0x27444600)
-                {
-                    Debug.WriteLine($"[SteamHelper] Unknown appinfo.vdf magic: 0x{magic:X8}. Skipping executable cache.");
-                    return result;
-                }
-                reader.ReadUInt32(); // skip secondary header field
-                while (stream.Position < stream.Length - 4)
-                {
-                    uint id = reader.ReadUInt32();
-                    if (id == 0) break;
-                    try { reader.ReadUInt32(); reader.ReadUInt32(); reader.ReadUInt32(); reader.ReadUInt64(); reader.ReadBytes(20); reader.ReadUInt32(); string? exe = ParseVdfForExecutable(reader); if (!string.IsNullOrEmpty(exe)) result[(int)id] = exe; } catch (Exception) { break; }
-                }
-            }
-            catch (Exception) { }
-            return result;
-        }
-
         private static string ReadCString(BinaryReader reader)
         {
-            // L3: cap at 4096 bytes to avoid unbounded reads if the file is truncated
-            // or the null terminator is missing (e.g. corrupted appinfo.vdf).
             const int MaxLen = 4096;
             var bytes = new List<byte>(64);
             byte b;
@@ -2072,69 +2075,110 @@ namespace EricGameLauncher
             return Encoding.UTF8.GetString(bytes.ToArray());
         }
 
-        private static string? ParseVdfForExecutable(BinaryReader reader)
-        {
-            string? executable = null;
-            int depth = 0;
-            bool inConfig = false, inLaunch = false, inLaunch0 = false;
-            try
-            {
-                while (true)
-                {
-                    byte type = reader.ReadByte();
-                    switch (type)
-                    {
-                        case 0x00: string name = ReadCString(reader); depth++; if (depth == 2 && name == "config") inConfig = true; if (inConfig && depth == 3 && name == "launch") inLaunch = true; if (inLaunch && depth == 4 && name == "0") inLaunch0 = true; break;
-                        case 0x01: string key = ReadCString(reader); string value = ReadCString(reader); if (inLaunch0 && key == "executable" && string.IsNullOrEmpty(executable)) executable = value; break;
-                        case 0x02: ReadCString(reader); reader.ReadInt32(); break;
-                        case 0x07: ReadCString(reader); reader.ReadInt64(); break;
-                        case 0x08: depth--; if (depth == 3) inLaunch0 = false; if (depth == 2) inLaunch = false; if (depth == 1) inConfig = false; if (depth < 0) return executable; break;
-                        default: return executable;
-                    }
-                }
-            }
-            catch (Exception) { return executable; }
-        }
-
-
-        private static string? FindExecutableInDirectory(string directory, string exeName)
-        {
-            try
-            {
-                string directPath = Path.Combine(directory, exeName);
-                if (File.Exists(directPath)) return directPath;
-                foreach (var file in Directory.EnumerateFiles(directory, exeName, SearchOption.AllDirectories)) return file;
-            }
-            catch (Exception) { }
-            return null;
-        }
-
         private static string? FindMainExecutable(string gameDir, string? gameName)
         {
             try
             {
+                if (!Directory.Exists(gameDir)) return null;
+
                 var exeFiles = new List<string>();
+                // 获取两层深度的所有 EXE
                 foreach (var file in Directory.EnumerateFiles(gameDir, "*.exe", SearchOption.TopDirectoryOnly)) exeFiles.Add(file);
                 foreach (var subDir in Directory.EnumerateDirectories(gameDir))
                 {
-                    try { foreach (var file in Directory.EnumerateFiles(subDir, "*.exe", SearchOption.TopDirectoryOnly)) exeFiles.Add(file); } catch { /* Ignore access denied */ }
+                    try
+                    {
+                        string dirName = Path.GetFileName(subDir).ToLower();
+                        // 忽略某些明显的非主程序目录以提速
+                        if (dirName == "engine" || dirName == "redist") continue;
+                        foreach (var file in Directory.EnumerateFiles(subDir, "*.exe", SearchOption.TopDirectoryOnly)) exeFiles.Add(file);
+                    }
+                    catch { }
                 }
+
                 if (exeFiles.Count == 0) return null;
-                var excludePatterns = new[] { "unins", "uninst", "setup", "install", "crash", "report", "update", "launcher", "redist", "vcredist", "dxsetup", "ue4prereq", "dotnet", "directx" };
-                var candidates = exeFiles.Where(f => { string fileName = Path.GetFileNameWithoutExtension(f).ToLower(); return !excludePatterns.Any(p => fileName.Contains(p)); }).ToList();
-                if (candidates.Count == 0) candidates = exeFiles;
-                if (!string.IsNullOrEmpty(gameName))
+
+                var excludePatterns = new[] { "unins", "uninst", "setup", "install", "crash", "report", "update", "launcher", "redist", "vcredist", "dxsetup", "ue4prereq", "dotnet", "directx", "easyanticheat", "eac_launcher" };
+
+                string normalizedGameName = string.IsNullOrEmpty(gameName) ? "" : Regex.Replace(gameName.ToLower(), @"[^a-z0-9]", "");
+                string normalizedDirName = Regex.Replace(Path.GetFileName(gameDir).ToLower(), @"[^a-z0-9]", "");
+
+                var scoredCandidates = exeFiles.Select(f =>
                 {
-                    string normalizedName = Regex.Replace(gameName.ToLower(), @"[^a-z0-9]", "");
-                    var bestMatch = candidates.OrderByDescending(f => { string fileName = Regex.Replace(Path.GetFileNameWithoutExtension(f).ToLower(), @"[^a-z0-9]", ""); if (fileName == normalizedName) return 100; if (fileName.Contains(normalizedName) || normalizedName.Contains(fileName)) return 50; return 0; }).ThenByDescending(f => new FileInfo(f).Length).FirstOrDefault();
-                    if (bestMatch != null) return bestMatch;
-                }
-                return candidates.OrderByDescending(f => new FileInfo(f).Length).FirstOrDefault();
+                    int score = 0;
+                    string fileName = Path.GetFileNameWithoutExtension(f).ToLower();
+                    string normalizedFileName = Regex.Replace(fileName, @"[^a-z0-9]", "");
+
+                    // 1. 黑名单过滤（致命打击 -1000）
+                    if (excludePatterns.Any(p => fileName.Contains(p))) score -= 1000;
+
+                    // 2. 名称匹配评分 (+50)
+                    if (normalizedFileName == normalizedGameName || normalizedFileName == normalizedDirName) score += 50;
+                    else if (normalizedFileName.Contains(normalizedGameName) || normalizedGameName.Contains(normalizedFileName)) score += 30;
+
+                    // 3. 文件体积评分 (+30)
+                    long length = new FileInfo(f).Length;
+                    if (length > 10 * 1024 * 1024) score += 30; // 超过 10MB
+                    else if (length > 1 * 1024 * 1024) score += 15; // 超过 1MB
+
+                    // 4. 目录深度评分 (+20)
+                    string? dir = Path.GetDirectoryName(f);
+                    if (dir != null && dir.Equals(gameDir, StringComparison.OrdinalIgnoreCase)) score += 20;
+
+                    return new { Path = f, Score = score, Length = length };
+                });
+
+                return scoredCandidates
+                    .OrderByDescending(c => c.Score)
+                    .ThenByDescending(c => c.Length)
+                    .FirstOrDefault()?.Path;
             }
             catch (Exception) { return null; }
         }
 
         public static void ClearCache() { _cachedSteamPath = null; _cachedLibraryFolders = null; _cachedExecutables = null; }
+
+        public static List<ScannedGame> GetAllInstalledGames()
+        {
+            var results = new List<ScannedGame>();
+            try
+            {
+                var libraryFolders = GetLibraryFolders();
+                foreach (var libFolder in libraryFolders)
+                {
+                    string appsDir = Path.Combine(libFolder, "steamapps");
+                    if (!Directory.Exists(appsDir)) continue;
+
+                    try
+                    {
+                        var manifestFiles = Directory.GetFiles(appsDir, "appmanifest_*.acf");
+                        foreach (var mf in manifestFiles)
+                        {
+                            string fileName = Path.GetFileNameWithoutExtension(mf);
+                            if (fileName.StartsWith("appmanifest_") && int.TryParse(fileName.Substring(12), out int appId))
+                            {
+                                if (appId == 228980 || appId == 1070560 || appId == 1391110 || appId == 1628350)
+                                    continue;
+
+                                var info = GetGameInfo(appId);
+                                if (info != null)
+                                {
+                                    results.Add(new ScannedGame
+                                    {
+                                        Title = info.Name ?? $"Steam Game {appId}",
+                                        ExePath = $"steam://rungameid/{appId}",
+                                        PlatformBadge = "Steam"
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception) { }
+                }
+            }
+            catch (Exception) { }
+            return results;
+        }
     }
 
     #endregion
@@ -2217,27 +2261,73 @@ namespace EricGameLauncher
 
                 if (installLocMatch.Success && launchExeMatch.Success)
                 {
-                    string installDir = installLocMatch.Groups[1].Value.Replace("\\\\", "\\");
-                    string launchExe = launchExeMatch.Groups[1].Value.Replace("\\\\", "\\");
+                    string installDir = installLocMatch.Groups[1].Value.Replace("\\\\", "\\").Replace("/", "\\");
+                    string launchExe = launchExeMatch.Groups[1].Value.Replace("\\\\", "\\").Replace("/", "\\");
 
                     string fullPath = Path.Combine(installDir, launchExe);
-                    if (File.Exists(fullPath)) return fullPath;
+                    return fullPath;
                 }
             }
             catch (Exception) { }
             return null;
+        }
+
+        public static List<ScannedGame> GetAllInstalledGames()
+        {
+            var results = new List<ScannedGame>();
+            string? manifestDir = DetectEpicManifestDir();
+            if (string.IsNullOrEmpty(manifestDir)) return results;
+
+            try
+            {
+                var manifestFiles = Directory.GetFiles(manifestDir, "*.item");
+                foreach (var file in manifestFiles)
+                {
+                    try
+                    {
+                        string content = File.ReadAllText(file);
+                        var nameMatch = Regex.Match(content, @"""DisplayName""\s*:\s*""([^""]+)""", RegexOptions.IgnoreCase);
+                        var appNameMatch = Regex.Match(content, @"""AppName""\s*:\s*""([^""]+)""", RegexOptions.IgnoreCase);
+                        var catalogNsMatch = Regex.Match(content, @"""CatalogNamespace""\s*:\s*""([^""]+)""", RegexOptions.IgnoreCase);
+                        var catalogItemMatch = Regex.Match(content, @"""CatalogItemId""\s*:\s*""([^""]+)""", RegexOptions.IgnoreCase);
+
+                        string? exePath = ExtractExePathFromManifest(content);
+                        if (!string.IsNullOrEmpty(exePath) && appNameMatch.Success)
+                        {
+                            string displayName = nameMatch.Success ? nameMatch.Groups[1].Value : appNameMatch.Groups[1].Value;
+                            string appName = appNameMatch.Groups[1].Value;
+                            string catalogNs = catalogNsMatch.Success ? catalogNsMatch.Groups[1].Value : "";
+                            string catalogItemId = catalogItemMatch.Success ? catalogItemMatch.Groups[1].Value : "";
+
+                            string fullEpicId = appName;
+                            if (!string.IsNullOrEmpty(catalogNs) && !string.IsNullOrEmpty(catalogItemId))
+                            {
+                                fullEpicId = $"{catalogNs}:{catalogItemId}:{appName}";
+                            }
+
+                            string epicUrl = $"{LauncherConstants.EpicAppsProtocol}{Uri.EscapeDataString(fullEpicId)}?action=launch&silent=true";
+
+                            results.Add(new ScannedGame
+                            {
+                                Title = displayName,
+                                ExePath = epicUrl,
+                                PlatformBadge = "Epic Games"
+                            });
+                        }
+                    }
+                    catch (Exception) { }
+                }
+            }
+            catch (Exception) { }
+            return results;
         }
     }
 
     public static class StoreHelper
     {
         private static readonly PackageManager _packageManager = new PackageManager();
-        // R7: limit online API calls to 10 seconds to avoid blocking thread pool indefinitely
         private static readonly HttpClient _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
 
-        /// <summary>
-        /// Detects if a UWP app is a game using Microsoft Store online API or AppxManifest fallback.
-        /// </summary>
         public static async Task<bool> IsGameAsync(string path)
         {
             if (string.IsNullOrEmpty(path)) return false;
@@ -2248,10 +2338,7 @@ namespace EricGameLauncher
 
             try
             {
-                // 1. Preferred: Check local manifest for technical Xbox/Game markers (Fast, offline)
                 if (await CheckManifestForGameMarkersAsync(aumid)) return true;
-
-                // 2. Fallback: Online verification for apps without clear manifest markers
                 return await IsGameOnlineAsync(pfn);
             }
             catch { return false; }
@@ -2274,7 +2361,6 @@ namespace EricGameLauncher
                             return true;
                     }
 
-                    // Backup check: ProductKind
                     if (product.TryGetProperty("ProductKind", out var kind))
                     {
                         string kindStr = kind.GetString() ?? "";
@@ -2293,16 +2379,11 @@ namespace EricGameLauncher
             {
                 try
                 {
-                    // Extract Package Family Name from AUMID
                     string pfn = aumid.Contains("!") ? aumid.Split('!')[0] : aumid;
-
-                    // O2: reuse the static _packageManager field instead of creating a new instance
                     var package = _packageManager.FindPackageForUser("", pfn);
                     if (package == null) return false;
 
                     string manifestPath = Path.Combine(package.InstalledLocation.Path, "AppxManifest.xml");
-                    if (!File.Exists(manifestPath)) return false;
-
                     XmlDocument doc = new XmlDocument();
                     doc.Load(manifestPath);
 
@@ -2310,26 +2391,35 @@ namespace EricGameLauncher
                     nsmgr.AddNamespace("uap", "http://schemas.microsoft.com/appx/manifest/uap/windows10");
                     nsmgr.AddNamespace("res", "http://schemas.microsoft.com/appx/manifest/foundation/windows10");
 
-                    // 1. Check for Xbox related protocols
-                    var protocols = doc.SelectNodes("//uap:Protocol", nsmgr);
+                    var protocols = doc.SelectNodes("//*[local-name()='Protocol']", nsmgr);
                     if (protocols != null)
                     {
                         foreach (XmlNode protocol in protocols)
                         {
                             string? protoName = protocol.Attributes?["Name"]?.Value;
-                            if (protoName != null && protoName.Contains("xbox", StringComparison.OrdinalIgnoreCase))
+                            if (protoName != null && (protoName.Contains("xbox", StringComparison.OrdinalIgnoreCase) || protoName.StartsWith("ms-xbl-", StringComparison.OrdinalIgnoreCase)))
                                 return true;
                         }
                     }
 
-                    // 2. Check for Xbox capabilities
-                    var capabilities = doc.SelectNodes("//*[local-name()='Capability' or local-name()='uap:Capability']", nsmgr);
+                    var capabilities = doc.SelectNodes("//*[local-name()='Capability' or local-name()='uap:Capability' or local-name()='resCap:Capability']", nsmgr);
                     if (capabilities != null)
                     {
                         foreach (XmlNode cap in capabilities)
                         {
                             string? capName = cap.Attributes?["Name"]?.Value;
-                            if (capName != null && capName.Contains("xbox", StringComparison.OrdinalIgnoreCase))
+                            if (capName != null && (capName.Contains("xbox", StringComparison.OrdinalIgnoreCase) || capName.Equals("gameList", StringComparison.OrdinalIgnoreCase)))
+                                return true;
+                        }
+                    }
+
+                    var extensions = doc.SelectNodes("//*[local-name()='Extension']", nsmgr);
+                    if (extensions != null)
+                    {
+                        foreach (XmlNode ext in extensions)
+                        {
+                            string? category = ext.Attributes?["Category"]?.Value;
+                            if (category != null && category.Contains("gameBar", StringComparison.OrdinalIgnoreCase))
                                 return true;
                         }
                     }
@@ -2338,13 +2428,60 @@ namespace EricGameLauncher
                 return false;
             });
         }
+
+        public static async Task<List<ScannedGame>> GetAllInstalledGamesAsync()
+        {
+            var results = new List<ScannedGame>();
+            try
+            {
+                var packages = _packageManager.FindPackagesForUser(string.Empty);
+                var tasks = new List<Task<ScannedGame?>>();
+
+                foreach (var package in packages)
+                {
+                    if (package.IsFramework || package.IsResourcePackage) continue;
+
+                    tasks.Add(Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var entries = await package.GetAppListEntriesAsync();
+                            if (entries == null || entries.Count == 0) return null;
+
+                            var entry = entries[0];
+                            string aumid = entry.AppUserModelId;
+                            string pfn = package.Id.FamilyName;
+
+
+
+                            if (await IsGameAsync(LauncherConstants.UwpAppsFolderPrefix + aumid))
+                            {
+                                return new ScannedGame
+                                {
+                                    Title = entry.DisplayInfo.DisplayName ?? package.DisplayName,
+                                    ExePath = LauncherConstants.UwpAppsFolderPrefix + aumid,
+                                    PlatformBadge = "Xbox"
+                                };
+                            }
+                        }
+                        catch { }
+                        return null;
+                    }));
+                }
+
+                var games = await Task.WhenAll(tasks);
+                results.AddRange(games.Where(g => g != null)!);
+            }
+            catch (Exception) { }
+
+            return results;
+        }
     }
 
     public class RunActionBase : INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler? PropertyChanged;
 
-        // R1: expose a protected helper so subclasses can raise PropertyChanged correctly.
         protected void NotifyPropertyChanged(string propertyName)
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
@@ -2385,8 +2522,6 @@ namespace EricGameLauncher
             get => _enabled;
             set
             {
-                // R1: was incorrectly using reflection on event as if it were a property.
-                // Now uses the protected NotifyPropertyChanged helper from RunActionBase.
                 if (_enabled != value) { _enabled = value; NotifyPropertyChanged(nameof(Enabled)); }
             }
         }
@@ -2451,9 +2586,6 @@ namespace EricGameLauncher
             public long size { get; set; }
         }
 
-        /// <summary>
-        /// 检查是否需要更新（每次启动均执行）
-        /// </summary>
         public static async Task<ReleaseInfo?> CheckForUpdateAsync()
         {
             try
@@ -2475,12 +2607,6 @@ namespace EricGameLauncher
             catch { return null; }
         }
 
-        // M6: GetLatestReleaseAsync was an unused duplicate of CheckForUpdateAsync
-        // (without the version-comparison step). Removed to avoid dead-code confusion.
-
-        /// <summary>
-        /// 启动更新程序
-        /// </summary>
         public static void StartUpdater(string downloadUrl)
         {
             try
@@ -2490,7 +2616,6 @@ namespace EricGameLauncher
 
                 string mainUpdaterPath = Path.Combine(tempDir, "updater.main.exe");
 
-                // 1. 释放嵌入的 MainUpdater 三件套 (非单文件模式)
                 var assembly = System.Reflection.Assembly.GetExecutingAssembly();
                 string[] resources = { "updater.main.exe", "updater.main.dll", "updater.main.runtimeconfig.json" };
                 foreach (var res in resources)
@@ -2507,14 +2632,10 @@ namespace EricGameLauncher
                     }
                 }
 
-                // 2. 准备启动参数 (转交下载职责)
-                // H4: escape embedded double-quotes in each argument so that paths or
-                // URLs containing quote characters don't break command-line parsing.
                 string installDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
                 string args = string.Join(" ", new[] { installDir, downloadUrl }
                     .Select(a => "\"" + a.Replace("\"", "\\\"") + "\""));
 
-                // 3. 启动更新器
                 ProcessStartInfo psi = new ProcessStartInfo
                 {
                     FileName = mainUpdaterPath,
@@ -2524,7 +2645,6 @@ namespace EricGameLauncher
 
                 Process.Start(psi);
 
-                // 4. 退出当前主程序
                 Application.Current.Exit();
             }
             catch (Exception ex)

@@ -162,7 +162,12 @@ namespace updater.main
                     {
                         if (string.IsNullOrEmpty(entry.Name)) continue; // Skip directories
 
-                        string destinationPath = Path.Combine(installDir, entry.FullName);
+                        string destinationPath = Path.GetFullPath(Path.Combine(installDir, entry.FullName));
+                        if (!destinationPath.StartsWith(installDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue; // Prevent Zip Slip vulnerability
+                        }
+
                         string destDir = Path.GetDirectoryName(destinationPath)!;
 
                         if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
