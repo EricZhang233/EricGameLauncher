@@ -1108,6 +1108,10 @@ namespace EricGameLauncher
 
     public sealed class ImagePathConverter : IValueConverter
     {
+        // In-memory soft-reference cache: key = "path@ticks", value = WeakReference<BitmapImage>
+        // WeakReference lets GC reclaim images under memory pressure without needing explicit eviction.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, WeakReference<BitmapImage>> _bitmapCache = new();
+
         public object? Convert(object value, Type targetType, object parameter, string language)
         {
             if (value is not string path || string.IsNullOrEmpty(path))
@@ -1118,26 +1122,32 @@ namespace EricGameLauncher
                 if (!File.Exists(path))
                     return null;
 
+                long cacheKey = new FileInfo(path).LastWriteTime.Ticks;
+                string cacheEntry = $"{path}@{cacheKey}";
+
+                // Try to return the already-decoded BitmapImage from the in-memory cache
+                if (_bitmapCache.TryGetValue(cacheEntry, out var weakRef) && weakRef.TryGetTarget(out var cached))
+                    return cached;
+
+                // Cache miss or GC-collected: create a new BitmapImage
                 var bitmap = new BitmapImage();
-                bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
                 bitmap.DecodePixelWidth = 256;
                 bitmap.DecodePixelHeight = 256;
 
-                long cacheKey = new FileInfo(path).LastWriteTime.Ticks;
                 string fileUri = $"file:///{path.Replace("\\", "/")}?t={cacheKey}";
-
                 try
                 {
                     bitmap.UriSource = new Uri(fileUri, UriKind.Absolute);
-                    return bitmap;
                 }
-                catch (Exception)
+                catch
                 {
                     bitmap.UriSource = new Uri(path, UriKind.Absolute);
-                    return bitmap;
                 }
+
+                _bitmapCache[cacheEntry] = new WeakReference<BitmapImage>(bitmap);
+                return bitmap;
             }
-            catch (Exception)
+            catch
             {
                 return null;
             }
@@ -1961,7 +1971,6 @@ namespace EricGameLauncher
         private static readonly string[] DefaultSteamPaths = ["Program Files (x86)\\Steam", "Program Files\\Steam", "Steam"];
         private static string? _cachedSteamPath;
         private static List<string>? _cachedLibraryFolders;
-        private static Dictionary<int, string>? _cachedExecutables;
 
 
         public static int? ExtractAppIdFromUrl(string url)
@@ -2136,7 +2145,7 @@ namespace EricGameLauncher
             catch (Exception) { return null; }
         }
 
-        public static void ClearCache() { _cachedSteamPath = null; _cachedLibraryFolders = null; _cachedExecutables = null; }
+        public static void ClearCache() { _cachedSteamPath = null; _cachedLibraryFolders = null; }
 
         public static List<ScannedGame> GetAllInstalledGames()
         {

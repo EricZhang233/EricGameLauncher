@@ -138,45 +138,92 @@ namespace updater.main
 
                 // Step 3: Extract and replace
                 Console.WriteLine($"[3/4] Applying updates...");
-                using (ZipArchive archive = ZipFile.OpenRead(tempZip))
+                string stagingDir = Path.Combine(installDir, "._update_staging");
+                string backupDir = Path.Combine(installDir, "._update_backup");
+
+                // Clear any leftover staging/backup from previous failed runs
+                if (Directory.Exists(stagingDir)) Directory.Delete(stagingDir, true);
+                if (Directory.Exists(backupDir)) Directory.Delete(backupDir, true);
+                Directory.CreateDirectory(stagingDir);
+
+                try
                 {
-                    // Clean install dir EXCEPT data folder
-                    var dirInfo = new DirectoryInfo(installDir);
-                    if (dirInfo.Exists)
+                    // Phase 1: Extract everything to staging directory
+                    using (ZipArchive archive = ZipFile.OpenRead(tempZip))
                     {
-                        foreach (var file in dirInfo.GetFiles())
+                        foreach (ZipArchiveEntry entry in archive.Entries)
                         {
-                            try { file.Delete(); } catch { }
+                            if (string.IsNullOrEmpty(entry.Name)) continue;
+
+                            string stagingPath = Path.GetFullPath(Path.Combine(stagingDir, entry.FullName));
+                            if (!stagingPath.StartsWith(stagingDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue; // Zip slip
+
+                            // Do not extract data configs
+                            if (entry.FullName.ToLower().StartsWith("data/")) continue;
+
+                            string destDir = Path.GetDirectoryName(stagingPath)!;
+                            if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
+
+                            entry.ExtractToFile(stagingPath, true);
                         }
-                        foreach (var dir in dirInfo.GetDirectories())
+                    }
+
+                    // Phase 2: Backup current files
+                    Directory.CreateDirectory(backupDir);
+                    var currentFiles = Directory.GetFiles(installDir, "*", SearchOption.AllDirectories)
+                        .Where(f => !f.StartsWith(stagingDir) && !f.StartsWith(backupDir) && !f.ToLower().Contains("\\data\\") && !f.ToLower().EndsWith(".update_staging") && !f.ToLower().EndsWith(".update_backup"));
+
+                    foreach (var file in currentFiles)
+                    {
+                        string relative = Path.GetRelativePath(installDir, file);
+                        string backupPath = Path.Combine(backupDir, relative);
+                        string bDir = Path.GetDirectoryName(backupPath)!;
+                        if (!Directory.Exists(bDir)) Directory.CreateDirectory(bDir);
+                        File.Move(file, backupPath, true);
+                    }
+
+                    // Phase 3: Move from staging to actual
+                    var stagedFiles = Directory.GetFiles(stagingDir, "*", SearchOption.AllDirectories);
+                    foreach (var file in stagedFiles)
+                    {
+                        string relative = Path.GetRelativePath(stagingDir, file);
+                        string finalPath = Path.Combine(installDir, relative);
+                        string fDir = Path.GetDirectoryName(finalPath)!;
+                        if (!Directory.Exists(fDir)) Directory.CreateDirectory(fDir);
+                        File.Move(file, finalPath, true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Error during update application: " + ex.Message);
+                    Console.WriteLine("Attempting rollback...");
+                    try
+                    {
+                        // Rollback from backup
+                        if (Directory.Exists(backupDir))
                         {
-                            if (dir.Name.ToLower() != "data")
+                            var backupFiles = Directory.GetFiles(backupDir, "*", SearchOption.AllDirectories);
+                            foreach (var file in backupFiles)
                             {
-                                try { dir.Delete(true); } catch { }
+                                string relative = Path.GetRelativePath(backupDir, file);
+                                string finalPath = Path.Combine(installDir, relative);
+                                if (File.Exists(finalPath)) File.Delete(finalPath);
+                                File.Move(file, finalPath, true);
                             }
                         }
+                        Console.WriteLine("Rollback successful. The launcher was not corrupted.");
                     }
-
-                    // Extract all
-                    foreach (ZipArchiveEntry entry in archive.Entries)
+                    catch (Exception rbEx)
                     {
-                        if (string.IsNullOrEmpty(entry.Name)) continue; // Skip directories
-
-                        string destinationPath = Path.GetFullPath(Path.Combine(installDir, entry.FullName));
-                        if (!destinationPath.StartsWith(installDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-                        {
-                            continue; // Prevent Zip Slip vulnerability
-                        }
-
-                        string destDir = Path.GetDirectoryName(destinationPath)!;
-
-                        if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
-
-                        // Don't overwrite data folder content if it somehow exists in zip
-                        if (entry.FullName.ToLower().StartsWith("data/")) continue;
-
-                        entry.ExtractToFile(destinationPath, true);
+                        Console.WriteLine("FATAL: Rollback failed! " + rbEx.Message);
                     }
+                    throw; // Rethrow to show standard error and exit
+                }
+                finally
+                {
+                    // Cleanup phase
+                    try { if (Directory.Exists(stagingDir)) Directory.Delete(stagingDir, true); } catch { }
+                    try { if (Directory.Exists(backupDir)) Directory.Delete(backupDir, true); } catch { }
                 }
 
                 // Step 4: Restart
