@@ -1589,7 +1589,7 @@ namespace EricGameLauncher
                         string? steamExePath = SteamHelper.GetExecutableFromSteamUrl(actualPath);
                         if (!string.IsNullOrEmpty(steamExePath) && File.Exists(steamExePath))
                         {
-                            iconPath = await IconHelper.GetIconPathAsync(steamExePath, _currentEditingItem.Id);
+                            iconPath = await IconHelper.GetIconPathAsync(steamExePath, _currentEditingItem.Id, forceExtract: true);
                         }
                         else
                         {
@@ -1626,7 +1626,7 @@ namespace EricGameLauncher
                             shouldExtractFromLnk = true;
                         }
 
-                        iconPath = await IconHelper.GetIconPathAsync(iconSource, _currentEditingItem.Id);
+                        iconPath = await IconHelper.GetIconPathAsync(iconSource, _currentEditingItem.Id, forceExtract: true);
                     }
 
                     if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
@@ -1777,7 +1777,7 @@ namespace EricGameLauncher
                     PropIcon.Source = null;
 
 
-                    string? newPath = await IconHelper.GetIconPathAsync(filePath, _currentEditingItem!.Id);
+                    string? newPath = await IconHelper.GetIconPathAsync(filePath, _currentEditingItem!.Id, forceExtract: true);
 
                     if (!string.IsNullOrEmpty(newPath) && File.Exists(newPath))
                     {
@@ -1895,7 +1895,7 @@ namespace EricGameLauncher
                             string? steamExePath = SteamHelper.GetExecutableFromSteamUrl(actualPath);
                             if (!string.IsNullOrEmpty(steamExePath) && File.Exists(steamExePath))
                             {
-                                iconPath = await IconHelper.GetIconPathAsync(steamExePath, _currentEditingItem.Id);
+                                iconPath = await IconHelper.GetIconPathAsync(steamExePath, _currentEditingItem.Id, forceExtract: true);
                             }
                             else
                             {
@@ -1926,7 +1926,7 @@ namespace EricGameLauncher
                             {
                                 iconSource = filePath;
                             }
-                            iconPath = await IconHelper.GetIconPathAsync(iconSource, _currentEditingItem.Id);
+                            iconPath = await IconHelper.GetIconPathAsync(iconSource, _currentEditingItem.Id, forceExtract: true);
                         }
 
                         if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
