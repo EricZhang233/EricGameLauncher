@@ -1150,6 +1150,30 @@ namespace EricGameLauncher
 
                     newAppItems.Add(newItem);
                     _allItems.Add(newItem);
+
+                    // kick off icon extraction immediately for UWP entries so users see
+                    // the icons without having to wait for a global refresh cycle.
+                    if (!string.IsNullOrEmpty(newItem.ExePath) &&
+                        newItem.ExePath.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                string? icon = await IconHelper.GetIconPathAsync(newItem.ExePath, newItem.Id);
+                                if (!string.IsNullOrEmpty(icon) && File.Exists(icon))
+                                {
+                                    // update item on UI thread
+                                    DispatcherQueue.TryEnqueue(() =>
+                                    {
+                                        newItem.IconPath = icon;
+                                        RefreshView();
+                                    });
+                                }
+                            }
+                            catch { }
+                        });
+                    }
                 }
 
                 ConfigService.SaveItems(_allItems.ToList());
@@ -1500,7 +1524,8 @@ namespace EricGameLauncher
             {
                 if (string.IsNullOrEmpty(filePath)) return;
                 bool isStoreApp = filePath.StartsWith("shell:AppsFolder\\");
-                if (!isStoreApp && !File.Exists(filePath)) return;
+                // existence check removed: caller (config/import) already ensures path is valid
+                // (we may still log or handle failures later in icon extraction).
 
 
                 string actualPath = filePath;
@@ -1804,7 +1829,7 @@ namespace EricGameLauncher
                 IntPtr hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
                 string? filePath = Win32FileDialog.ShowOpenFileDialog(hwnd, "Select Executable File");
 
-                if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
+                if (!string.IsNullOrEmpty(filePath))
                 {
 
                     string actualPath = filePath;
