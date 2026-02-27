@@ -435,14 +435,33 @@ namespace EricGameLauncher
                             }
 
                             string? iconPath = null;
-                            if (!string.IsNullOrEmpty(resolvedPath) && File.Exists(resolvedPath))
+                            // When dealing with UWP/apps folder paths the file system checks
+                            // above will always return false (they're not real files), which
+                            // previously meant icons could never be rebuilt after a batch import
+                            // scan.  We now treat any path prefixed with the UWP constant as
+                            // valid for icon extraction.
+                            bool resolvedIsStoreApp = !string.IsNullOrEmpty(resolvedPath) &&
+                                                      resolvedPath.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase);
+                            bool sourceIsStoreApp = !string.IsNullOrEmpty(sourcePath) &&
+                                                    sourcePath.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase);
+
+                            if (!string.IsNullOrEmpty(resolvedPath) &&
+                                (resolvedIsStoreApp || File.Exists(resolvedPath)))
                             {
                                 iconPath = await IconHelper.GetIconPathAsync(resolvedPath, item.Id);
-                                if (string.IsNullOrEmpty(iconPath) && !string.IsNullOrEmpty(sourcePath) && File.Exists(sourcePath) && sourcePath != resolvedPath)
+                                if (string.IsNullOrEmpty(iconPath) &&
+                                    !string.IsNullOrEmpty(sourcePath) &&
+                                    (sourceIsStoreApp || File.Exists(sourcePath)) &&
+                                    sourcePath != resolvedPath)
+                                {
                                     iconPath = await IconHelper.GetIconPathAsync(sourcePath, item.Id);
+                                }
                             }
-                            else if (!string.IsNullOrEmpty(sourcePath) && File.Exists(sourcePath))
+                            else if (!string.IsNullOrEmpty(sourcePath) &&
+                                     (sourceIsStoreApp || File.Exists(sourcePath)))
+                            {
                                 iconPath = await IconHelper.GetIconPathAsync(sourcePath, item.Id);
+                            }
 
                             if (!string.IsNullOrEmpty(iconPath))
                             {
@@ -1242,7 +1261,9 @@ namespace EricGameLauncher
         public static async Task<string?> GetIconPathAsync(string exePath, string itemId)
         {
             if (string.IsNullOrEmpty(exePath)) return null;
-            if (!exePath.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase) && !File.Exists(exePath)) return null;
+            // removed strict File.Exists guard: callers (配置/新建/导入) typically supply a valid path,
+            // and we prefer to attempt extraction later instead of rejecting up front.
+            // UWP shell paths are still allowed unconditionally.
 
             string iconPath = Path.Combine(CachePath, $"{itemId}.png");
             if (File.Exists(iconPath) && new FileInfo(iconPath).Length > 0) return iconPath;
@@ -1255,7 +1276,8 @@ namespace EricGameLauncher
             {
                 if (string.IsNullOrEmpty(sourcePath)) return null;
                 bool isStoreApp = sourcePath.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase);
-                if (!isStoreApp && !File.Exists(sourcePath)) return null;
+                // skip existence check here; callers generally expect extraction to proceed
+                // and failure will be handled by returning null downstream.
 
                 string targetPath = sourcePath;
                 int iconIndex = 0;
