@@ -1258,15 +1258,19 @@ namespace EricGameLauncher
         private static string CachePath => ConfigService.FixedCachePath;
         private static readonly int[] IconSizes = [512, 256, 192, 128, 96, 72, 64, 48, 32, 24, 16];
 
-        public static async Task<string?> GetIconPathAsync(string exePath, string itemId)
+        public static async Task<string?> GetIconPathAsync(string exePath, string itemId, bool forceExtract = false)
         {
             if (string.IsNullOrEmpty(exePath)) return null;
-            // removed strict File.Exists guard: callers (配置/新建/导入) typically supply a valid path,
-            // and we prefer to attempt extraction later instead of rejecting up front.
-            // UWP shell paths are still allowed unconditionally.
-
+            // If the caller wants to override the cached icon (for example, user
+            // explicitly changed it), delete any existing file first so we don't
+            // return stale data.  forceExtract is intentionally false by default to
+            // preserve previous behaviour in bulk operations.
             string iconPath = Path.Combine(CachePath, $"{itemId}.png");
-            if (File.Exists(iconPath) && new FileInfo(iconPath).Length > 0) return iconPath;
+            if (forceExtract && File.Exists(iconPath))
+            {
+                try { File.Delete(iconPath); } catch { }
+            }
+            if (!forceExtract && File.Exists(iconPath) && new FileInfo(iconPath).Length > 0) return iconPath;
             return await ExtractAndSaveIconAsync(exePath, itemId);
         }
 
