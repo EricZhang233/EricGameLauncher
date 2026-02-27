@@ -315,6 +315,7 @@ namespace EricGameLauncher
         private IntPtr _hWnd;
         private IntPtr _oldWndProc;
         private WndProc? _wndProcDelegate;
+        private DateTime _lastLaunchTime = DateTime.MinValue;
 
         private delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
@@ -581,10 +582,10 @@ namespace EricGameLauncher
                         var processStartInfo = new System.Diagnostics.ProcessStartInfo
                         {
                             FileName = cfgUpdaterPath,
-                            Arguments = $"\"{configPath}\"",
                             CreateNoWindow = true,
                             UseShellExecute = false
                         };
+                        processStartInfo.ArgumentList.Add(configPath);
                         var process = System.Diagnostics.Process.Start(processStartInfo);
                         if (process != null)
                         {
@@ -649,6 +650,10 @@ namespace EricGameLauncher
 
         private void LaunchItem(AppItem item)
         {
+            // L8: Implementation of Section 5.2 - 500ms Launch Debounce for entry points
+            if ((DateTime.Now - _lastLaunchTime).TotalMilliseconds < 500) return;
+            _lastLaunchTime = DateTime.Now;
+
             try
             {
 
@@ -708,7 +713,7 @@ namespace EricGameLauncher
                     else
                     {
                         psi.FileName = "explorer.exe";
-                        psi.Arguments = path;
+                        psi.Arguments = $"\"{path.Replace("\"", "\\\"")}\"";
                     }
                 }
                 else if (path.Contains("://"))
@@ -725,7 +730,9 @@ namespace EricGameLauncher
                     psi.FileName = filePath;
                     if (!string.IsNullOrEmpty(arguments))
                     {
-                        psi.Arguments = arguments;
+                        var argList = arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                                               .Select(a => $"\"{a.Trim('"').Replace("\"", "\\\"")}\"");
+                        psi.Arguments = string.Join(" ", argList);
                     }
                     if (admin)
                         psi.Verb = "runas";
@@ -947,6 +954,9 @@ namespace EricGameLauncher
                 {
                     if (!string.IsNullOrEmpty(ci.Command))
                     {
+                        if ((DateTime.Now - _lastLaunchTime).TotalMilliseconds < 500) return;
+                        _lastLaunchTime = DateTime.Now;
+
                         RunProcess(ci.Command, ci.IsAdmin);
                     }
                 }
@@ -971,6 +981,9 @@ namespace EricGameLauncher
 
                 if (!string.IsNullOrEmpty(managerPath))
                 {
+                    if ((DateTime.Now - _lastLaunchTime).TotalMilliseconds < 500) return;
+                    _lastLaunchTime = DateTime.Now;
+
                     RunProcess(managerPath, item.IsMgrAdmin);
                 }
             }
@@ -1059,9 +1072,17 @@ namespace EricGameLauncher
                     }
                     else
                     {
-                        // Some basic matching by ExePath or Title (we could refine this)
+                        // Normalize paths to canonical form to catch casing/relative-path duplicates
+                        static string NormalizePath(string? p)
+                        {
+                            if (string.IsNullOrEmpty(p)) return string.Empty;
+                            try { return Path.GetFullPath(p).ToUpperInvariant(); }
+                            catch { return p.ToUpperInvariant(); }
+                        }
+
+                        string gameNorm = NormalizePath(game.ExePath);
                         exists = _allItems.Any(a =>
-                            (!string.IsNullOrEmpty(a.ExePath) && a.ExePath.Equals(game.ExePath, StringComparison.OrdinalIgnoreCase)) ||
+                            (!string.IsNullOrEmpty(a.ExePath) && NormalizePath(a.ExePath) == gameNorm) ||
                             string.Equals(a.Title, game.Title, StringComparison.OrdinalIgnoreCase)
                         );
                     }
@@ -2139,7 +2160,7 @@ namespace EricGameLauncher
         {
             Process.Start(new ProcessStartInfo
             {
-                FileName = "https://github.com/EricZhang233",
+                FileName = "https://github.com/EricZhang233/EricGameLauncher",
                 UseShellExecute = true
             });
         }
@@ -2331,7 +2352,8 @@ namespace EricGameLauncher
 
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
-                FileName = folder,
+                FileName = "explorer.exe",
+                Arguments = $"\"{folder.Replace("\"", "\\\"")}\"",
                 UseShellExecute = true
             });
         }
