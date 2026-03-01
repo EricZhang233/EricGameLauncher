@@ -2675,6 +2675,7 @@ namespace EricGameLauncher
                 {
                     FileName = mainUpdaterPath,
                     Arguments = args,
+                    WorkingDirectory = tempDir,
                     UseShellExecute = true
                 };
 

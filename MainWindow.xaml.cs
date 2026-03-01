@@ -582,6 +582,7 @@ namespace EricGameLauncher
                         var processStartInfo = new System.Diagnostics.ProcessStartInfo
                         {
                             FileName = cfgUpdaterPath,
+                            WorkingDirectory = tempDir,
                             CreateNoWindow = true,
                             UseShellExecute = false
                         };
@@ -602,6 +603,7 @@ namespace EricGameLauncher
                             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                             {
                                 FileName = currentExe,
+                                WorkingDirectory = System.IO.Path.GetDirectoryName(currentExe),
                                 UseShellExecute = true
                             });
                         }
@@ -707,7 +709,7 @@ namespace EricGameLauncher
                         string encoded = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(psScript));
                         psi.FileName = "powershell.exe";
                         psi.Arguments = $"-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand {encoded}";
-                        psi.UseShellExecute = true;
+                        psi.UseShellExecute = false;
                         psi.CreateNoWindow = true;
                     }
                     else
@@ -728,6 +730,17 @@ namespace EricGameLauncher
 
 
                     psi.FileName = filePath;
+                    
+                    try
+                    {
+                        string? dir = System.IO.Path.GetDirectoryName(filePath);
+                        if (!string.IsNullOrEmpty(dir))
+                        {
+                            psi.WorkingDirectory = dir;
+                        }
+                    }
+                    catch { }
+
                     if (!string.IsNullOrEmpty(arguments))
                     {
                         var argList = arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries)
