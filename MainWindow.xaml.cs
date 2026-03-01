@@ -283,23 +283,78 @@ namespace EricGameLauncher
 
         private async void MenuCheckUpdate_Click(object sender, RoutedEventArgs e)
         {
-            var release = await UpdateService.CheckForUpdateAsync();
+            var release = await UpdateService.GetLatestReleaseAsync();
             if (release != null)
             {
-                _pendingUpdate = release;
-
-                DispatcherQueue.TryEnqueue(() =>
+                bool hasUpdate = false;
+                var match = System.Text.RegularExpressions.Regex.Match(release.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
+                if (match.Success)
                 {
-                    HasUpdate = true;
-                    UpdateIndicatorColor = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 0, 0));
-                });
+                    Version latestVersion = new Version(match.Value);
+                    Version currentVersion = new Version(AppVersion.Version);
+                    hasUpdate = latestVersion > currentVersion;
+                }
 
-                // 直接进入更新确认流程
-                await StartUpdateFlowAsync(release);
+                if (hasUpdate)
+                {
+                    _pendingUpdate = release;
+
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        HasUpdate = true;
+                        UpdateIndicatorColor = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 0, 0));
+                    });
+
+                    // 直接进入更新确认流程
+                    await StartUpdateFlowAsync(release);
+                }
+                else
+                {
+                    // 已经是最新版本，弹出带有 Release Notes 的提示，包含修复按钮
+                    string downloadUrl = release.assets.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.browser_download_url ?? "";
+                    
+                    var markdownText = new CommunityToolkit.WinUI.UI.Controls.MarkdownTextBlock
+                    {
+                        Text = $"# {I18n.T("Update_NoUpdateContent")}\n\n## {release.name}\n\n{release.body}",
+                        HorizontalAlignment = HorizontalAlignment.Stretch,
+                        Margin = new Thickness(0, 0, 10, 0),
+                        Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent)
+                    };
+
+                    markdownText.Header1FontSize = 22;
+                    markdownText.Header2FontSize = 18;
+                    markdownText.Header1FontWeight = Microsoft.UI.Text.FontWeights.Bold;
+                    markdownText.Header2FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+                    markdownText.ParagraphMargin = new Thickness(0, 5, 0, 10);
+
+                    var scrollViewer = new ScrollViewer
+                    {
+                        Height = 400,
+                        Content = markdownText,
+                        VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                        Margin = new Thickness(10)
+                    };
+
+                    ContentDialog noUpdateDialog = new ContentDialog
+                    {
+                        Title = I18n.T("Update_NoUpdateTitle"),
+                        Content = scrollViewer,
+                        CloseButtonText = "OK",
+                        PrimaryButtonText = string.IsNullOrEmpty(downloadUrl) ? "" : I18n.T("Update_Repair"),
+                        XamlRoot = this.Content.XamlRoot
+                    };
+                    
+                    var result = await noUpdateDialog.ShowAsync();
+                    if (result == ContentDialogResult.Primary && !string.IsNullOrEmpty(downloadUrl))
+                    {
+                        UpdateService.StartUpdater(downloadUrl);
+                    }
+                }
             }
             else
             {
-                // 已经是最新版本，弹出提示
+                // 获取失败等回退逻辑
                 ContentDialog noUpdateDialog = new ContentDialog
                 {
                     Title = I18n.T("Update_NoUpdateTitle"),
@@ -822,9 +877,12 @@ namespace EricGameLauncher
             {
                 if (sender is MenuFlyout menu && menu.Target is FrameworkElement target)
                 {
-                    return target.Tag as AppItem;
+                    return (target.Tag as AppItem) ?? (target.DataContext as AppItem);
                 }
-                if (sender is FrameworkElement fe) return fe.Tag as AppItem;
+                if (sender is FrameworkElement fe) 
+                {
+                    return (fe.Tag as AppItem) ?? (fe.DataContext as AppItem);
+                }
                 return null;
             }
             catch (Exception)
@@ -916,6 +974,7 @@ namespace EricGameLauncher
                     var mgrItem = new MenuFlyoutItem
                     {
                         Tag = "DynamicManager",
+                        DataContext = item,
                         Icon = new SymbolIcon(Symbol.Repair)
                     };
 
@@ -1488,7 +1547,7 @@ namespace EricGameLauncher
                     var flyout = new MenuFlyout();
                     var startMenuSub = new MenuFlyoutSubItem { Text = I18n.T("Menu_StartMenu"), Icon = new FontIcon { Glyph = "\uE700" } };
                     var desktopSub = new MenuFlyoutSubItem { Text = I18n.T("Menu_Desktop"), Icon = new FontIcon { Glyph = "\uE8FC" } };
-                    var browseItem = new MenuFlyoutItem { Text = I18n.T("Menu_Browse"), Icon = new FontIcon { Glyph = "\uE8E5" } };
+                    var browseItem = new MenuFlyoutItem { Text = I18n.T("Property_BrowseFile"), Icon = new FontIcon { Glyph = "\uE8E5" } };
 
                     browseItem.Click += (s, e) => BtnBrowseCustom_Click(index);
 
