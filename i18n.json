@@ -82,7 +82,8 @@
 		"Scanner_Loading": "正在扫描本地游戏...",
 		"Scanner_NewGames": "新增 ({0})",
 		"Scanner_ExistingGames": "已存在 ({0})",
-		"Scanner_ImportAll": "导入全部新增项目"
+		"Scanner_ImportAll": "导入全部新增项目",
+		"Update_Repair": "修复"
 	},
 	"EN": {
 		"_LangName": "English",
@@ -167,7 +168,8 @@
 		"Scanner_Loading": "Scanning local games...",
 		"Scanner_NewGames": "New ({0})",
 		"Scanner_ExistingGames": "Existing ({0})",
-		"Scanner_ImportAll": "Import All New Items"
+		"Scanner_ImportAll": "Import All New Items",
+		"Update_Repair": "Repair"
 	},
 	"Zh-TW": {
 		"_LangName": "繁體中文",
@@ -246,7 +248,8 @@
 		"Scanner_Loading": "正在掃描本地遊戲...",
 		"Scanner_NewGames": "新增 ({0})",
 		"Scanner_ExistingGames": "已存在 ({0})",
-		"Scanner_ImportAll": "匯入全部新增項目"
+		"Scanner_ImportAll": "匯入全部新增項目",
+		"Update_Repair": "修復"
 	},
 	"JA": {
 		"_LangName": "日本語",
@@ -321,7 +324,8 @@
 		"Scanner_Loading": "ローカルゲームをスキャン中...",
 		"Scanner_NewGames": "新規 ({0})",
 		"Scanner_ExistingGames": "既存 ({0})",
-		"Scanner_ImportAll": "すべてインポート"
+		"Scanner_ImportAll": "すべてインポート",
+		"Update_Repair": "修復"
 	},
 	"KO": {
 		"_LangName": "한국어",
@@ -391,7 +395,8 @@
 		"Scanner_Loading": "로컬 게임 스캔 중...",
 		"Scanner_NewGames": "새로 추가됨 ({0})",
 		"Scanner_ExistingGames": "이미 존재함 ({0})",
-		"Scanner_ImportAll": "모두 가져오기"
+		"Scanner_ImportAll": "모두 가져오기",
+		"Update_Repair": "복구"
 	},
 	"FR": {
 		"_LangName": "Français",
@@ -460,7 +465,8 @@
 		"Scanner_Loading": "Analyse des jeux locaux...",
 		"Scanner_NewGames": "Nouveaux ({0})",
 		"Scanner_ExistingGames": "Existants ({0})",
-		"Scanner_ImportAll": "Tout importer"
+		"Scanner_ImportAll": "Tout importer",
+		"Update_Repair": "Réparer"
 	},
 	"DE": {
 		"_LangName": "Deutsch",
@@ -529,7 +535,8 @@
 		"Scanner_Loading": "Lokale Spiele werden gescannt...",
 		"Scanner_NewGames": "Neu ({0})",
 		"Scanner_ExistingGames": "Vorhanden ({0})",
-		"Scanner_ImportAll": "Alle importieren"
+		"Scanner_ImportAll": "Alle importieren",
+		"Update_Repair": "Reparieren"
 	},
 	"ES": {
 		"_LangName": "Español",
@@ -598,6 +605,7 @@
 		"Scanner_Loading": "Escaneando juegos locales...",
 		"Scanner_NewGames": "Nuevos ({0})",
 		"Scanner_ExistingGames": "Existentes ({0})",
-		"Scanner_ImportAll": "Importar todo"
+		"Scanner_ImportAll": "Importar todo",
+		"Update_Repair": "Reparar"
 	}
 }

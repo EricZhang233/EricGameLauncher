@@ -2621,14 +2621,23 @@ namespace EricGameLauncher
             public long size { get; set; }
         }
 
-        public static async Task<ReleaseInfo?> CheckForUpdateAsync()
+        public static async Task<ReleaseInfo?> GetLatestReleaseAsync()
         {
             try
             {
                 if (!client.DefaultRequestHeaders.Contains("User-Agent"))
                     client.DefaultRequestHeaders.Add("User-Agent", "EricGameLauncher-Updater");
 
-                var release = await client.GetFromJsonAsync<ReleaseInfo>(GitHubApiUrl);
+                return await client.GetFromJsonAsync<ReleaseInfo>(GitHubApiUrl);
+            }
+            catch { return null; }
+        }
+
+        public static async Task<ReleaseInfo?> CheckForUpdateAsync()
+        {
+            try
+            {
+                var release = await GetLatestReleaseAsync();
                 if (release == null || string.IsNullOrEmpty(release.tag_name)) return null;
 
                 var match = System.Text.RegularExpressions.Regex.Match(release.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
