@@ -1031,16 +1031,16 @@
         
         <ContentDialog x:Name="ScannerDialog" 
                        Grid.RowSpan="2"
-                       PrimaryButtonText="导入选中的项目" 
-                       SecondaryButtonText="导入全部新增项目" 
-                       CloseButtonText="取消"
+                       PrimaryButtonText="" 
+                       SecondaryButtonText="" 
+                       CloseButtonText=""
                        PrimaryButtonClick="ScannerDialog_PrimaryButtonClick"
                        SecondaryButtonClick="ScannerDialog_SecondaryButtonClick">
             <Grid MinWidth="450" MinHeight="350">
                 <Grid x:Name="ScannerLoadingPanel" VerticalAlignment="Center" HorizontalAlignment="Center">
                     <StackPanel Spacing="16">
                         <ProgressRing Width="48" Height="48" IsActive="True"/>
-                        <TextBlock x:Name="ScannerLoadingText" Text="正在扫描本地游戏..." HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <TextBlock x:Name="ScannerLoadingText" Text="" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                     </StackPanel>
                 </Grid>
                 
@@ -1053,7 +1053,7 @@
                                    TextWrapping="Wrap"/>
                         
                         <StackPanel x:Name="ScannerNewGamesSection">
-                            <TextBlock x:Name="ScannerNewGamesHeader" Text="新增" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <TextBlock x:Name="ScannerNewGamesHeader" Text="" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
                             <ListView x:Name="ScannerNewGamesList" SelectionMode="Multiple" ScrollViewer.VerticalScrollMode="Disabled" ItemContainerStyle="{StaticResource DefaultListViewItemStyle}">
                                 <ListView.ItemTemplate>
                                     <DataTemplate x:DataType="models:ScannedGame">
@@ -1073,7 +1073,7 @@
                         </StackPanel>
                         
                         <StackPanel x:Name="ScannerExistingGamesSection">
-                            <TextBlock x:Name="ScannerExistingGamesHeader" Text="已存在" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <TextBlock x:Name="ScannerExistingGamesHeader" Text="" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
                             <ListView x:Name="ScannerExistingGamesList" SelectionMode="None" ScrollViewer.VerticalScrollMode="Disabled" Opacity="0.6">
                                 <ListView.ItemTemplate>
                                     <DataTemplate x:DataType="models:ScannedGame">
