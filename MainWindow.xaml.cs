@@ -28,7 +28,6 @@ namespace EricGameLauncher
         private ObservableCollection<AppItem>? _tempOrderCollection;
 
 
-        private ToggleSwitch? _toggleCloseAfterLaunch;
         private Slider? _sizeSlider;
         private ListView? _orderItemsControl;
         private StackPanel[] _customSections;
@@ -38,9 +37,6 @@ namespace EricGameLauncher
         private DropDownButton[] _customBrowses;
         private TextBlock[] _customAdminLabels;
         private TextBlock[] _customSlotLabels;
-
-        // P1: Preloaded shortcut sources. Background-populated during startup so that
-        // opening the property panel does not block the UI thread with Shell COM calls.
         private Task<List<ShortcutScanner.FileItem>>? _preloadedStartMenuTask;
         private Task<List<ShortcutScanner.FileItem>>? _preloadedDesktopTask;
 
@@ -112,7 +108,6 @@ namespace EricGameLauncher
         {
             this.InitializeComponent();
 
-            // Initialize custom menu section arrays
             _customSections = new StackPanel[] { PropCustomSection1, PropCustomSection2, PropCustomSection3, PropCustomSection4, PropCustomSection5, PropCustomSection6, PropCustomSection7, PropCustomSection8, PropCustomSection9, PropCustomSection10 };
             _customTitles = new TextBox[] { PropCustomTitle1, PropCustomTitle2, PropCustomTitle3, PropCustomTitle4, PropCustomTitle5, PropCustomTitle6, PropCustomTitle7, PropCustomTitle8, PropCustomTitle9, PropCustomTitle10 };
             _customCommands = new TextBox[] { PropCustomCommand1, PropCustomCommand2, PropCustomCommand3, PropCustomCommand4, PropCustomCommand5, PropCustomCommand6, PropCustomCommand7, PropCustomCommand8, PropCustomCommand9, PropCustomCommand10 };
@@ -248,13 +243,11 @@ namespace EricGameLauncher
             LoadSettings();
             ApplyLocalization();
 
-            // Intercept Win32 messages to detect user-initiated resize/move
             _hWnd = WindowNative.GetWindowHandle(this);
             _oldWndProc = SetWindowLongPtr(_hWnd, GWLP_WNDPROC, Marshal.GetFunctionPointerForDelegate(_wndProcDelegate = new WndProc(WindowProcess)));
 
             _ = LoadData();
 
-            // 氓锟铰ヅ犅ヅ撀郝棵︹€郝疵︹€撀懊╋拷鈩⒚┞凰溍βｂ偓忙鸥?
             _ = CheckForUpdatesQuietlyAsync();
         }
 
@@ -262,19 +255,17 @@ namespace EricGameLauncher
         {
             try
             {
-                // 莽颅鈥懊ヂ锯€?3 莽搂鈥櫭寂捗÷ぢ匡拷莽鲁禄莽禄鸥猫碌鈥灻β猴拷盲录藴氓鈥λ喢ニ嗏€犆┾€︼拷莽禄鈩⒚ぢ嘎幻р€⑴捗╋拷垄氓鈥郝久β犫€∶ヅ犅犆铰?
                 await Task.Delay(3000);
 
-                var release = await UpdateService.CheckForUpdateAsync();
+                var release = await UpdateService.CheckForUpdateAsync(ConfigService.UpdateChannel);
                 if (release != null)
                 {
                     _pendingUpdate = release;
 
-                    // 盲陆驴莽鈥澛ぢ脚矫ぢ妓溍モ€λ喢郝︹€郝疵︹€撀?UI茂录艗茅锟铰棵モ€︼拷氓鹿虏忙鈥奥懊р€澛λ喡访ぢ郝っぢ衡€櫭モ€櫯捗β嘎裁ε糕€?
                     DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
                     {
                         HasUpdate = true;
-                        UpdateIndicatorColor = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 0, 0)); // 莽潞垄猫鈥奥裁︼拷锟矫┾€犫€?
+                        UpdateIndicatorColor = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 0, 0));
                     });
                 }
             }
@@ -283,7 +274,7 @@ namespace EricGameLauncher
 
         private async void MenuCheckUpdate_Click(object sender, RoutedEventArgs e)
         {
-            var release = await UpdateService.GetLatestReleaseAsync();
+            var release = await UpdateService.GetReleaseAsync(ConfigService.UpdateChannel);
             if (release != null)
             {
                 bool hasUpdate = false;
@@ -305,12 +296,10 @@ namespace EricGameLauncher
                         UpdateIndicatorColor = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 0, 0));
                     });
 
-                    // 莽鈥郝疵ε铰ッ库€好モ€βッ︹€郝疵︹€撀懊÷っβ碉拷莽篓鈥?
                     await StartUpdateFlowAsync(release);
                 }
                 else
                 {
-                    // 氓路虏莽禄锟矫λ溌ε撯偓忙鈥撀懊р€八喢ε撀寂捗ヂ悸姑モ€÷好ヂ嘎γε撯€?Release Notes 莽拧鈥灻︼拷锟矫ぢ好寂捗ヅ掆€γワ拷芦盲驴庐氓陇锟矫ε掆€懊┾€櫬?
                     string downloadUrl = release.assets.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.browser_download_url ?? "";
                     
                     Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", System.IO.Path.Combine(System.IO.Path.GetTempPath(), "EricGameLauncher_WebView2"));
@@ -330,7 +319,6 @@ namespace EricGameLauncher
                             actualTheme = Application.Current.RequestedTheme == ApplicationTheme.Dark ? ElementTheme.Dark : ElementTheme.Light;
                         }
 
-                        // Load merged github markdown css and set color-scheme manually over media query
                         string cssContent = "";
                         using (var stream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream($"EricGameLauncher.webview.css"))
                         using (var reader = new System.IO.StreamReader(stream!))
@@ -370,23 +358,21 @@ namespace EricGameLauncher
                     }
                     catch (Exception)
                     {
-                        // Fallback completely native text block if WebView2 isn't installed
                         webView = null;
                     }
 
-                    // 动态获取当前窗口逻辑尺寸，计算弹窗目标尺寸（不超过80%窗口面积）
                     double windowW = this.Bounds.Width;
                     double windowH = this.Bounds.Height;
                     double dialogW = Math.Max(560, windowW * 0.80);
                     double dialogH = Math.Max(420, windowH * 0.78);
-                    // ContentDialog内容区高度 = 弹窗总高度 - 标题栏+按钮区约150px
                     double contentAreaH = Math.Max(280, dialogH - 150);
+                    double innerH = contentAreaH - 48;
 
                     object? dialogContent = null;
                     if (webView != null)
                     {
                         webView.MinWidth = dialogW - 48;
-                        webView.MinHeight = contentAreaH;
+                        webView.MinHeight = innerH;
                         dialogContent = webView;
                     }
                     else
@@ -396,20 +382,34 @@ namespace EricGameLauncher
                             Text = $"## {release.name}\n\n{release.body}",
                             TextWrapping = TextWrapping.Wrap
                         };
-                        dialogContent = new ScrollViewer { Content = textFallback, Height = contentAreaH };
+                        dialogContent = new ScrollViewer { Content = textFallback, Height = innerH };
                     }
+
+                    string channelNoteName = ConfigService.UpdateChannel == "latest"
+                        ? I18n.T("Settings_UpdateChannel_Latest")
+                        : I18n.T("Settings_UpdateChannel_Stable");
+                    var channelNoteBlock = new TextBlock
+                    {
+                        Text = string.Format(I18n.T("Update_ChannelNote"), channelNoteName),
+                        TextWrapping = TextWrapping.Wrap,
+                        FontSize = 12,
+                        Opacity = 0.6,
+                        Margin = new Thickness(0, 10, 0, 0)
+                    };
+                    var contentWrapper = new StackPanel();
+                    contentWrapper.Children.Add((UIElement)dialogContent!);
+                    contentWrapper.Children.Add(channelNoteBlock);
 
                     ContentDialog noUpdateDialog = new ContentDialog
                     {
                         Title = $"{I18n.T("Update_NoUpdateContent")}  ·  {release.name}",
-                        Content = dialogContent,
+                        Content = contentWrapper,
                         CloseButtonText = I18n.T("Update_OK"),
                         PrimaryButtonText = string.IsNullOrEmpty(downloadUrl) ? "" : I18n.T("Update_Repair"),
                         DefaultButton = ContentDialogButton.Close,
                         XamlRoot = this.Content.XamlRoot
                     };
 
-                    // 覆盖系统默认的 ContentDialogMaxWidth/Height（约500px），放大弹窗承载能力
                     noUpdateDialog.Resources["ContentDialogMaxWidth"] = dialogW;
                     noUpdateDialog.Resources["ContentDialogMaxHeight"] = dialogH;
 
@@ -422,7 +422,6 @@ namespace EricGameLauncher
             }
             else
             {
-                // 猫沤路氓锟解€撁ヂぢ泵绰ッ€懊モ€号久┾偓鈧┾偓禄猫戮鈥?
                 ContentDialog noUpdateDialog = new ContentDialog
                 {
                     Title = I18n.T("Update_NoUpdateTitle"),
@@ -461,11 +460,9 @@ namespace EricGameLauncher
             }
             else if (msg == WM_EXITSIZEMOVE)
             {
-                // User finished resizing or moving the window
                 _isUserInteracting = false;
                 SaveWindowState(null);
 
-                // Trigger pending refresh if any occurred during movement
                 if (_isRefreshPending)
                 {
                     RefreshView();
@@ -477,17 +474,10 @@ namespace EricGameLauncher
 
         private void AppWindow_Changed(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowChangedEventArgs args)
         {
-            // We no longer save window state here to avoid system-triggered drift.
-            // Saving is now handled via WM_EXITSIZEMOVE in WindowProcess.
-
             if (args.DidSizeChange && this.AppWindow != null)
             {
-                // Update hit test region if size changed.
-                // Cache InputNonClientPointerSource to avoid frequent GetForWindowId overhead.
                 _inputSource ??= Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(this.AppWindow.Id);
 
-                // Use Pixels (AppWindow.Size) for consistency with WinUI 3 SetRegionRects.
-                // Logical height 48 is scaled to pixels via RasterizationScale.
                 double scale = this.Content.XamlRoot?.RasterizationScale ?? 1.0;
                 int scaledHeight = (int)(48 * scale);
 
@@ -503,7 +493,6 @@ namespace EricGameLauncher
             {
                 var (x, y, width, height) = ConfigService.GetWindowBounds();
 
-                // Use Resize instead of ResizeClient to avoid drifting when title bar is extended
                 if (width > 0 && height > 0)
                 {
                     this.AppWindow.Resize(new Windows.Graphics.SizeInt32(width, height));
@@ -524,7 +513,6 @@ namespace EricGameLauncher
                     int workRight = work.X + work.Width;
                     int workBottom = work.Y + work.Height;
 
-                    // Clamp saved position into the current work area so window does not drift off-screen
                     int targetX = Math.Clamp(x, workLeft, Math.Max(workRight - 100, workLeft));
                     int targetY = Math.Clamp(y, workTop, Math.Max(workBottom - 100, workTop));
 
@@ -539,8 +527,6 @@ namespace EricGameLauncher
 
         private void MainWindow_Closed(object sender, WindowEventArgs args)
         {
-            // M3: restore the original WndProc to prevent use-after-free when the
-            // WinUI 3 window is destroyed while our hook is still installed.
             if (_oldWndProc != IntPtr.Zero)
             {
                 SetWindowLongPtr(_hWnd, GWLP_WNDPROC, _oldWndProc);
@@ -573,19 +559,16 @@ namespace EricGameLauncher
                 if (presenter != null && (presenter.State == Microsoft.UI.Windowing.OverlappedPresenterState.Minimized ||
                                          presenter.State == Microsoft.UI.Windowing.OverlappedPresenterState.Maximized))
                 {
-                    // Do not save window state when minimized or maximized
                     return;
                 }
 
                 var current = ConfigService.GetWindowBounds();
                 int x = current.X, y = current.Y, width = current.Width, height = current.Height;
 
-                // Use Size instead of ClientSize for consistent mapping with Resize
                 var size = this.AppWindow.Size;
                 var position = this.AppWindow.Position;
 
                 bool changed = false;
-                // If args is null, it means it's triggered by WM_EXITSIZEMOVE, so we always check for changes
                 if (args == null || args.DidSizeChange)
                 {
                     if (width != size.Width || height != size.Height)
@@ -620,9 +603,9 @@ namespace EricGameLauncher
             try
             {
 
-                if (_toggleCloseAfterLaunch != null)
+                if (ToggleCloseAfterLaunch != null)
                 {
-                    _toggleCloseAfterLaunch.IsOn = ConfigService.CloseAfterLaunch;
+                    ToggleCloseAfterLaunch.IsOn = ConfigService.CloseAfterLaunch;
                 }
 
 
@@ -676,7 +659,6 @@ namespace EricGameLauncher
             {
                 if (ConfigService.RequiresMigration)
                 {
-                    // ... (migration logic unchanged)
                     MigrationOverlay.Visibility = Visibility.Visible;
                     await Task.Delay(200);
 
@@ -738,10 +720,8 @@ namespace EricGameLauncher
                     return;
                 }
 
-                // Simplified LoadData: Just trigger the global refresh in Core
                 await ConfigService.RefreshGlobalAsync();
 
-                // Preload tasks remain
                 _preloadedStartMenuTask = Task.Run(() => ShortcutScanner.GetStartMenuItems());
                 _preloadedDesktopTask = Task.Run(() => ShortcutScanner.GetDesktopItems());
             }
@@ -776,7 +756,6 @@ namespace EricGameLauncher
 
         private void LaunchItem(AppItem item)
         {
-            // L8: Implementation of Section 5.2 - 500ms Launch Debounce for entry points
             if ((DateTime.Now - _lastLaunchTime).TotalMilliseconds < 500) return;
             _lastLaunchTime = DateTime.Now;
 
@@ -826,9 +805,6 @@ namespace EricGameLauncher
                 {
                     if (admin)
                     {
-                        // S4: Use -EncodedCommand (Base64) to safely pass the path
-                        // without risk of PowerShell injection via special characters
-                        // such as ", $, `, & that could remain after simple escaping.
                         string psScript = $"Start-Process '{path.Replace("'", "''")}' -Verb RunAs";
                         string encoded = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(psScript));
                         psi.FileName = "powershell.exe";
@@ -980,13 +956,12 @@ namespace EricGameLauncher
                 var item = GetTag(menu);
                 if (item == null) return;
 
-                // 1. Localization & Basic Filtering
                 bool isPeFile = false;
                 try
                 {
                     string path = (item.ExePath ?? "").Trim('\"');
                     if (path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) isPeFile = true;
-                    else if (item.ExePath?.Contains(" ") == true && !item.ExePath.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)) isPeFile = true; // Likely exe with args
+                    else if (item.ExePath?.Contains(" ") == true && !item.ExePath.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)) isPeFile = true;
                 }
                 catch { }
 
@@ -1006,13 +981,11 @@ namespace EricGameLauncher
                                 _ => menuItem.Text
                             };
 
-                            // L7: Hide "Open File Location" for non-PE files
                             if (si.Symbol == Symbol.Folder)
                             {
                                 menuItem.Visibility = isPeFile ? Visibility.Visible : Visibility.Collapsed;
                             }
 
-                            // L4: We'll handle Manager item specially below
                             if (si.Symbol == Symbol.Repair)
                             {
                                 menuItem.Visibility = Visibility.Collapsed;
@@ -1021,7 +994,6 @@ namespace EricGameLauncher
                     }
                 }
 
-                // 2. Clear dynamic items
                 var toRemove = menu.Items.Where(i =>
                     i.Tag is CustomMenuItem ||
                     (i is MenuFlyoutSeparator sep && sep.Name == "DynamicSeparator") ||
@@ -1029,10 +1001,8 @@ namespace EricGameLauncher
                 ).ToList();
                 foreach (var r in toRemove) menu.Items.Remove(r);
 
-                // 3. Inject Dynamic Managers (L2-9)
-                int insertIndex = 1; // After "Run"
+                int insertIndex = 1;
 
-                // Primary Manager
                 var platform = GamePlatformHelper.DetectPlatform(item.ExePath ?? "");
                 var mgrPlatform = !string.IsNullOrEmpty(item.MgrPath) ? GamePlatformHelper.DetectPlatform(item.MgrPath) : null;
                 bool isXbox = item.PlatformName == "Xbox";
@@ -1047,7 +1017,6 @@ namespace EricGameLauncher
                         Icon = new SymbolIcon(Symbol.Repair)
                     };
 
-                    // Priority: 1. Manual MgrPath matches a platform, 2. Auto-detected ExePath platform, 3. Xbox, 4. Generic Custom
                     if (mgrPlatform != null)
                     {
                         mgrItem.Text = string.Format(I18n.T("Menu_PlatformManager"), mgrPlatform.PlatformName);
@@ -1066,7 +1035,6 @@ namespace EricGameLauncher
                     menu.Items.Insert(insertIndex++, mgrItem);
                 }
 
-                // Custom Items
                 var customItems = item.GetCustomMenuItems();
                 if (customItems.Count > 0)
                 {
@@ -1114,7 +1082,6 @@ namespace EricGameLauncher
 
                 string? managerPath = item.RuntimeManagerPath;
 
-                // Robustness: Double check Xbox binding for UWP games
                 if (string.IsNullOrEmpty(managerPath) && item.PlatformName == "Xbox")
                 {
                     managerPath = "xbox://";
@@ -1184,10 +1151,8 @@ namespace EricGameLauncher
                 ScannerNewGamesList.ItemsSource = null;
                 ScannerExistingGamesList.ItemsSource = null;
 
-                // Show dialog early
                 var dialogTask = ScannerDialog.ShowAsync();
 
-                // Run scans in background
                 var scannedGames = await Task.Run(async () =>
                 {
                     var games = new List<ScannedGame>();
@@ -1197,13 +1162,11 @@ namespace EricGameLauncher
                     return games;
                 });
 
-                // Differentiate new and existing
                 var existingGames = new List<ScannedGame>();
                 var newGames = new List<ScannedGame>();
 
                 foreach (var game in scannedGames)
                 {
-                    // For UWP, check AUMID segment. For others, full or partial path check.
                     bool exists = false;
 
                     if (game.PlatformBadge == "Xbox")
@@ -1213,7 +1176,6 @@ namespace EricGameLauncher
                     }
                     else
                     {
-                        // Normalize paths to canonical form to catch casing/relative-path duplicates
                         static string NormalizePath(string? p)
                         {
                             if (string.IsNullOrEmpty(p)) return string.Empty;
@@ -1232,7 +1194,6 @@ namespace EricGameLauncher
                     else newGames.Add(game);
                 }
 
-                // Update UI and visibility
                 ScannerNewGamesList.ItemsSource = new ObservableCollection<ScannedGame>(newGames);
                 ScannerExistingGamesList.ItemsSource = new ObservableCollection<ScannedGame>(existingGames);
 
@@ -1276,7 +1237,6 @@ namespace EricGameLauncher
             {
                 int sortOrder = _allItems.Count > 0 ? _allItems.Max(x => x.SortOrder) + 1 : 0;
 
-                // Add all to collection
                 var newAppItems = new List<AppItem>();
                 foreach (var game in games)
                 {
@@ -1292,8 +1252,6 @@ namespace EricGameLauncher
                     newAppItems.Add(newItem);
                     _allItems.Add(newItem);
 
-                    // kick off icon extraction immediately for UWP entries so users see
-                    // the icons without having to wait for a global refresh cycle.
                     if (!string.IsNullOrEmpty(newItem.ExePath) &&
                         newItem.ExePath.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase))
                     {
@@ -1304,7 +1262,6 @@ namespace EricGameLauncher
                                 string? icon = await IconHelper.GetIconPathAsync(newItem.ExePath, newItem.Id);
                                 if (!string.IsNullOrEmpty(icon) && File.Exists(icon))
                                 {
-                                    // update item on UI thread
                                     DispatcherQueue.TryEnqueue(() =>
                                     {
                                         newItem.IconPath = icon;
@@ -1319,7 +1276,6 @@ namespace EricGameLauncher
 
                 ConfigService.SaveItems(_allItems.ToList());
 
-                // Trigger global refresh in Core which handles icon extraction and final notification
                 _ = ConfigService.RefreshGlobalAsync();
             }
             catch (Exception) { }
@@ -1337,11 +1293,6 @@ namespace EricGameLauncher
                 PropIsMgrAdmin.IsChecked = _currentEditingItem.IsMgrAdmin;
                 PropDisplayNameLabel.Text = I18n.T("Property_DisplayName");
 
-                // Initial identification
-                // M2: capture ExePath to a local variable before entering Task.Run to
-                // avoid a race condition where _currentEditingItem could be set to null
-                // on the UI thread (e.g. user closes the panel) while the background
-                // thread is still running.
                 string? exePathSnapshot = _currentEditingItem.ExePath;
                 _ = Task.Run(async () =>
                 {
@@ -1392,9 +1343,6 @@ namespace EricGameLauncher
                     {
                         try
                         {
-                            // H1: use LastWriteTime as cache key so unchanged icons can be
-                            // reused from the WinUI bitmap cache instead of being re-decoded
-                            // on every panel open.
                             var bitmap = new BitmapImage();
                             long cacheKey = new FileInfo(_currentEditingItem!.IconPath!).LastWriteTime.Ticks;
                             var uri = new Uri($"file:///{_currentEditingItem.IconPath.Replace("\\", "/")}?t={cacheKey}");
@@ -1460,9 +1408,6 @@ namespace EricGameLauncher
                     }
                 }
                 _currentEditingItem.SetCustomMenuItems(customItems);
-                // L5: only overwrite Platform if the badge shows a non-empty value;
-                // an empty badge means detection failed and we should preserve any
-                // previously stored Platform (e.g. "Steam") rather than erasing it.
                 string? detectedPlatform = PropPlatformBadge.Text?.Trim();
                 if (!string.IsNullOrEmpty(detectedPlatform))
                     _currentEditingItem.Platform = detectedPlatform;
@@ -1496,7 +1441,6 @@ namespace EricGameLauncher
                 {
                     try
                     {
-                        // H1: use file modification time as cache key (consistent with ImagePathConverter).
                         var bitmap = new BitmapImage();
                         long cacheKey = new FileInfo(iconPath).LastWriteTime.Ticks;
                         var uri = new Uri($"file:///{iconPath.Replace("\\", "/")}?t={cacheKey}");
@@ -1559,15 +1503,10 @@ namespace EricGameLauncher
             AppGrid.Padding = new Thickness(20, 20, 420, 20);
         }
 
-        // P1: async void so it returns immediately to the caller, letting the
-        // property-panel animation start without waiting for shell enumeration.
         private async void PopulateShortcutMenus()
         {
             try
             {
-                // Clear menus IMMEDIATELY (before any await) so that if this method is
-                // invoked again while the previous call is still awaiting, the second
-                // call's clear runs first and prevents duplicate items from the first call.
                 MenuExeStartMenu.Items.Clear();
                 MenuExeDesktop.Items.Clear();
                 MenuAltStartMenu.Items.Clear();
@@ -1577,9 +1516,6 @@ namespace EricGameLauncher
                 MenuMgrStartMenu.Items.Clear();
                 MenuMgrDesktop.Items.Clear();
 
-                // Use preloaded data when available; fall back to background load otherwise.
-                // H3: consume and null-out the preloaded tasks so subsequent panel openings
-                // (after the first) re-scan the sources and pick up newly installed apps.
                 List<ShortcutScanner.FileItem> startMenuItems = _preloadedStartMenuTask != null
                     ? await _preloadedStartMenuTask
                     : await Task.Run(() => ShortcutScanner.GetStartMenuItems());
@@ -1590,8 +1526,6 @@ namespace EricGameLauncher
                     : await Task.Run(() => ShortcutScanner.GetDesktopItems());
                 _preloadedDesktopTask = null;
 
-                // Clear again after await in case another invocation fired between
-                // the first clear and here (double-clear is safe and ensures no duplicates).
                 MenuExeStartMenu.Items.Clear();
                 MenuExeDesktop.Items.Clear();
                 MenuAltStartMenu.Items.Clear();
@@ -1641,7 +1575,6 @@ namespace EricGameLauncher
 
         private void PopulateMenuItems(MenuFlyoutSubItem parent, List<ShortcutScanner.FileItem> items, TextBox targetTextBox)
         {
-            // Flat list as requested by user
             foreach (var item in items)
             {
                 if (!item.IsFolder)
@@ -1652,8 +1585,6 @@ namespace EricGameLauncher
                 }
                 else if (item.IsFolder && item.Children.Count > 0)
                 {
-                    // If it is a folder, still flatten its contents into the same menu (optional, but keep it recursive-flattened if needed)
-                    // Given ShortcutScanner now returns flat for Start Menu, this recursive part is mostly for Desktop items
                     PopulateMenuItems(parent, item.Children, targetTextBox);
                 }
             }
@@ -1665,8 +1596,6 @@ namespace EricGameLauncher
             {
                 if (string.IsNullOrEmpty(filePath)) return;
                 bool isStoreApp = filePath.StartsWith("shell:AppsFolder\\");
-                // existence check removed: caller (config/import) already ensures path is valid
-                // (we may still log or handle failures later in icon extraction).
 
 
                 string actualPath = filePath;
@@ -1742,7 +1671,6 @@ namespace EricGameLauncher
                         string iconSource = filePath;
                         bool shouldExtractFromLnk = extractFromLnk;
 
-                        // UWP Priority: Use shell:AppsFolder path for better icon extraction
                         if (actualPath.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase))
                         {
                             iconSource = actualPath;
@@ -1772,8 +1700,6 @@ namespace EricGameLauncher
 
                     if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
                     {
-                        // M1: removed magic Task.Delay(100); File.Exists above is sufficient
-                        // to confirm the icon is on disk before updating the UI.
                         _currentEditingItem.IconPath = null;
                         _currentEditingItem.IconPath = iconPath;
                         RefreshIconDisplay(iconPath);
@@ -1842,7 +1768,6 @@ namespace EricGameLauncher
 
                 if (string.IsNullOrWhiteSpace(PropExePath.Text))
                 {
-                    // R6: give user visual feedback instead of silently discarding the save
                     PropExePath.BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 196, 43, 28));
                     _ = Task.Delay(2000).ContinueWith(_ =>
                         DispatcherQueue.TryEnqueue(() => PropExePath.ClearValue(TextBox.BorderBrushProperty)),
@@ -1860,8 +1785,6 @@ namespace EricGameLauncher
 
                     if (existing != null)
                     {
-                        // H2: give the user visual feedback instead of silently discarding
-                        // the save (mirrors the R6 treatment of an empty ExePath).
                         PropExePath.BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 196, 43, 28));
                         _ = Task.Delay(2000).ContinueWith(_ =>
                             DispatcherQueue.TryEnqueue(() => PropExePath.ClearValue(TextBox.BorderBrushProperty)),
@@ -1923,8 +1846,6 @@ namespace EricGameLauncher
                     if (!string.IsNullOrEmpty(newPath) && File.Exists(newPath))
                     {
 
-                        // M1: removed magic Task.Delay(200); confirmed newPath exists via
-                        // the File.Exists guard below 芒鈧?no delay needed.
                         _currentEditingItem.IconPath = null;
                         _currentEditingItem.IconPath = newPath;
 
@@ -1933,7 +1854,6 @@ namespace EricGameLauncher
                         {
                             try
                             {
-                                // H1: use file modification time as cache key.
                                 var bitmap = new BitmapImage();
                                 long cacheKey = new FileInfo(newPath).LastWriteTime.Ticks;
                                 var uri = new Uri($"file:///{newPath.Replace("\\", "/")}?t={cacheKey}");
@@ -2047,7 +1967,6 @@ namespace EricGameLauncher
 
                             string iconSource = filePath;
 
-                            // UWP Priority: Use shell:AppsFolder path for better icon extraction
                             if (actualPath.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase))
                             {
                                 iconSource = actualPath;
@@ -2072,8 +1991,6 @@ namespace EricGameLauncher
 
                         if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
                         {
-                            // M1: removed magic Task.Delay(200); File.Exists already confirms
-                            // the icon is persisted to disk.
                             _currentEditingItem.IconPath = null;
                             _currentEditingItem.IconPath = iconPath;
                             RefreshIconDisplay(iconPath);
@@ -2133,9 +2050,6 @@ namespace EricGameLauncher
 
                 string query = (sender.Text ?? "").ToLower().Trim();
 
-                // L1: replace ItemsSource with a new collection in one shot instead of
-                // Clear() + individual Add() calls, which each fire CollectionChanged
-                // and trigger incremental UI re-layout on every item.
                 IEnumerable<AppItem> filtered = string.IsNullOrEmpty(query)
                     ? _allItems
                     : _allItems.Where(item =>
@@ -2158,7 +2072,6 @@ namespace EricGameLauncher
         {
             try
             {
-                // 莽鈥澛ヂ解€溍モ€帮拷茅隆鹿莽鈥郝♀€灻モ€︹€姑┡♀€犆ヂ宦好€姑ぢ嘎疵︹€斅睹┾€衡€犆ワ拷藛茂录艗茅锟铰棵モ€︼拷氓锟铰趁︹€斅睹︹€郝疵︹€撀懊ぢ嘎幻р€犆モ€郝?
                 _tempOrderCollection = new ObservableCollection<AppItem>(_allItems);
                 OrderItemsControl.ItemsSource = _tempOrderCollection;
                 _orderItemsControl = OrderItemsControl as ListView;
@@ -2188,9 +2101,6 @@ namespace EricGameLauncher
 
         private void BtnEdit_Click(object sender, RoutedEventArgs e)
         {
-            // M4: This handler is intentionally empty 芒鈧?editing is triggered by double-clicking
-            // or via the right-click context menu (MenuProp_Click). If a dedicated Edit button
-            // is added to the UI, implement the body here.
         }
 
         private void BtnMoveUp_Click(object sender, RoutedEventArgs e)
@@ -2221,7 +2131,6 @@ namespace EricGameLauncher
             {
                 if (_tempOrderCollection != null)
                 {
-                    // 茅拢啪氓卤鈥毭モ€β趁┾€斅︹€斅睹寂捗ぢ糕偓忙卢隆忙鈧ぢ匡拷氓颅藴忙鈥⒙懊︼拷庐氓鹿露氓藛路忙鈥撀懊モ€βヂ扁偓猫搂鈥犆モ€郝?
                     ConfigService.SaveItems(_tempOrderCollection.ToList());
                     RefreshView();
                     _tempOrderCollection = null;
@@ -2235,7 +2144,7 @@ namespace EricGameLauncher
             if (item == null || _tempOrderCollection == null) return;
 
             int index = _tempOrderCollection.IndexOf(item);
-            if (index == -1) return; // 茅藴虏氓麓漏盲驴锟矫ε犅っ寂∶ヂ︹€毭ε九撁┞÷姑р€郝ぢ革拷氓艙篓茅鈥衡€犆ワ拷藛盲赂颅茂录艗莽鈥郝疵ε铰ッ库€澝モ€?
+            if (index == -1) return;
 
             int newIndex = index + offset;
 
@@ -2288,9 +2197,6 @@ namespace EricGameLauncher
 
         private void BtnAdd_Click(object sender, RoutedEventArgs e)
         {
-            // L6: assign a stable random Id upfront so the item has a unique identity
-            // before ExePath is set. Relying solely on the ExePath setter side-effect
-            // leaves a window where Id is empty (if ExePath is set to empty string).
             var newItem = new AppItem
             {
                 Id = Guid.NewGuid().ToString("N")[..16],
@@ -2337,6 +2243,10 @@ namespace EricGameLauncher
             {
                 ToggleCloseAfterLaunch.IsOn = ConfigService.CloseAfterLaunch;
             }
+            if (ComboUpdateChannel != null)
+            {
+                ComboUpdateChannel.SelectedIndex = ConfigService.UpdateChannel == "latest" ? 1 : 0;
+            }
             if (SizeSlider != null)
             {
                 SizeSlider.Value = ConfigService.IconSize;
@@ -2355,7 +2265,6 @@ namespace EricGameLauncher
                 string appName = "EricGameLauncher";
                 string description = "Eric Game Launcher";
 
-                // Paths
                 string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
                 string desktopShortcutPath = Path.Combine(desktopPath, $"{appName}.lnk");
 
@@ -2363,11 +2272,9 @@ namespace EricGameLauncher
                 string startMenuPath = Path.Combine(appDataRoaming, @"Microsoft\Windows\Start Menu\Programs");
                 string startMenuShortcutPath = Path.Combine(startMenuPath, $"{appName}.lnk");
 
-                // 1. Remove old shortcuts if they exist
                 if (File.Exists(desktopShortcutPath)) File.Delete(desktopShortcutPath);
                 if (File.Exists(startMenuShortcutPath)) File.Delete(startMenuShortcutPath);
 
-                // 2. Create new shortcuts
                 ShortcutResolver.CreateShortcut(exePath, desktopShortcutPath, description);
 
                 if (!Directory.Exists(startMenuPath)) Directory.CreateDirectory(startMenuPath);
@@ -2399,11 +2306,22 @@ namespace EricGameLauncher
         {
             if (sender is ToggleSwitch toggle)
             {
-                _toggleCloseAfterLaunch = toggle;
-
                 if (ConfigService.CloseAfterLaunch != toggle.IsOn)
                 {
                     ConfigService.CloseAfterLaunch = toggle.IsOn;
+                    ConfigService.SaveConfig();
+                }
+            }
+        }
+
+        private void ComboUpdateChannel_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (sender is ComboBox combo)
+            {
+                string newChannel = combo.SelectedIndex == 1 ? "latest" : "stable";
+                if (ConfigService.UpdateChannel != newChannel)
+                {
+                    ConfigService.UpdateChannel = newChannel;
                     ConfigService.SaveConfig();
                 }
             }
@@ -2443,7 +2361,6 @@ namespace EricGameLauncher
         {
             if (args.InRecycleQueue) return;
 
-            // Apply current IconSize to this container as it gets realized
             if (args.ItemContainer is GridViewItem gvi)
                 ApplySizeToContainer(gvi, IconSize);
         }
@@ -2491,7 +2408,7 @@ namespace EricGameLauncher
             }
 
 
-            StoragePathText.Text = ConfigService.CurrentDataPath;
+            ToolTipService.SetToolTip(StorageModeText, ConfigService.CurrentDataPath);
         }
 
         private void BtnOpenFolder_Click(object sender, RoutedEventArgs e)
@@ -2529,11 +2446,6 @@ namespace EricGameLauncher
 
 
 
-        // L4: FindChildByName performs a linear recursive VisualTree walk on every call.
-        // For the current item sizes (芒鈥?a few hundred items and shallow sub-trees inside
-        // each GridViewItem template) the cost is negligible. If the collection ever grows
-        // large, consider caching results per container or shifting to x:Name code-behind
-        // references for the fixed template elements (IconGrid, TitleText, etc.).
         private DependencyObject? FindChildByName(DependencyObject parent, string name)
         {
             if (parent == null) return null;
@@ -2585,7 +2497,16 @@ namespace EricGameLauncher
                 SortDescription.Text = I18n.T("Sort_Description");
                 SettingsTitle.Text = I18n.T("Settings_Title");
                 SettingsGeneralLabel.Text = I18n.T("Settings_General");
-                ToggleCloseAfterLaunch.Header = I18n.T("Settings_CloseAfterLaunch");
+                SettingsCloseAfterLaunchLabel.Text = I18n.T("Settings_CloseAfterLaunch");
+                SettingsUpdateChannelLabel.Text = I18n.T("Settings_UpdateChannel");
+                ComboUpdateChannel.SelectionChanged -= ComboUpdateChannel_SelectionChanged;
+                ComboUpdateChannel.Items.Clear();
+                ComboUpdateChannel.Items.Add(I18n.T("Settings_UpdateChannel_Stable"));
+                ComboUpdateChannel.Items.Add(I18n.T("Settings_UpdateChannel_Latest"));
+                ComboUpdateChannel.SelectedIndex = ConfigService.UpdateChannel == "latest" ? 1 : 0;
+                ComboUpdateChannel.SelectionChanged += ComboUpdateChannel_SelectionChanged;
+                if (SettingsUpdateChannelDesc != null)
+                    SettingsUpdateChannelDesc.Text = I18n.T("Settings_UpdateChannel_Desc");
                 SettingsDataLocationLabel.Text = I18n.T("Settings_DataLocation");
                 StorageModeText.Text = ConfigService.IsSystemMode
                     ? I18n.T("Settings_SystemMode")
@@ -2611,10 +2532,8 @@ namespace EricGameLauncher
 
                 try
                 {
-                    // Remove erroneous tooltip from migration button
                     ToolTipService.SetToolTip(BtnSwitchStorageMode, null);
 
-                    // Set correct tooltip for folder button
                     if (BtnOpenConfigFolder != null)
                         ToolTipService.SetToolTip(BtnOpenConfigFolder, I18n.T("Settings_OpenConfigFolder"));
                 }
@@ -2691,7 +2610,6 @@ namespace EricGameLauncher
 
                 EmptyStateText.Text = I18n.T("Empty_Description");
 
-                // Custom Menu Localization
                 PropCustomMenuLabel.Text = I18n.T("Property_CustomMenu");
                 string titlePlaceholder = I18n.T("Property_CustomTitlePlaceholder");
                 string cmdPlaceholder = I18n.T("Property_CustomCommandPlaceholder");
@@ -2736,11 +2654,6 @@ namespace EricGameLauncher
         }
         private void UpdateCustomVisibility()
         {
-            // M5: Custom menu slots use a progressive disclosure pattern.
-            // Slot N+1 is shown only when slot N has a non-empty Command.
-            // Slots must therefore be filled sequentially 芒鈧?clearing a middle
-            // slot's Command will hide all subsequent slots (data is preserved
-            // internally, just not displayed until restored).
             int visibleCount = 0;
             string customItemLabel = I18n.T("Property_CustomItem");
             for (int i = 0; i < 10; i++)
@@ -2752,7 +2665,6 @@ namespace EricGameLauncher
                 }
                 else
                 {
-                    // Show if previous one has a command typed
                     isVisible = !string.IsNullOrEmpty(_customCommands[i - 1].Text?.Trim());
                 }
 
@@ -2772,12 +2684,17 @@ namespace EricGameLauncher
                 string downloadUrl = release.assets.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.browser_download_url ?? "";
                 if (string.IsNullOrEmpty(downloadUrl)) return;
 
-                // 1. 氓掳锟矫€⒚ニ嗭拷氓搂鈥姑ヅ?Webview2 氓卤鈥⒚ぢ好ヅ脚该р€澟?Github 忙沤鈥櫭р€八?
                 Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", System.IO.Path.Combine(System.IO.Path.GetTempPath(), "EricGameLauncher_WebView2"));
+                double dlgW2 = Math.Max(560, this.Bounds.Width * 0.80);
+                double dlgH2 = Math.Max(420, this.Bounds.Height * 0.78);
+                double innerH2 = Math.Max(280, dlgH2 - 150) - 48;
+
                 var webView = new Microsoft.UI.Xaml.Controls.WebView2
                 {
                     HorizontalAlignment = HorizontalAlignment.Stretch,
-                    VerticalAlignment = VerticalAlignment.Stretch
+                    VerticalAlignment = VerticalAlignment.Stretch,
+                    MinWidth = dlgW2 - 48,
+                    MinHeight = innerH2
                 };
 
                 object dialogContent;
@@ -2791,7 +2708,6 @@ namespace EricGameLauncher
                         actualTheme = Application.Current.RequestedTheme == ApplicationTheme.Dark ? ElementTheme.Dark : ElementTheme.Light;
                     }
 
-                    // Load merged github markdown css and set color-scheme manually over media query
                     string cssContent = "";
                     using (var stream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream($"EricGameLauncher.webview.css"))
                     using (var reader = new System.IO.StreamReader(stream!))
@@ -2834,28 +2750,44 @@ namespace EricGameLauncher
                 }
                 catch (Exception)
                 {
-                    // Fallback completely
                     var textFallback = new TextBlock
                     {
                         Text = $"# {release.name}\n\n{(release.body)}",
                         TextWrapping = TextWrapping.Wrap
                     };
-                    dialogContent = new ScrollViewer { Content = textFallback, Height = 400 };
+                    dialogContent = new ScrollViewer { Content = textFallback, Height = innerH2 };
                 }
+
+                string dlgChannelName = ConfigService.UpdateChannel == "latest"
+                    ? I18n.T("Settings_UpdateChannel_Latest")
+                    : I18n.T("Settings_UpdateChannel_Stable");
+                var dlgChannelNote = new TextBlock
+                {
+                    Text = string.Format(I18n.T("Update_ChannelNote"), dlgChannelName),
+                    TextWrapping = TextWrapping.Wrap,
+                    FontSize = 12,
+                    Opacity = 0.6,
+                    Margin = new Thickness(0, 10, 0, 0)
+                };
+                var dlgWrapper = new StackPanel();
+                dlgWrapper.Children.Add((UIElement)dialogContent);
+                dlgWrapper.Children.Add(dlgChannelNote);
 
                 ContentDialog confirmDialog = new ContentDialog
                 {
                     Title = I18n.T("Update_DialogTitle"),
-                    Content = dialogContent,
+                    Content = dlgWrapper,
                     PrimaryButtonText = I18n.T("Update_DialogConfirm"),
                     CloseButtonText = I18n.T("Update_DialogCancel"),
                     DefaultButton = ContentDialogButton.Primary,
                     XamlRoot = this.Content.XamlRoot
                 };
 
+                confirmDialog.Resources["ContentDialogMaxWidth"] = dlgW2;
+                confirmDialog.Resources["ContentDialogMaxHeight"] = dlgH2;
+
                 if (await confirmDialog.ShowAsync() != ContentDialogResult.Primary) return;
 
-                // 2. 氓锟铰ヅ犅ヂも€撁┢捖︹€郝疵︹€撀懊モ劉?(莽鈥澛泵︹€郝疵︹€撀懊モ劉篓莽鈥孤€姑磁该绰Ｃぢ糕€姑铰矫ｂ偓锟矫库€好ヂ郝γヂ扁€⒚ぢ好ぢ概矫︹€犆р€衡€?
                 UpdateService.StartUpdater(downloadUrl);
             }
             catch { }

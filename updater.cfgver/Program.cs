@@ -20,7 +20,6 @@ namespace updater.cfgver
 
             string inputPath = args[0];
 
-            // Remove quotes if present
             if (inputPath.StartsWith("\"") && inputPath.EndsWith("\""))
             {
                 inputPath = inputPath.Substring(1, inputPath.Length - 2);
@@ -57,7 +56,7 @@ namespace updater.cfgver
 
             if (configRoot == null) return;
 
-            int currentVersion = 1; // Default
+            int currentVersion = 1;
             if (configRoot.TryGetPropertyValue("Version", out var verNode) && verNode != null)
             {
                 currentVersion = verNode.GetValue<int>();
@@ -66,7 +65,6 @@ namespace updater.cfgver
             bool migratedAny = false;
             int startVersion = currentVersion;
 
-            // Pipeline Execution
             while (true)
             {
                 JsonNode? matchingRule = null;

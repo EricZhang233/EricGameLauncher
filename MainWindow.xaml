@@ -299,7 +299,7 @@
             <Button x:Name="SettingsFlyoutHost" Visibility="Collapsed">
                 <Button.Flyout>
                     <Flyout x:Name="SettingsFlyout" Placement="Bottom">
-                        <StackPanel Spacing="20" MaxWidth="400">
+                        <StackPanel Spacing="8" Width="300">
                             <TextBlock x:Name="SettingsTitle" Text="" FontSize="20" FontWeight="SemiBold"/>
                             <StackPanel Spacing="8">
                                 <TextBlock x:Name="SettingsGeneralLabel" Text="" FontSize="14" FontWeight="SemiBold"
@@ -312,11 +312,54 @@
                                               SelectionChanged="LanguageComboBox_SelectionChanged"
                                               HorizontalAlignment="Stretch"/>
                                 </Grid>
-                                <ToggleSwitch x:Name="ToggleCloseAfterLaunch" 
-                                              Header="" 
-                                              Toggled="ToggleCloseAfterLaunch_Toggled"/>
+                                <Border Height="1" Margin="0,4,0,4" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <StackPanel Grid.Column="0"
+                                                Orientation="Horizontal"
+                                                Spacing="12"
+                                                VerticalAlignment="Center">
+                                        <FontIcon Glyph="&#xE8BB;" FontSize="16"
+                                                  VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="SettingsCloseAfterLaunchLabel"
+                                                   Text=""
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <ToggleSwitch x:Name="ToggleCloseAfterLaunch"
+                                                  Grid.Column="2"
+                                                  OffContent=""
+                                                  OnContent=""
+                                                  MinWidth="0"
+                                                  VerticalAlignment="Center"
+                                                  Margin="0,-8,0,-8"
+                                                  Toggled="ToggleCloseAfterLaunch_Toggled"/>
+                                </Grid>
+                                <Border Height="1" Margin="0,4,0,4" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+                                <Grid HorizontalAlignment="Stretch">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="12"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="&#xE895;" FontSize="16"
+                                              VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="SettingsUpdateChannelLabel"
+                                               Grid.Column="2"
+                                               Text=""
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,8,0"/>
+                                    <ComboBox x:Name="ComboUpdateChannel"
+                                              Grid.Column="3"
+                                              HorizontalAlignment="Stretch"
+                                              SelectionChanged="ComboUpdateChannel_SelectionChanged"/>
+                                </Grid>
+                                <TextBlock x:Name="SettingsUpdateChannelDesc"
+                                           Text=""
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                           TextWrapping="Wrap"/>
                             </StackPanel>
-                            <MenuFlyoutSeparator />
+                            <Border Height="2" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="0,4,0,4"/>
                             <StackPanel Spacing="8">
                                 <TextBlock x:Name="SettingsDataLocationLabel" Text="" FontSize="14" FontWeight="SemiBold"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
@@ -334,7 +377,8 @@
                                                Grid.Column="0"
                                                Text="" 
                                                VerticalAlignment="Center"
-                                               FontWeight="SemiBold"/>
+                                               FontWeight="SemiBold"
+                                               ToolTipService.ToolTip=""/>
                                     <Button x:Name="BtnSwitchStorageMode" 
                                             Grid.Column="2"
                                             Click="BtnSwitchStorageMode_Click"
@@ -352,13 +396,6 @@
                                         <FontIcon Glyph="&#xE8DA;" FontSize="12"/>
                                     </Button>
                                 </Grid>
-                                
-                                <TextBlock x:Name="StoragePathText" 
-                                           Text=""
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
-                                           Style="{ThemeResource CaptionTextBlockStyle}" 
-                                           TextWrapping="Wrap"
-                                           IsTextSelectionEnabled="True"/>
                                 
                                 <TextBlock x:Name="SettingsMigrateNote" Text="" 
                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}" 
