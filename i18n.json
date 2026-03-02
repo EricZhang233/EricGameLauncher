@@ -83,7 +83,8 @@
 		"Scanner_NewGames": "新增 ({0})",
 		"Scanner_ExistingGames": "已存在 ({0})",
 		"Scanner_ImportAll": "导入全部新增项目",
-		"Update_Repair": "修复"
+		"Update_Repair": "强制重装",
+		"Update_OK": "确定"
 	},
 	"EN": {
 		"_LangName": "English",
@@ -169,7 +170,8 @@
 		"Scanner_NewGames": "New ({0})",
 		"Scanner_ExistingGames": "Existing ({0})",
 		"Scanner_ImportAll": "Import All New Items",
-		"Update_Repair": "Repair"
+		"Update_Repair": "Force Reinstall",
+		"Update_OK": "OK"
 	},
 	"Zh-TW": {
 		"_LangName": "繁體中文",
@@ -249,7 +251,14 @@
 		"Scanner_NewGames": "新增 ({0})",
 		"Scanner_ExistingGames": "已存在 ({0})",
 		"Scanner_ImportAll": "匯入全部新增項目",
-		"Update_Repair": "修復"
+		"Update_DialogTitle": "發現新版本",
+		"Update_DialogContent": "是否立即下載並更新？更新過程中應用程式將自動重啟。",
+		"Update_DialogConfirm": "立即更新",
+		"Update_DialogCancel": "稍後再說",
+		"Update_NoUpdateTitle": "檢查更新",
+		"Update_NoUpdateContent": "您目前使用的是最新版本。",
+		"Update_Repair": "強制重新安裝",
+		"Update_OK": "確定"
 	},
 	"JA": {
 		"_LangName": "日本語",
@@ -274,6 +283,10 @@
 		"Menu_OpenFileLocation": "ファイルの場所を開く",
 		"Menu_Properties": "プロパティ",
 		"Menu_Delete": "削除",
+		"Menu_SystemIntegration": "ショートカット",
+		"Menu_Install": "作成",
+		"Menu_Uninstall": "アンインストール",
+		"Menu_CheckUpdate": "アップデートを確認",
 		"Sort_Title": "順序の編集",
 		"Sort_Description": "移動ボタンをクリックするか、項目を選択して W S ↑ ↓ で順序を変更",
 		"Sort_MoveUp": "上へ",
@@ -325,7 +338,14 @@
 		"Scanner_NewGames": "新規 ({0})",
 		"Scanner_ExistingGames": "既存 ({0})",
 		"Scanner_ImportAll": "すべてインポート",
-		"Update_Repair": "修復"
+		"Update_DialogTitle": "新しいバージョンが見つかりました",
+		"Update_DialogContent": "今すぐダウンロードして更新しますか？更新中にアプリは自動的に再起動します。",
+		"Update_DialogConfirm": "今すぐ更新",
+		"Update_DialogCancel": "後で",
+		"Update_NoUpdateTitle": "アップデートを確認",
+		"Update_NoUpdateContent": "現在の最新バージョンをお使いです。",
+		"Update_Repair": "強制再インストール",
+		"Update_OK": "OK"
 	},
 	"KO": {
 		"_LangName": "한국어",
@@ -384,6 +404,7 @@
 		"Property_CustomTitlePlaceholder": "메뉴 제목",
 		"Property_CustomCommandPlaceholder": "실행 경로 또는 인수",
 		"Property_CustomItem": "사용자 지정 항목",
+		"Menu_CheckUpdate": "업데이트 확인",
 		"Menu_PlatformManager": "{0}",
 		"Migration_OverlayTitle": "구성 엔진 업그레이드 중...",
 		"Migration_OverlaySubTitle": "몇 초 정도 걸릴 수 있으며, 완료 후 앱이 자동으로 재시작됩니다.",
@@ -396,7 +417,14 @@
 		"Scanner_NewGames": "새로 추가됨 ({0})",
 		"Scanner_ExistingGames": "이미 존재함 ({0})",
 		"Scanner_ImportAll": "모두 가져오기",
-		"Update_Repair": "복구"
+		"Update_DialogTitle": "새 버전 발견",
+		"Update_DialogContent": "지금 다운로드하여 업데이트하시겠습니까? 업데이트 중 앱이 자동으로 재시작됩니다.",
+		"Update_DialogConfirm": "지금 업데이트",
+		"Update_DialogCancel": "나중에",
+		"Update_NoUpdateTitle": "업데이트 확인",
+		"Update_NoUpdateContent": "현재 최신 버전을 사용 중입니다.",
+		"Update_Repair": "강제 재설치",
+		"Update_OK": "확인"
 	},
 	"FR": {
 		"_LangName": "Français",
@@ -454,6 +482,8 @@
 		"Property_CustomMenu": "Menu contextuel personnalisé",
 		"Property_CustomTitlePlaceholder": "Titre du menu",
 		"Property_CustomCommandPlaceholder": "Chemin ou arguments",
+		"Property_CustomItem": "Élément personnalisé",
+		"Menu_CheckUpdate": "Vérifier les mises à jour",
 		"Menu_PlatformManager": "{0}",
 		"Migration_OverlayTitle": "Mise à niveau du moteur de configuration...",
 		"Migration_OverlaySubTitle": "Cela peut prendre quelques secondes ; l'application redémarrera automatiquement à la fin.",
@@ -466,7 +496,14 @@
 		"Scanner_NewGames": "Nouveaux ({0})",
 		"Scanner_ExistingGames": "Existants ({0})",
 		"Scanner_ImportAll": "Tout importer",
-		"Update_Repair": "Réparer"
+		"Update_DialogTitle": "Nouvelle version trouvée",
+		"Update_DialogContent": "Souhaitez-vous télécharger et mettre à jour maintenant ? L'application redémarrera automatiquement.",
+		"Update_DialogConfirm": "Mettre à jour maintenant",
+		"Update_DialogCancel": "Plus tard",
+		"Update_NoUpdateTitle": "Vérifier les mises à jour",
+		"Update_NoUpdateContent": "Vous utilisez déjà la dernière version.",
+		"Update_Repair": "Réinstallation Forcée",
+		"Update_OK": "OK"
 	},
 	"DE": {
 		"_LangName": "Deutsch",
@@ -524,6 +561,8 @@
 		"Property_CustomMenu": "Benutzerdefiniertes Kontextmenü",
 		"Property_CustomTitlePlaceholder": "Menütitel",
 		"Property_CustomCommandPlaceholder": "Pfad oder Argumente",
+		"Property_CustomItem": "Benutzerdefiniertes Element",
+		"Menu_CheckUpdate": "Nach Updates suchen",
 		"Menu_PlatformManager": "{0}",
 		"Migration_OverlayTitle": "Konfigurations-Engine wird aktualisiert...",
 		"Migration_OverlaySubTitle": "Dies kann einige Sekunden dauern. Die App wird nach Abschluss automatisch neu gestartet.",
@@ -536,7 +575,14 @@
 		"Scanner_NewGames": "Neu ({0})",
 		"Scanner_ExistingGames": "Vorhanden ({0})",
 		"Scanner_ImportAll": "Alle importieren",
-		"Update_Repair": "Reparieren"
+		"Update_DialogTitle": "Neue Version gefunden",
+		"Update_DialogContent": "Möchten Sie jetzt herunterladen und aktualisieren? Die App wird automatisch neu gestartet.",
+		"Update_DialogConfirm": "Jetzt aktualisieren",
+		"Update_DialogCancel": "Später",
+		"Update_NoUpdateTitle": "Nach Updates suchen",
+		"Update_NoUpdateContent": "Sie verwenden bereits die neueste Version.",
+		"Update_Repair": "Neuinstallation",
+		"Update_OK": "OK"
 	},
 	"ES": {
 		"_LangName": "Español",
@@ -594,6 +640,8 @@
 		"Property_CustomMenu": "Menú contextual personalizado",
 		"Property_CustomTitlePlaceholder": "Título del menú",
 		"Property_CustomCommandPlaceholder": "Ruta de ejecución o argumentos",
+		"Property_CustomItem": "Elemento personalizado",
+		"Menu_CheckUpdate": "Buscar actualizaciones",
 		"Menu_PlatformManager": "{0}",
 		"Migration_OverlayTitle": "Actualizando el motor de configuración...",
 		"Migration_OverlaySubTitle": "Esto puede tardar unos segundos; la aplicación se reiniciará automáticamente cuando termine.",
@@ -606,6 +654,13 @@
 		"Scanner_NewGames": "Nuevos ({0})",
 		"Scanner_ExistingGames": "Existentes ({0})",
 		"Scanner_ImportAll": "Importar todo",
-		"Update_Repair": "Reparar"
+		"Update_DialogTitle": "Nueva versión encontrada",
+		"Update_DialogContent": "¿Desea descargar y actualizar ahora? La aplicación se reiniciará automáticamente.",
+		"Update_DialogConfirm": "Actualizar ahora",
+		"Update_DialogCancel": "Más tarde",
+		"Update_NoUpdateTitle": "Buscar actualizaciones",
+		"Update_NoUpdateContent": "Ya está usando la última versión.",
+		"Update_Repair": "Reinstalación Forzada",
+		"Update_OK": "OK"
 	}
 }

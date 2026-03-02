@@ -2611,6 +2611,7 @@ namespace EricGameLauncher
             public string name { get; set; } = "";
             public string html_url { get; set; } = "";
             public string body { get; set; } = "";
+            public string body_html { get; set; } = "";
             public List<Asset> assets { get; set; } = new List<Asset>();
         }
 
@@ -2627,6 +2628,10 @@ namespace EricGameLauncher
             {
                 if (!client.DefaultRequestHeaders.Contains("User-Agent"))
                     client.DefaultRequestHeaders.Add("User-Agent", "EricGameLauncher-Updater");
+                
+                // Add Accept header to tell GitHub to return rendered HTML body as well
+                if (!client.DefaultRequestHeaders.Contains("Accept"))
+                    client.DefaultRequestHeaders.Add("Accept", "application/vnd.github.v3.html+json");
 
                 return await client.GetFromJsonAsync<ReleaseInfo>(GitHubApiUrl);
             }

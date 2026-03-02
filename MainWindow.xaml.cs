@@ -1,4 +1,4 @@
-using EricGameLauncher;
+﻿using EricGameLauncher;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -254,7 +254,7 @@ namespace EricGameLauncher
 
             _ = LoadData();
 
-            // 启动在线更新静默检查
+            // 氓锟铰ヅ犅ヅ撀郝棵︹€郝疵︹€撀懊╋拷鈩⒚┞凰溍βｂ偓忙鸥?
             _ = CheckForUpdatesQuietlyAsync();
         }
 
@@ -262,7 +262,7 @@ namespace EricGameLauncher
         {
             try
             {
-                // 等待 3 秒，确保系统资源优先分配给主界面图标加载
+                // 莽颅鈥懊ヂ锯€?3 莽搂鈥櫭寂捗÷ぢ匡拷莽鲁禄莽禄鸥猫碌鈥灻β猴拷盲录藴氓鈥λ喢ニ嗏€犆┾€︼拷莽禄鈩⒚ぢ嘎幻р€⑴捗╋拷垄氓鈥郝久β犫€∶ヅ犅犆铰?
                 await Task.Delay(3000);
 
                 var release = await UpdateService.CheckForUpdateAsync();
@@ -270,11 +270,11 @@ namespace EricGameLauncher
                 {
                     _pendingUpdate = release;
 
-                    // 使用低优先级更新 UI，避免干扰用户交互和渲染
+                    // 盲陆驴莽鈥澛ぢ脚矫ぢ妓溍モ€λ喢郝︹€郝疵︹€撀?UI茂录艗茅锟铰棵モ€︼拷氓鹿虏忙鈥奥懊р€澛λ喡访ぢ郝っぢ衡€櫭モ€櫯捗β嘎裁ε糕€?
                     DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
                     {
                         HasUpdate = true;
-                        UpdateIndicatorColor = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 0, 0)); // 红色提醒
+                        UpdateIndicatorColor = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 0, 0)); // 莽潞垄猫鈥奥裁︼拷锟矫┾€犫€?
                     });
                 }
             }
@@ -305,46 +305,114 @@ namespace EricGameLauncher
                         UpdateIndicatorColor = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 0, 0));
                     });
 
-                    // 直接进入更新确认流程
+                    // 莽鈥郝疵ε铰ッ库€好モ€βッ︹€郝疵︹€撀懊÷っβ碉拷莽篓鈥?
                     await StartUpdateFlowAsync(release);
                 }
                 else
                 {
-                    // 已经是最新版本，弹出带有 Release Notes 的提示，包含修复按钮
+                    // 氓路虏莽禄锟矫λ溌ε撯偓忙鈥撀懊р€八喢ε撀寂捗ヂ悸姑モ€÷好ヂ嘎γε撯€?Release Notes 莽拧鈥灻︼拷锟矫ぢ好寂捗ヅ掆€γワ拷芦盲驴庐氓陇锟矫ε掆€懊┾€櫬?
                     string downloadUrl = release.assets.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.browser_download_url ?? "";
                     
-                    var markdownText = new CommunityToolkit.WinUI.UI.Controls.MarkdownTextBlock
+                    Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", System.IO.Path.Combine(System.IO.Path.GetTempPath(), "EricGameLauncher_WebView2"));
+                    var webView = new Microsoft.UI.Xaml.Controls.WebView2
                     {
-                        Text = $"# {I18n.T("Update_NoUpdateContent")}\n\n## {release.name}\n\n{release.body}",
                         HorizontalAlignment = HorizontalAlignment.Stretch,
-                        Margin = new Thickness(0, 0, 10, 0),
-                        Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent)
+                        VerticalAlignment = VerticalAlignment.Stretch
                     };
 
-                    markdownText.Header1FontSize = 22;
-                    markdownText.Header2FontSize = 18;
-                    markdownText.Header1FontWeight = Microsoft.UI.Text.FontWeights.Bold;
-                    markdownText.Header2FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
-                    markdownText.ParagraphMargin = new Thickness(0, 5, 0, 10);
-
-                    var scrollViewer = new ScrollViewer
+                    try
                     {
-                        Height = 400,
-                        Content = markdownText,
-                        VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                        Margin = new Thickness(10)
-                    };
+                        await webView.EnsureCoreWebView2Async();
+                        
+                        var actualTheme = (this.Content as FrameworkElement)?.ActualTheme ?? ElementTheme.Default;
+                        if (actualTheme == ElementTheme.Default)
+                        {
+                            actualTheme = Application.Current.RequestedTheme == ApplicationTheme.Dark ? ElementTheme.Dark : ElementTheme.Light;
+                        }
+
+                        // Load merged github markdown css and set color-scheme manually over media query
+                        string cssContent = "";
+                        using (var stream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream($"EricGameLauncher.webview.css"))
+                        using (var reader = new System.IO.StreamReader(stream!))
+                        {
+                            cssContent = reader.ReadToEnd();
+                        }
+
+                        string htmlContent = $@"
+                        <!DOCTYPE html>
+                        <html data-theme='{(actualTheme == ElementTheme.Dark ? "dark" : "light")}'>
+                        <head>
+                            <meta charset='utf-8'>
+                            <style>
+                                {cssContent}
+                                /* Force the desired mode manually ignoring OS media scheme when needed */
+                                @media (prefers-color-scheme: light), (prefers-color-scheme: dark) {{
+                                    html[data-theme='dark'] .markdown-body {{ background-color: #0d1117; color: #e6edf3; }}
+                                    html[data-theme='light'] .markdown-body {{ background-color: #ffffff; color: #1F2328; }}
+                                }}
+                                body {{
+                                    box-sizing: border-box; overflow-x: hidden; margin: 0; padding: 25px;
+                                    background-color: transparent !important;
+                                }}
+                                @media (max-width: 767px) {{
+                                    body {{
+                                        padding: 15px; width: 95%;
+                                    }}
+                                }}
+                            </style>
+                        </head>
+                        <body class='markdown-body'>
+                            {(!string.IsNullOrEmpty(release.body_html) ? release.body_html : release.body)}
+                        </body>
+                        </html>";
+
+                        webView.NavigateToString(htmlContent);
+                    }
+                    catch (Exception)
+                    {
+                        // Fallback completely native text block if WebView2 isn't installed
+                        webView = null;
+                    }
+
+                    // 动态获取当前窗口逻辑尺寸，计算弹窗目标尺寸（不超过80%窗口面积）
+                    double windowW = this.Bounds.Width;
+                    double windowH = this.Bounds.Height;
+                    double dialogW = Math.Max(560, windowW * 0.80);
+                    double dialogH = Math.Max(420, windowH * 0.78);
+                    // ContentDialog内容区高度 = 弹窗总高度 - 标题栏+按钮区约150px
+                    double contentAreaH = Math.Max(280, dialogH - 150);
+
+                    object? dialogContent = null;
+                    if (webView != null)
+                    {
+                        webView.MinWidth = dialogW - 48;
+                        webView.MinHeight = contentAreaH;
+                        dialogContent = webView;
+                    }
+                    else
+                    {
+                        var textFallback = new TextBlock
+                        {
+                            Text = $"## {release.name}\n\n{release.body}",
+                            TextWrapping = TextWrapping.Wrap
+                        };
+                        dialogContent = new ScrollViewer { Content = textFallback, Height = contentAreaH };
+                    }
 
                     ContentDialog noUpdateDialog = new ContentDialog
                     {
-                        Title = I18n.T("Update_NoUpdateTitle"),
-                        Content = scrollViewer,
-                        CloseButtonText = "OK",
+                        Title = $"{I18n.T("Update_NoUpdateContent")}  ·  {release.name}",
+                        Content = dialogContent,
+                        CloseButtonText = I18n.T("Update_OK"),
                         PrimaryButtonText = string.IsNullOrEmpty(downloadUrl) ? "" : I18n.T("Update_Repair"),
+                        DefaultButton = ContentDialogButton.Close,
                         XamlRoot = this.Content.XamlRoot
                     };
-                    
+
+                    // 覆盖系统默认的 ContentDialogMaxWidth/Height（约500px），放大弹窗承载能力
+                    noUpdateDialog.Resources["ContentDialogMaxWidth"] = dialogW;
+                    noUpdateDialog.Resources["ContentDialogMaxHeight"] = dialogH;
+
                     var result = await noUpdateDialog.ShowAsync();
                     if (result == ContentDialogResult.Primary && !string.IsNullOrEmpty(downloadUrl))
                     {
@@ -354,12 +422,13 @@ namespace EricGameLauncher
             }
             else
             {
-                // 获取失败等回退逻辑
+                // 猫沤路氓锟解€撁ヂぢ泵绰ッ€懊モ€号久┾偓鈧┾偓禄猫戮鈥?
                 ContentDialog noUpdateDialog = new ContentDialog
                 {
                     Title = I18n.T("Update_NoUpdateTitle"),
                     Content = I18n.T("Update_NoUpdateContent"),
-                    CloseButtonText = "OK",
+                    CloseButtonText = I18n.T("Update_OK"),
+                    DefaultButton = ContentDialogButton.Close,
                     XamlRoot = this.Content.XamlRoot
                 };
                 await noUpdateDialog.ShowAsync();
@@ -1545,8 +1614,8 @@ namespace EricGameLauncher
                 {
                     int index = i;
                     var flyout = new MenuFlyout();
-                    var startMenuSub = new MenuFlyoutSubItem { Text = I18n.T("Menu_StartMenu"), Icon = new FontIcon { Glyph = "\uE700" } };
-                    var desktopSub = new MenuFlyoutSubItem { Text = I18n.T("Menu_Desktop"), Icon = new FontIcon { Glyph = "\uE8FC" } };
+                    var startMenuSub = new MenuFlyoutSubItem { Text = I18n.T("Source_StartMenu"), Icon = new FontIcon { Glyph = "\uE700" } };
+                    var desktopSub = new MenuFlyoutSubItem { Text = I18n.T("Source_Desktop"), Icon = new FontIcon { Glyph = "\uE8FC" } };
                     var browseItem = new MenuFlyoutItem { Text = I18n.T("Property_BrowseFile"), Icon = new FontIcon { Glyph = "\uE8E5" } };
 
                     browseItem.Click += (s, e) => BtnBrowseCustom_Click(index);
@@ -1855,7 +1924,7 @@ namespace EricGameLauncher
                     {
 
                         // M1: removed magic Task.Delay(200); confirmed newPath exists via
-                        // the File.Exists guard below — no delay needed.
+                        // the File.Exists guard below 芒鈧?no delay needed.
                         _currentEditingItem.IconPath = null;
                         _currentEditingItem.IconPath = newPath;
 
@@ -2089,24 +2158,10 @@ namespace EricGameLauncher
         {
             try
             {
-                // 用当前项目的克隆建立临时集合，避免即时更新主视图
+                // 莽鈥澛ヂ解€溍モ€帮拷茅隆鹿莽鈥郝♀€灻モ€︹€姑┡♀€犆ヂ宦好€姑ぢ嘎疵︹€斅睹┾€衡€犆ワ拷藛茂录艗茅锟铰棵モ€︼拷氓锟铰趁︹€斅睹︹€郝疵︹€撀懊ぢ嘎幻р€犆モ€郝?
                 _tempOrderCollection = new ObservableCollection<AppItem>(_allItems);
                 OrderItemsControl.ItemsSource = _tempOrderCollection;
                 _orderItemsControl = OrderItemsControl as ListView;
-
-                // Localize sort flyout text
-                PropSaveText.Text = I18n.T("Button_Save");
-                PropDeleteText.Text = I18n.T("Button_Delete");
-
-                PropCustomMenuLabel.Text = I18n.T("Property_CustomMenu");
-                for (int i = 0; i < 10; i++)
-                {
-                    _customTitles[i].PlaceholderText = I18n.T("Property_CustomTitlePlaceholder");
-                    _customCommands[i].PlaceholderText = I18n.T("Property_CustomCommandPlaceholder");
-                    ToolTipService.SetToolTip(_customAdmins[i], I18n.T("Property_RunAsAdmin"));
-                }
-                SortTitle.Text = I18n.T("Sort_Title");
-                SortDescription.Text = I18n.T("Sort_Description");
             }
             catch (Exception) { }
         }
@@ -2133,7 +2188,7 @@ namespace EricGameLauncher
 
         private void BtnEdit_Click(object sender, RoutedEventArgs e)
         {
-            // M4: This handler is intentionally empty — editing is triggered by double-clicking
+            // M4: This handler is intentionally empty 芒鈧?editing is triggered by double-clicking
             // or via the right-click context menu (MenuProp_Click). If a dedicated Edit button
             // is added to the UI, implement the body here.
         }
@@ -2166,7 +2221,7 @@ namespace EricGameLauncher
             {
                 if (_tempOrderCollection != null)
                 {
-                    // 飞层关闭时，一次性保存数据并刷新全局视图
+                    // 茅拢啪氓卤鈥毭モ€β趁┾€斅︹€斅睹寂捗ぢ糕偓忙卢隆忙鈧ぢ匡拷氓颅藴忙鈥⒙懊︼拷庐氓鹿露氓藛路忙鈥撀懊モ€βヂ扁偓猫搂鈥犆モ€郝?
                     ConfigService.SaveItems(_tempOrderCollection.ToList());
                     RefreshView();
                     _tempOrderCollection = null;
@@ -2180,7 +2235,7 @@ namespace EricGameLauncher
             if (item == null || _tempOrderCollection == null) return;
 
             int index = _tempOrderCollection.IndexOf(item);
-            if (index == -1) return; // 防崩保护：如果项目不在集合中，直接返回
+            if (index == -1) return; // 茅藴虏氓麓漏盲驴锟矫ε犅っ寂∶ヂ︹€毭ε九撁┞÷姑р€郝ぢ革拷氓艙篓茅鈥衡€犆ワ拷藛盲赂颅茂录艗莽鈥郝疵ε铰ッ库€澝モ€?
 
             int newIndex = index + offset;
 
@@ -2475,7 +2530,7 @@ namespace EricGameLauncher
 
 
         // L4: FindChildByName performs a linear recursive VisualTree walk on every call.
-        // For the current item sizes (≤ a few hundred items and shallow sub-trees inside
+        // For the current item sizes (芒鈥?a few hundred items and shallow sub-trees inside
         // each GridViewItem template) the cost is negligible. If the collection ever grows
         // large, consider caching results per container or shifting to x:Name code-behind
         // references for the fixed template elements (IconGrid, TitleText, etc.).
@@ -2683,7 +2738,7 @@ namespace EricGameLauncher
         {
             // M5: Custom menu slots use a progressive disclosure pattern.
             // Slot N+1 is shown only when slot N has a non-empty Command.
-            // Slots must therefore be filled sequentially — clearing a middle
+            // Slots must therefore be filled sequentially 芒鈧?clearing a middle
             // slot's Command will hide all subsequent slots (data is preserved
             // internally, just not displayed until restored).
             int visibleCount = 0;
@@ -2709,6 +2764,7 @@ namespace EricGameLauncher
                 }
             }
         }
+
         private async Task StartUpdateFlowAsync(UpdateService.ReleaseInfo release)
         {
             try
@@ -2716,43 +2772,90 @@ namespace EricGameLauncher
                 string downloadUrl = release.assets.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.browser_download_url ?? "";
                 if (string.IsNullOrEmpty(downloadUrl)) return;
 
-                // 1. 准备原生 Markdown 控件 (彻底摆脱 WebView2 缓存文件夹)
-                var markdownText = new CommunityToolkit.WinUI.UI.Controls.MarkdownTextBlock
+                // 1. 氓掳锟矫€⒚ニ嗭拷氓搂鈥姑ヅ?Webview2 氓卤鈥⒚ぢ好ヅ脚该р€澟?Github 忙沤鈥櫭р€八?
+                Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", System.IO.Path.Combine(System.IO.Path.GetTempPath(), "EricGameLauncher_WebView2"));
+                var webView = new Microsoft.UI.Xaml.Controls.WebView2
                 {
-                    Text = $"# {release.name}\n\n{release.body}",
                     HorizontalAlignment = HorizontalAlignment.Stretch,
-                    Margin = new Thickness(0, 0, 10, 0),
-                    Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent)
+                    VerticalAlignment = VerticalAlignment.Stretch
                 };
 
-                // 设置原生样式以适配应用主题
-                markdownText.Header1FontSize = 22;
-                markdownText.Header2FontSize = 18;
-                markdownText.Header1FontWeight = Microsoft.UI.Text.FontWeights.Bold;
-                markdownText.Header2FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
-                markdownText.ParagraphMargin = new Thickness(0, 5, 0, 10);
-
-                var scrollViewer = new ScrollViewer
+                object dialogContent;
+                try
                 {
-                    Height = 400,
-                    Content = markdownText,
-                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                    HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                    Margin = new Thickness(10)
-                };
+                    await webView.EnsureCoreWebView2Async();
+                    
+                    var actualTheme = (this.Content as FrameworkElement)?.ActualTheme ?? ElementTheme.Default;
+                    if (actualTheme == ElementTheme.Default)
+                    {
+                        actualTheme = Application.Current.RequestedTheme == ApplicationTheme.Dark ? ElementTheme.Dark : ElementTheme.Light;
+                    }
+
+                    // Load merged github markdown css and set color-scheme manually over media query
+                    string cssContent = "";
+                    using (var stream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream($"EricGameLauncher.webview.css"))
+                    using (var reader = new System.IO.StreamReader(stream!))
+                    {
+                        cssContent = reader.ReadToEnd();
+                    }
+
+                    string htmlContent = $@"
+                        <!DOCTYPE html>
+                        <html data-theme='{(actualTheme == ElementTheme.Dark ? "dark" : "light")}'>
+                        <head>
+                            <meta charset='utf-8'>
+                            <style>
+                                {cssContent}
+                                /* Force the desired mode manually ignoring OS media scheme when needed */
+                                @media (prefers-color-scheme: light), (prefers-color-scheme: dark) {{
+                                    html[data-theme='dark'] .markdown-body {{ background-color: #0d1117; color: #e6edf3; }}
+                                    html[data-theme='light'] .markdown-body {{ background-color: #ffffff; color: #1F2328; }}
+                                }}
+                                body {{
+                                    box-sizing: border-box; overflow-x: hidden; margin: 0; padding: 25px;
+                                    background-color: transparent !important;
+                                }}
+                                @media (max-width: 767px) {{
+                                    body {{
+                                        padding: 15px; width: 95%;
+                                    }}
+                                }}
+                            </style>
+                        </head>
+                        <body class='markdown-body'>
+                            <h2>{release.name}</h2>
+                            <hr/>
+                            {(!string.IsNullOrEmpty(release.body_html) ? release.body_html : release.body)}
+                        </body>
+                        </html>";
+
+                    webView.NavigateToString(htmlContent);
+                    dialogContent = webView;
+                }
+                catch (Exception)
+                {
+                    // Fallback completely
+                    var textFallback = new TextBlock
+                    {
+                        Text = $"# {release.name}\n\n{(release.body)}",
+                        TextWrapping = TextWrapping.Wrap
+                    };
+                    dialogContent = new ScrollViewer { Content = textFallback, Height = 400 };
+                }
 
                 ContentDialog confirmDialog = new ContentDialog
                 {
                     Title = I18n.T("Update_DialogTitle"),
-                    Content = scrollViewer,
+                    Content = dialogContent,
                     PrimaryButtonText = I18n.T("Update_DialogConfirm"),
                     CloseButtonText = I18n.T("Update_DialogCancel"),
+                    DefaultButton = ContentDialogButton.Primary,
                     XamlRoot = this.Content.XamlRoot
                 };
 
                 if (await confirmDialog.ShowAsync() != ContentDialogResult.Primary) return;
 
-                // 2. 启动外部更新器 (由更新器独立负责下载、进度展示与覆盖)
+                // 2. 氓锟铰ヅ犅ヂも€撁┢捖︹€郝疵︹€撀懊モ劉?(莽鈥澛泵︹€郝疵︹€撀懊モ劉篓莽鈥孤€姑磁该绰Ｃぢ糕€姑铰矫ｂ偓锟矫库€好ヂ郝γヂ扁€⒚ぢ好ぢ概矫︹€犆р€衡€?
                 UpdateService.StartUpdater(downloadUrl);
             }
             catch { }
@@ -2766,4 +2869,5 @@ namespace EricGameLauncher
         }
     }
 }
+
 

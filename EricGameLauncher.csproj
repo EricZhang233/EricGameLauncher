@@ -49,20 +49,14 @@
 
   <!-- 强制预编译并发布 MainUpdater 影子组件 -->
   <Target Name="BuildMainUpdater" BeforeTargets="BeforeBuild">
-    <Message Importance="High"
-      Text="Publishing MainUpdater ($(Configuration)) to intermediate directory..." />
-    <MSBuild Projects="updater.main\updater.main.csproj"
-      Targets="Restore;Publish"
-      Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=false;PublishDir=$(MSBuildProjectDirectory)\payload\updater.main\" />
+    <Message Importance="High" Text="Publishing MainUpdater ($(Configuration)) to intermediate directory..." />
+    <MSBuild Projects="updater.main\updater.main.csproj" Targets="Restore;Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=false;PublishDir=$(MSBuildProjectDirectory)\payload\updater.main\" />
   </Target>
 
   <!-- 强制预编译并发布 CfgUpdater 影子组件 -->
   <Target Name="BuildCfgUpdater" BeforeTargets="BeforeBuild">
-    <Message Importance="High"
-      Text="Publishing CfgUpdater ($(Configuration)) to intermediate directory..." />
-    <MSBuild Projects="updater.cfgver\updater.cfgver.csproj"
-      Targets="Restore;Publish"
-      Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=false;PublishDir=$(MSBuildProjectDirectory)\payload\updater.cfgver\" />
+    <Message Importance="High" Text="Publishing CfgUpdater ($(Configuration)) to intermediate directory..." />
+    <MSBuild Projects="updater.cfgver\updater.cfgver.csproj" Targets="Restore;Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=false;PublishDir=$(MSBuildProjectDirectory)\payload\updater.cfgver\" />
   </Target>
 
   <!-- 4. 构建生命周期管理：构建后阶段 (Post-Build & Cleanup) -->
@@ -75,17 +69,13 @@
 
   <!-- Release 自动化打包流 -->
   <Target Name="ZipReleaseBuild" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
-    <Message Importance="High"
-      Text="Zipping Release artifacts to EricGameLauncher_$(ExtractedVersion).zip..." />
+    <Message Importance="High" Text="Zipping Release artifacts to EricGameLauncher_$(ExtractedVersion).zip..." />
     <MakeDir Directories="output" />
-    <ZipDirectory SourceDirectory="$(OutputPath)"
-      DestinationFile="output\EricGameLauncher_$(ExtractedVersion).zip"
-      Overwrite="true" />
+    <ZipDirectory SourceDirectory="$(OutputPath)" DestinationFile="output\EricGameLauncher_$(ExtractedVersion).zip" Overwrite="true" />
   </Target>
 
   <!-- 极致 Release 清理：压缩包生成后物理抹除所有项目缓存 -->
-  <Target Name="ReleasePostCleanPayload" AfterTargets="ZipReleaseBuild"
-    Condition="'$(Configuration)' == 'Release'">
+  <Target Name="ReleasePostCleanPayload" AfterTargets="ZipReleaseBuild" Condition="'$(Configuration)' == 'Release'">
     <RemoveDir Directories="bin" />
     <RemoveDir Directories="obj" />
     <RemoveDir Directories="updater.main\bin" />
@@ -93,8 +83,7 @@
     <RemoveDir Directories="updater.cfgver\bin" />
     <RemoveDir Directories="updater.cfgver\obj" />
     <RemoveDir Directories="payload" />
-    <Message Importance="High"
-      Text="Release post-build cleanup: payload and binary directories removed." />
+    <Message Importance="High" Text="Release post-build cleanup: payload and binary directories removed." />
   </Target>
 
   <!-- 5. 全量硬核 Clean 操作集成 (Hard Clean Integration) -->
@@ -106,8 +95,7 @@
     <RemoveDir Directories="updater.cfgver\bin" />
     <RemoveDir Directories="updater.cfgver\obj" />
     <RemoveDir Directories="payload" />
-    <Message Importance="High"
-      Text="Hard Clean: Physically removed all build and payload directories." />
+    <Message Importance="High" Text="Hard Clean: Physically removed all build and payload directories." />
   </Target>
 
   <!-- 6. 依赖与资源管理 (Dependencies & Resources) -->
@@ -124,6 +112,7 @@
     <None Include="Package.appxmanifest" />
     <EmbeddedResource Include="ico.ico" />
     <EmbeddedResource Include="i18n.json" />
+    <EmbeddedResource Include="webview.css" />
   </ItemGroup>
 
   <ItemGroup>
@@ -136,24 +125,18 @@
   <ItemGroup>
     <None Remove="payload\updater.main\**" />
     <Content Remove="payload\updater.main\**" />
-    <EmbeddedResource Include="payload\updater.main\updater.main.exe"
-      LogicalName="EricGameLauncher.updater.main.exe" />
-    <EmbeddedResource Include="payload\updater.main\updater.main.dll"
-      LogicalName="EricGameLauncher.updater.main.dll" />
-    <EmbeddedResource Include="payload\updater.main\updater.main.runtimeconfig.json"
-      LogicalName="EricGameLauncher.updater.main.runtimeconfig.json" />
+    <EmbeddedResource Include="payload\updater.main\updater.main.exe" LogicalName="EricGameLauncher.updater.main.exe" />
+    <EmbeddedResource Include="payload\updater.main\updater.main.dll" LogicalName="EricGameLauncher.updater.main.dll" />
+    <EmbeddedResource Include="payload\updater.main\updater.main.runtimeconfig.json" LogicalName="EricGameLauncher.updater.main.runtimeconfig.json" />
   </ItemGroup>
 
   <!-- CfgUpdater 影子分发配置 (非单文件) -->
   <ItemGroup>
     <None Remove="payload\updater.cfgver\**" />
     <Content Remove="payload\updater.cfgver\**" />
-    <EmbeddedResource Include="payload\updater.cfgver\updater.cfgver.exe"
-      LogicalName="EricGameLauncher.updater.cfgver.exe" />
-    <EmbeddedResource Include="payload\updater.cfgver\updater.cfgver.dll"
-      LogicalName="EricGameLauncher.updater.cfgver.dll" />
-    <EmbeddedResource Include="payload\updater.cfgver\updater.cfgver.runtimeconfig.json"
-      LogicalName="EricGameLauncher.updater.cfgver.runtimeconfig.json" />
+    <EmbeddedResource Include="payload\updater.cfgver\updater.cfgver.exe" LogicalName="EricGameLauncher.updater.cfgver.exe" />
+    <EmbeddedResource Include="payload\updater.cfgver\updater.cfgver.dll" LogicalName="EricGameLauncher.updater.cfgver.dll" />
+    <EmbeddedResource Include="payload\updater.cfgver\updater.cfgver.runtimeconfig.json" LogicalName="EricGameLauncher.updater.cfgver.runtimeconfig.json" />
   </ItemGroup>
 
 </Project>
