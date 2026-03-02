@@ -1,5 +1,4 @@
-﻿//using System;
-using System.Threading;
+﻿using System.Threading;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -344,6 +343,12 @@ namespace EricGameLauncher
             set { if (_configData?.Settings != null) _configData.Settings.Language = value; }
         }
 
+        public static string UpdateChannel
+        {
+            get => _configData?.Settings?.UpdateChannel ?? "stable";
+            set { if (_configData?.Settings != null) _configData.Settings.UpdateChannel = value; }
+        }
+
         public static bool IsSystemMode => CurrentDataPath == SystemBasePath;
 
         public static async Task<bool> ReconstructMissingConfigAsync()
@@ -388,7 +393,6 @@ namespace EricGameLauncher
 
         public static async Task RefreshGlobalAsync()
         {
-            // 1. Icon Reconstruction
             var items = LoadItems();
             var rebuildTasks = new List<Task>();
             int successfulRebuilds = 0;
@@ -404,7 +408,6 @@ namespace EricGameLauncher
                             string? sourcePath = item.ExePath;
                             string? resolvedPath = null;
 
-                            // Resolve protocols
                             if (SteamHelper.ExtractAppIdFromUrl(item.ExePath!) is int)
                                 resolvedPath = SteamHelper.GetExecutableFromSteamUrl(item.ExePath!);
                             else if (GamePlatformHelper.DetectPlatform(item.ExePath!)?.PlatformName == "Epic Games")
@@ -435,11 +438,6 @@ namespace EricGameLauncher
                             }
 
                             string? iconPath = null;
-                            // When dealing with UWP/apps folder paths the file system checks
-                            // above will always return false (they're not real files), which
-                            // previously meant icons could never be rebuilt after a batch import
-                            // scan.  We now treat any path prefixed with the UWP constant as
-                            // valid for icon extraction.
                             bool resolvedIsStoreApp = !string.IsNullOrEmpty(resolvedPath) &&
                                                       resolvedPath.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase);
                             bool sourceIsStoreApp = !string.IsNullOrEmpty(sourcePath) &&
@@ -479,15 +477,12 @@ namespace EricGameLauncher
                 await Task.WhenAll(rebuildTasks);
                 if (successfulRebuilds > 0)
                 {
-                    // Pass false to avoid double event trigger
                     SaveItems(items, false);
                 }
             }
 
-            // 2. Platform Reconstruction
             await ReconstructMissingConfigAsync();
 
-            // 3. Notify UI (One stop shop)
             DataChanged?.Invoke();
         }
 
@@ -1069,6 +1064,9 @@ namespace EricGameLauncher
         [JsonPropertyName("language")]
         public string Language { get; set; } = "";
 
+        [JsonPropertyName("updateChannel")]
+        public string UpdateChannel { get; set; } = "stable";
+
         [JsonPropertyName("windowBounds")]
         [JsonConverter(typeof(IntArrayJsonConverter))]
         public int[] WindowBounds { get; set; } = [-1, -1, 950, 650];
@@ -1127,8 +1125,6 @@ namespace EricGameLauncher
 
     public sealed class ImagePathConverter : IValueConverter
     {
-        // In-memory soft-reference cache: key = "path@ticks", value = WeakReference<BitmapImage>
-        // WeakReference lets GC reclaim images under memory pressure without needing explicit eviction.
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, WeakReference<BitmapImage>> _bitmapCache = new();
 
         public object? Convert(object value, Type targetType, object parameter, string language)
@@ -1144,11 +1140,9 @@ namespace EricGameLauncher
                 long cacheKey = new FileInfo(path).LastWriteTime.Ticks;
                 string cacheEntry = $"{path}@{cacheKey}";
 
-                // Try to return the already-decoded BitmapImage from the in-memory cache
                 if (_bitmapCache.TryGetValue(cacheEntry, out var weakRef) && weakRef.TryGetTarget(out var cached))
                     return cached;
 
-                // Cache miss or GC-collected: create a new BitmapImage
                 var bitmap = new BitmapImage();
                 bitmap.DecodePixelWidth = 256;
                 bitmap.DecodePixelHeight = 256;
@@ -1261,10 +1255,6 @@ namespace EricGameLauncher
         public static async Task<string?> GetIconPathAsync(string exePath, string itemId, bool forceExtract = false)
         {
             if (string.IsNullOrEmpty(exePath)) return null;
-            // If the caller wants to override the cached icon (for example, user
-            // explicitly changed it), delete any existing file first so we don't
-            // return stale data.  forceExtract is intentionally false by default to
-            // preserve previous behaviour in bulk operations.
             string iconPath = Path.Combine(CachePath, $"{itemId}.png");
             if (forceExtract && File.Exists(iconPath))
             {
@@ -1280,8 +1270,6 @@ namespace EricGameLauncher
             {
                 if (string.IsNullOrEmpty(sourcePath)) return null;
                 bool isStoreApp = sourcePath.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase);
-                // skip existence check here; callers generally expect extraction to proceed
-                // and failure will be handled by returning null downstream.
 
                 string targetPath = sourcePath;
                 int iconIndex = 0;
@@ -2078,10 +2066,8 @@ namespace EricGameLauncher
             if (string.IsNullOrEmpty(installDir) || string.IsNullOrEmpty(libraryPath)) return null;
             string gameDir = Path.Combine(libraryPath, "steamapps", "common", installDir);
 
-            // 优化：不再使用不稳定的可执行文件探测逻辑，直接进行启发式扫描
             string? fullExePath = FindMainExecutable(gameDir, gameName);
 
-            // 增加兜底方案：如果找不到 EXE（或 DLL），则使用 Steam 本地缓存的图标
             if (string.IsNullOrEmpty(fullExePath) || !File.Exists(fullExePath))
             {
                 string? steamPath = DetectSteamPath();
@@ -2117,14 +2103,12 @@ namespace EricGameLauncher
                 if (!Directory.Exists(gameDir)) return null;
 
                 var exeFiles = new List<string>();
-                // 获取两层深度的所有 EXE
                 foreach (var file in Directory.EnumerateFiles(gameDir, "*.exe", SearchOption.TopDirectoryOnly)) exeFiles.Add(file);
                 foreach (var subDir in Directory.EnumerateDirectories(gameDir))
                 {
                     try
                     {
                         string dirName = Path.GetFileName(subDir).ToLower();
-                        // 忽略某些明显的非主程序目录以提速
                         if (dirName == "engine" || dirName == "redist") continue;
                         foreach (var file in Directory.EnumerateFiles(subDir, "*.exe", SearchOption.TopDirectoryOnly)) exeFiles.Add(file);
                     }
@@ -2144,19 +2128,15 @@ namespace EricGameLauncher
                     string fileName = Path.GetFileNameWithoutExtension(f).ToLower();
                     string normalizedFileName = Regex.Replace(fileName, @"[^a-z0-9]", "");
 
-                    // 1. 黑名单过滤（致命打击 -1000）
                     if (excludePatterns.Any(p => fileName.Contains(p))) score -= 1000;
 
-                    // 2. 名称匹配评分 (+50)
                     if (normalizedFileName == normalizedGameName || normalizedFileName == normalizedDirName) score += 50;
                     else if (normalizedFileName.Contains(normalizedGameName) || normalizedGameName.Contains(normalizedFileName)) score += 30;
 
-                    // 3. 文件体积评分 (+30)
                     long length = new FileInfo(f).Length;
-                    if (length > 10 * 1024 * 1024) score += 30; // 超过 10MB
-                    else if (length > 1 * 1024 * 1024) score += 15; // 超过 1MB
+                    if (length > 10 * 1024 * 1024) score += 30;
+                    else if (length > 1 * 1024 * 1024) score += 15;
 
-                    // 4. 目录深度评分 (+20)
                     string? dir = Path.GetDirectoryName(f);
                     if (dir != null && dir.Equals(gameDir, StringComparison.OrdinalIgnoreCase)) score += 20;
 
@@ -2603,7 +2583,16 @@ namespace EricGameLauncher
     {
         private static readonly HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
         private const string GitHubApiUrl = "https://api.github.com/repos/EricZhang233/EricGameLauncher/releases/latest";
+        private const string AllReleasesApiUrl = "https://api.github.com/repos/EricZhang233/EricGameLauncher/releases?per_page=100";
         private const string MirrorPrefix = "https://ghproxy.com/";
+
+        public static bool IsStableVersion(string tagName)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(tagName, @"(\d+)\.(\d+)\.(\d+)");
+            if (!m.Success) return false;
+            int v3 = int.Parse(m.Groups[3].Value);
+            return v3 > 0 && v3 % 10 == 0;
+        }
 
         public class ReleaseInfo
         {
@@ -2629,7 +2618,6 @@ namespace EricGameLauncher
                 if (!client.DefaultRequestHeaders.Contains("User-Agent"))
                     client.DefaultRequestHeaders.Add("User-Agent", "EricGameLauncher-Updater");
                 
-                // Add Accept header to tell GitHub to return rendered HTML body as well
                 if (!client.DefaultRequestHeaders.Contains("Accept"))
                     client.DefaultRequestHeaders.Add("Accept", "application/vnd.github.v3.html+json");
 
@@ -2638,11 +2626,38 @@ namespace EricGameLauncher
             catch { return null; }
         }
 
-        public static async Task<ReleaseInfo?> CheckForUpdateAsync()
+        public static async Task<ReleaseInfo?> GetLatestStableReleaseAsync()
         {
             try
             {
-                var release = await GetLatestReleaseAsync();
+                if (!client.DefaultRequestHeaders.Contains("User-Agent"))
+                    client.DefaultRequestHeaders.Add("User-Agent", "EricGameLauncher-Updater");
+                if (!client.DefaultRequestHeaders.Contains("Accept"))
+                    client.DefaultRequestHeaders.Add("Accept", "application/vnd.github.v3.html+json");
+
+                var releases = await client.GetFromJsonAsync<List<ReleaseInfo>>(AllReleasesApiUrl);
+                if (releases == null || releases.Count == 0) return null;
+
+                return releases
+                    .Where(r => IsStableVersion(r.tag_name))
+                    .OrderByDescending(r =>
+                    {
+                        var m = System.Text.RegularExpressions.Regex.Match(r.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
+                        return m.Success ? new Version(m.Value) : new Version(0, 0, 0);
+                    })
+                    .FirstOrDefault();
+            }
+            catch { return null; }
+        }
+
+        public static Task<ReleaseInfo?> GetReleaseAsync(string channel)
+            => channel == "latest" ? GetLatestReleaseAsync() : GetLatestStableReleaseAsync();
+
+        public static async Task<ReleaseInfo?> CheckForUpdateAsync(string channel = "stable")
+        {
+            try
+            {
+                var release = await GetReleaseAsync(channel);
                 if (release == null || string.IsNullOrEmpty(release.tag_name)) return null;
 
                 var match = System.Text.RegularExpressions.Regex.Match(release.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
@@ -2697,10 +2712,7 @@ namespace EricGameLauncher
 
                 Application.Current.Exit();
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Failed to start updater: " + ex.Message);
-            }
+            catch { }
         }
     }
 

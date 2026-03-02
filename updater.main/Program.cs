@@ -33,7 +33,6 @@ namespace updater.main
             string downloadUrl = args[1];
             string tempZip = Path.Combine(Path.GetTempPath(), $"update_{Guid.NewGuid():N}.zip");
 
-            // 1. Check for Write Access and Self-Elevate if needed
             if (!HasWriteAccess(installDir))
             {
                 if (!IsAdministrator())
@@ -44,14 +43,12 @@ namespace updater.main
                         ProcessStartInfo psi = new ProcessStartInfo
                         {
                             FileName = Process.GetCurrentProcess().MainModule?.FileName,
-                            // O3: escape any embedded double-quotes in each argument to prevent
-                            // command-line parsing errors when paths contain quote characters.
                             Arguments = string.Join(" ", args.Select(a => $"\"{a.Replace("\"", "\\\"")}\"")),
                             UseShellExecute = true,
                             Verb = "runas"
                         };
                         Process.Start(psi);
-                        return; // Exit current instance
+                        return;
                     }
                     catch (Exception ex)
                     {
@@ -70,11 +67,7 @@ namespace updater.main
 
             try
             {
-                // Step 1: Download with Progress
                 Console.WriteLine($"[1/4] Downloading update package...");
-                // L2: set a generous timeout so the download can never hang indefinitely
-                // on a broken connection. 30 minutes covers even very large packages on
-                // a slow connection while still ensuring eventual cleanup.
                 using (var client = new HttpClient { Timeout = TimeSpan.FromMinutes(30) })
                 {
                     client.DefaultRequestHeaders.Add("User-Agent", "EricGameLauncher-Updater");
@@ -103,7 +96,6 @@ namespace updater.main
                                 var now = DateTime.Now;
                                 var elapsedSinceReport = (now - lastReportTime).TotalMilliseconds;
 
-                                // Update every 200ms or at completion
                                 if (elapsedSinceReport > 200 || totalRead == totalBytes)
                                 {
                                     lastReportTime = now;
@@ -127,7 +119,6 @@ namespace updater.main
                 }
                 Console.WriteLine("\n      Download completed.");
 
-                // Step 2: Kill existing processes
                 Console.WriteLine($"[2/4] Closing Eric Game Launcher...");
                 var processes = Process.GetProcessesByName("EricGameLauncher");
                 foreach (var p in processes)
@@ -136,19 +127,16 @@ namespace updater.main
                 }
                 await Task.Delay(1000);
 
-                // Step 3: Extract and replace
                 Console.WriteLine($"[3/4] Applying updates...");
                 string stagingDir = Path.Combine(installDir, "._update_staging");
                 string backupDir = Path.Combine(installDir, "._update_backup");
 
-                // Clear any leftover staging/backup from previous failed runs
                 if (Directory.Exists(stagingDir)) Directory.Delete(stagingDir, true);
                 if (Directory.Exists(backupDir)) Directory.Delete(backupDir, true);
                 Directory.CreateDirectory(stagingDir);
 
                 try
                 {
-                    // Phase 1: Extract everything to staging directory
                     using (ZipArchive archive = ZipFile.OpenRead(tempZip))
                     {
                         foreach (ZipArchiveEntry entry in archive.Entries)
@@ -156,9 +144,8 @@ namespace updater.main
                             if (string.IsNullOrEmpty(entry.Name)) continue;
 
                             string stagingPath = Path.GetFullPath(Path.Combine(stagingDir, entry.FullName));
-                            if (!stagingPath.StartsWith(stagingDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue; // Zip slip
+                            if (!stagingPath.StartsWith(stagingDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
 
-                            // Do not extract data configs
                             if (entry.FullName.ToLower().StartsWith("data/")) continue;
 
                             string destDir = Path.GetDirectoryName(stagingPath)!;
@@ -168,7 +155,6 @@ namespace updater.main
                         }
                     }
 
-                    // Phase 2: Backup current files
                     Directory.CreateDirectory(backupDir);
                     var currentFiles = Directory.GetFiles(installDir, "*", SearchOption.AllDirectories)
                         .Where(f => !f.StartsWith(stagingDir) && !f.StartsWith(backupDir) && !f.ToLower().Contains("\\data\\") && !f.ToLower().EndsWith(".update_staging") && !f.ToLower().EndsWith(".update_backup"));
@@ -182,7 +168,6 @@ namespace updater.main
                         File.Move(file, backupPath, true);
                     }
 
-                    // Phase 3: Move from staging to actual
                     var stagedFiles = Directory.GetFiles(stagingDir, "*", SearchOption.AllDirectories);
                     foreach (var file in stagedFiles)
                     {
@@ -199,7 +184,6 @@ namespace updater.main
                     Console.WriteLine("Attempting rollback...");
                     try
                     {
-                        // Rollback from backup
                         if (Directory.Exists(backupDir))
                         {
                             var backupFiles = Directory.GetFiles(backupDir, "*", SearchOption.AllDirectories);
@@ -217,16 +201,14 @@ namespace updater.main
                     {
                         Console.WriteLine("FATAL: Rollback failed! " + rbEx.Message);
                     }
-                    throw; // Rethrow to show standard error and exit
+                    throw;
                 }
                 finally
                 {
-                    // Cleanup phase
                     try { if (Directory.Exists(stagingDir)) Directory.Delete(stagingDir, true); } catch { }
                     try { if (Directory.Exists(backupDir)) Directory.Delete(backupDir, true); } catch { }
                 }
 
-                // Step 4: Restart
                 Console.WriteLine($"[4/4] Restarting application...");
                 string exePath = Path.Combine(installDir, "EricGameLauncher.exe");
                 if (File.Exists(exePath))

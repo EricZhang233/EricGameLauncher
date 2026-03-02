@@ -32,6 +32,10 @@
 		"Settings_Title": "设置",
 		"Settings_General": "常规",
 		"Settings_CloseAfterLaunch": "启动程序后自动退出",
+		"Settings_UpdateChannel": "更新通道",
+		"Settings_UpdateChannel_Stable": "稳定版",
+		"Settings_UpdateChannel_Latest": "开发版",
+		"Settings_UpdateChannel_Desc": "稳定版以稳定性为优先，通常不包含最新功能；开发版始终跟进最新发行版，可能含有尚未确认的缺陷。",
 		"Settings_DataLocation": "数据存储位置",
 		"Settings_SystemMode": "系统模式",
 		"Settings_PortableMode": "便携模式",
@@ -84,6 +88,7 @@
 		"Scanner_ExistingGames": "已存在 ({0})",
 		"Scanner_ImportAll": "导入全部新增项目",
 		"Update_Repair": "强制重装",
+		"Update_ChannelNote": "当前更新通道：{0}。可前往「设置」中切换。",
 		"Update_OK": "确定"
 	},
 	"EN": {
@@ -119,6 +124,10 @@
 		"Settings_Title": "Settings",
 		"Settings_General": "General",
 		"Settings_CloseAfterLaunch": "Close after launching app",
+		"Settings_UpdateChannel": "Update Channel",
+		"Settings_UpdateChannel_Stable": "Stable",
+		"Settings_UpdateChannel_Latest": "Dev",
+		"Settings_UpdateChannel_Desc": "Stable prioritizes reliability and may not include the latest features. Dev always updates to the latest release but may contain unverified issues.",
 		"Settings_DataLocation": "Data Location",
 		"Settings_SystemMode": "System Mode",
 		"Settings_PortableMode": "Portable Mode",
@@ -171,6 +180,7 @@
 		"Scanner_ExistingGames": "Existing ({0})",
 		"Scanner_ImportAll": "Import All New Items",
 		"Update_Repair": "Force Reinstall",
+		"Update_ChannelNote": "Current update channel: {0}. You can switch it in Settings.",
 		"Update_OK": "OK"
 	},
 	"Zh-TW": {
@@ -206,6 +216,10 @@
 		"Settings_Title": "設定",
 		"Settings_General": "一般",
 		"Settings_CloseAfterLaunch": "啟動應用程式後自動關閉",
+		"Settings_UpdateChannel": "更新通道",
+		"Settings_UpdateChannel_Stable": "穩定版",
+		"Settings_UpdateChannel_Latest": "開發版",
+		"Settings_UpdateChannel_Desc": "穩定版以穩定性為優先，通常不包含最新功能；開發版始終跟進最新發行版，可能含有尚未確認的缺陷。",
 		"Settings_DataLocation": "資料儲存位置",
 		"Settings_SystemMode": "系統模式",
 		"Settings_PortableMode": "攜帶式模式",
@@ -258,6 +272,7 @@
 		"Update_NoUpdateTitle": "檢查更新",
 		"Update_NoUpdateContent": "您目前使用的是最新版本。",
 		"Update_Repair": "強制重新安裝",
+		"Update_ChannelNote": "目前更新通道：{0}。可前往「設定」中切換。",
 		"Update_OK": "確定"
 	},
 	"JA": {
@@ -294,6 +309,10 @@
 		"Settings_Title": "設定",
 		"Settings_General": "一般",
 		"Settings_CloseAfterLaunch": "起動後に自動終了",
+		"Settings_UpdateChannel": "更新チャンネル",
+		"Settings_UpdateChannel_Stable": "安定版",
+		"Settings_UpdateChannel_Latest": "開発版",
+		"Settings_UpdateChannel_Desc": "安定版は安定性を優先するため、最新機能が含まれない場合があります。開発版は常に最新リリースへ更新されますが、未確認の不具合が含まれる可能性があります。",
 		"Settings_DataLocation": "データ保存場所",
 		"Settings_SystemMode": "システムモード",
 		"Settings_PortableMode": "ポータブルモード",
@@ -345,12 +364,12 @@
 		"Update_NoUpdateTitle": "アップデートを確認",
 		"Update_NoUpdateContent": "現在の最新バージョンをお使いです。",
 		"Update_Repair": "強制再インストール",
+		"Update_ChannelNote": "現在の更新チャンネル：{0}。設定から変更できます。",
 		"Update_OK": "OK"
 	},
 	"KO": {
 		"_LangName": "한국어",
 		"App_Title": "Eric Game Launcher",
-		"TitleBar_Search": "검색",
 		"TitleBar_SearchPlaceholder": "검색...",
 		"TitleBar_More": "더 보기",
 		"Menu_IconSize": "아이콘 크기",
@@ -372,6 +391,10 @@
 		"Settings_Title": "설정",
 		"Settings_General": "일반",
 		"Settings_CloseAfterLaunch": "앱 실행 후 자동 종료",
+		"Settings_UpdateChannel": "업데이트 채널",
+		"Settings_UpdateChannel_Stable": "안정 버전",
+		"Settings_UpdateChannel_Latest": "개발 버전",
+		"Settings_UpdateChannel_Desc": "안정 버전은 안정성을 우선시하며 최신 기능이 포함되지 않을 수 있습니다. 개발 버전은 항상 최신 릴리스로 업데이트되지만 확인되지 않은 버그가 포함될 수 있습니다.",
 		"Settings_DataLocation": "데이터 저장 위치",
 		"Settings_SystemMode": "시스템 모드",
 		"Settings_PortableMode": "포터블 모드",
@@ -424,6 +447,7 @@
 		"Update_NoUpdateTitle": "업데이트 확인",
 		"Update_NoUpdateContent": "현재 최신 버전을 사용 중입니다.",
 		"Update_Repair": "강제 재설치",
+		"Update_ChannelNote": "현재 업데이트 채널: {0}. 설정에서 변경할 수 있습니다.",
 		"Update_OK": "확인"
 	},
 	"FR": {
@@ -451,6 +475,10 @@
 		"Settings_Title": "Paramètres",
 		"Settings_General": "Général",
 		"Settings_CloseAfterLaunch": "Fermer après le lancement",
+		"Settings_UpdateChannel": "Canal de mise à jour",
+		"Settings_UpdateChannel_Stable": "Stable",
+		"Settings_UpdateChannel_Latest": "Dev",
+		"Settings_UpdateChannel_Desc": "Stable privilégie la fiabilité et peut ne pas inclure les dernières fonctionnalités. Dev suit toujours la dernière version publiée, mais peut contenir des problèmes non vérifiés.",
 		"Settings_DataLocation": "Emplacement des données",
 		"Settings_SystemMode": "Mode système",
 		"Settings_PortableMode": "Mode portable",
@@ -503,6 +531,7 @@
 		"Update_NoUpdateTitle": "Vérifier les mises à jour",
 		"Update_NoUpdateContent": "Vous utilisez déjà la dernière version.",
 		"Update_Repair": "Réinstallation Forcée",
+		"Update_ChannelNote": "Canal actuel : {0}. Modifiable dans Paramètres.",
 		"Update_OK": "OK"
 	},
 	"DE": {
@@ -530,6 +559,10 @@
 		"Settings_Title": "Einstellungen",
 		"Settings_General": "Allgemein",
 		"Settings_CloseAfterLaunch": "Nach dem Start schließen",
+		"Settings_UpdateChannel": "Updatekanal",
+		"Settings_UpdateChannel_Stable": "Stabil",
+		"Settings_UpdateChannel_Latest": "Dev",
+		"Settings_UpdateChannel_Desc": "Stabil priorisiert Zuverlässigkeit und enthält möglicherweise nicht die neuesten Funktionen. Dev wird immer auf die neueste Veröffentlichung aktualisiert, kann jedoch nicht verifizierte Fehler enthalten.",
 		"Settings_DataLocation": "Datenspeicherort",
 		"Settings_SystemMode": "Systemmodus",
 		"Settings_PortableMode": "Portabler Modus",
@@ -582,6 +615,7 @@
 		"Update_NoUpdateTitle": "Nach Updates suchen",
 		"Update_NoUpdateContent": "Sie verwenden bereits die neueste Version.",
 		"Update_Repair": "Neuinstallation",
+		"Update_ChannelNote": "Aktueller Updatekanal: {0}. \u00c4nderbar in den Einstellungen.",
 		"Update_OK": "OK"
 	},
 	"ES": {
@@ -609,6 +643,10 @@
 		"Settings_Title": "Configuración",
 		"Settings_General": "General",
 		"Settings_CloseAfterLaunch": "Cerrar al lanzar la aplicación",
+		"Settings_UpdateChannel": "Canal de actualización",
+		"Settings_UpdateChannel_Stable": "Estable",
+		"Settings_UpdateChannel_Latest": "Dev",
+		"Settings_UpdateChannel_Desc": "Estable prioriza la fiabilidad y puede no incluir las últimas funciones. Dev siempre se actualiza a la última versión publicada, pero puede contener errores no verificados.",
 		"Settings_DataLocation": "Ubicación de datos",
 		"Settings_SystemMode": "Modo sistema",
 		"Settings_PortableMode": "Modo portátil",
@@ -661,6 +699,7 @@
 		"Update_NoUpdateTitle": "Buscar actualizaciones",
 		"Update_NoUpdateContent": "Ya está usando la última versión.",
 		"Update_Repair": "Reinstalación Forzada",
+		"Update_ChannelNote": "Canal actual: {0}. Se puede cambiar en Configuraci\u00f3n.",
 		"Update_OK": "OK"
 	}
 }
