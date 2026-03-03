@@ -300,124 +300,7 @@ namespace EricGameLauncher
                 }
                 else
                 {
-                    string downloadUrl = release.assets.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.browser_download_url ?? "";
-                    
-                    Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", System.IO.Path.Combine(System.IO.Path.GetTempPath(), "EricGameLauncher_WebView2"));
-                    var webView = new Microsoft.UI.Xaml.Controls.WebView2
-                    {
-                        HorizontalAlignment = HorizontalAlignment.Stretch,
-                        VerticalAlignment = VerticalAlignment.Stretch
-                    };
-
-                    try
-                    {
-                        await webView.EnsureCoreWebView2Async();
-                        
-                        var actualTheme = (this.Content as FrameworkElement)?.ActualTheme ?? ElementTheme.Default;
-                        if (actualTheme == ElementTheme.Default)
-                        {
-                            actualTheme = Application.Current.RequestedTheme == ApplicationTheme.Dark ? ElementTheme.Dark : ElementTheme.Light;
-                        }
-
-                        string cssContent = "";
-                        using (var stream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream($"EricGameLauncher.webview.css"))
-                        using (var reader = new System.IO.StreamReader(stream!))
-                        {
-                            cssContent = reader.ReadToEnd();
-                        }
-
-                        string htmlContent = $@"
-                        <!DOCTYPE html>
-                        <html data-theme='{(actualTheme == ElementTheme.Dark ? "dark" : "light")}'>
-                        <head>
-                            <meta charset='utf-8'>
-                            <style>
-                                {cssContent}
-                                /* Force the desired mode manually ignoring OS media scheme when needed */
-                                @media (prefers-color-scheme: light), (prefers-color-scheme: dark) {{
-                                    html[data-theme='dark'] .markdown-body {{ background-color: #0d1117; color: #e6edf3; }}
-                                    html[data-theme='light'] .markdown-body {{ background-color: #ffffff; color: #1F2328; }}
-                                }}
-                                body {{
-                                    box-sizing: border-box; overflow-x: hidden; margin: 0; padding: 25px;
-                                    background-color: transparent !important;
-                                }}
-                                @media (max-width: 767px) {{
-                                    body {{
-                                        padding: 15px; width: 95%;
-                                    }}
-                                }}
-                            </style>
-                        </head>
-                        <body class='markdown-body'>
-                            {(!string.IsNullOrEmpty(release.body_html) ? release.body_html : release.body)}
-                        </body>
-                        </html>";
-
-                        webView.NavigateToString(htmlContent);
-                    }
-                    catch (Exception)
-                    {
-                        webView = null;
-                    }
-
-                    double windowW = this.Bounds.Width;
-                    double windowH = this.Bounds.Height;
-                    double dialogW = Math.Max(560, windowW * 0.80);
-                    double dialogH = Math.Max(420, windowH * 0.78);
-                    double contentAreaH = Math.Max(280, dialogH - 150);
-                    double innerH = contentAreaH - 48;
-
-                    object? dialogContent = null;
-                    if (webView != null)
-                    {
-                        webView.MinWidth = dialogW - 48;
-                        webView.MinHeight = innerH;
-                        dialogContent = webView;
-                    }
-                    else
-                    {
-                        var textFallback = new TextBlock
-                        {
-                            Text = $"## {release.name}\n\n{release.body}",
-                            TextWrapping = TextWrapping.Wrap
-                        };
-                        dialogContent = new ScrollViewer { Content = textFallback, Height = innerH };
-                    }
-
-                    string channelNoteName = ConfigService.UpdateChannel == "latest"
-                        ? I18n.T("Settings_UpdateChannel_Latest")
-                        : I18n.T("Settings_UpdateChannel_Stable");
-                    var channelNoteBlock = new TextBlock
-                    {
-                        Text = string.Format(I18n.T("Update_ChannelNote"), channelNoteName),
-                        TextWrapping = TextWrapping.Wrap,
-                        FontSize = 12,
-                        Opacity = 0.6,
-                        Margin = new Thickness(0, 10, 0, 0)
-                    };
-                    var contentWrapper = new StackPanel();
-                    contentWrapper.Children.Add((UIElement)dialogContent!);
-                    contentWrapper.Children.Add(channelNoteBlock);
-
-                    ContentDialog noUpdateDialog = new ContentDialog
-                    {
-                        Title = $"{I18n.T("Update_NoUpdateContent")}  ·  {release.name}",
-                        Content = contentWrapper,
-                        CloseButtonText = I18n.T("Update_OK"),
-                        PrimaryButtonText = string.IsNullOrEmpty(downloadUrl) ? "" : I18n.T("Update_Repair"),
-                        DefaultButton = ContentDialogButton.Close,
-                        XamlRoot = this.Content.XamlRoot
-                    };
-
-                    noUpdateDialog.Resources["ContentDialogMaxWidth"] = dialogW;
-                    noUpdateDialog.Resources["ContentDialogMaxHeight"] = dialogH;
-
-                    var result = await noUpdateDialog.ShowAsync();
-                    if (result == ContentDialogResult.Primary && !string.IsNullOrEmpty(downloadUrl))
-                    {
-                        UpdateService.StartUpdater(downloadUrl);
-                    }
+                    await ShowReleaseDialogAsync(release, hasUpdate: false);
                 }
             }
             else
@@ -2399,12 +2282,12 @@ namespace EricGameLauncher
             if (ConfigService.IsSystemMode)
             {
                 StorageModeText.Text = I18n.T("Settings_SystemMode");
-                SwitchStorageModeText.Text = I18n.T("Settings_SwitchToPortable");
+                ToolTipService.SetToolTip(BtnSwitchStorageMode, I18n.T("Settings_SwitchToPortable"));
             }
             else
             {
                 StorageModeText.Text = I18n.T("Settings_PortableMode");
-                SwitchStorageModeText.Text = I18n.T("Settings_SwitchToSystem");
+                ToolTipService.SetToolTip(BtnSwitchStorageMode, I18n.T("Settings_SwitchToSystem"));
             }
 
 
@@ -2511,10 +2394,9 @@ namespace EricGameLauncher
                 StorageModeText.Text = ConfigService.IsSystemMode
                     ? I18n.T("Settings_SystemMode")
                     : I18n.T("Settings_PortableMode");
-                SwitchStorageModeText.Text = ConfigService.IsSystemMode
+                ToolTipService.SetToolTip(BtnSwitchStorageMode, ConfigService.IsSystemMode
                     ? I18n.T("Settings_SwitchToPortable")
-                    : I18n.T("Settings_SwitchToSystem");
-                ToolTipService.SetToolTip(BtnSwitchStorageMode.Parent as FrameworkElement ?? BtnSwitchStorageMode, I18n.T("Settings_OpenConfigFolder"));
+                    : I18n.T("Settings_SwitchToSystem"));
                 SettingsMigrateNote.Text = I18n.T("Settings_MigrateNote");
                 var languages = I18n.GetAvailableLanguages();
                 LanguageComboBox.SelectionChanged -= LanguageComboBox_SelectionChanged;
@@ -2532,8 +2414,6 @@ namespace EricGameLauncher
 
                 try
                 {
-                    ToolTipService.SetToolTip(BtnSwitchStorageMode, null);
-
                     if (BtnOpenConfigFolder != null)
                         ToolTipService.SetToolTip(BtnOpenConfigFolder, I18n.T("Settings_OpenConfigFolder"));
                 }
@@ -2679,118 +2559,117 @@ namespace EricGameLauncher
 
         private async Task StartUpdateFlowAsync(UpdateService.ReleaseInfo release)
         {
+            try { await ShowReleaseDialogAsync(release, hasUpdate: true); }
+            catch { }
+        }
+
+        private async Task ShowReleaseDialogAsync(UpdateService.ReleaseInfo release, bool hasUpdate)
+        {
+            string downloadUrl = release.assets.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.browser_download_url ?? "";
+            if (hasUpdate && string.IsNullOrEmpty(downloadUrl)) return;
+
+            var (contentGrid, dlgW, dlgH) = await BuildReleaseContentAsync(release, prependTitle: hasUpdate);
+            var dialog = new ContentDialog
+            {
+                Title = hasUpdate
+                    ? (object)I18n.T("Update_DialogTitle")
+                    : $"{I18n.T("Update_NoUpdateContent")}  ·  {release.name}",
+                Content = contentGrid,
+                PrimaryButtonText = hasUpdate ? I18n.T("Update_DialogConfirm") : (string.IsNullOrEmpty(downloadUrl) ? "" : I18n.T("Update_Repair")),
+                CloseButtonText = hasUpdate ? I18n.T("Update_DialogCancel") : I18n.T("Update_OK"),
+                DefaultButton = hasUpdate ? ContentDialogButton.Primary : ContentDialogButton.Close,
+                XamlRoot = this.Content.XamlRoot
+            };
+            dialog.Resources["ContentDialogMaxWidth"] = dlgW;
+            dialog.Resources["ContentDialogMaxHeight"] = dlgH;
+
+            var result = await dialog.ShowAsync();
+            if (result == ContentDialogResult.Primary && !string.IsNullOrEmpty(downloadUrl))
+                UpdateService.StartUpdater(downloadUrl);
+        }
+
+        private async Task<(Grid contentGrid, double dialogW, double dialogH)> BuildReleaseContentAsync(UpdateService.ReleaseInfo release, bool prependTitle)
+        {
+            Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", System.IO.Path.Combine(System.IO.Path.GetTempPath(), "EricGameLauncher_WebView2"));
+            double dialogW = Math.Max(560, this.Bounds.Width * 0.80);
+            double dialogH = Math.Max(420, this.Bounds.Height * 0.78);
+            double innerH = Math.Max(280, dialogH - 150) - 48;
+
+            var webView = new Microsoft.UI.Xaml.Controls.WebView2
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch,
+                Width = dialogW - 48,
+                Height = innerH
+            };
+
+            object dialogContent;
             try
             {
-                string downloadUrl = release.assets.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.browser_download_url ?? "";
-                if (string.IsNullOrEmpty(downloadUrl)) return;
+                await webView.EnsureCoreWebView2Async();
+                var actualTheme = (this.Content as FrameworkElement)?.ActualTheme ?? ElementTheme.Default;
+                if (actualTheme == ElementTheme.Default)
+                    actualTheme = Application.Current.RequestedTheme == ApplicationTheme.Dark ? ElementTheme.Dark : ElementTheme.Light;
 
-                Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", System.IO.Path.Combine(System.IO.Path.GetTempPath(), "EricGameLauncher_WebView2"));
-                double dlgW2 = Math.Max(560, this.Bounds.Width * 0.80);
-                double dlgH2 = Math.Max(420, this.Bounds.Height * 0.78);
-                double innerH2 = Math.Max(280, dlgH2 - 150) - 48;
+                string bodyHtml = (!string.IsNullOrEmpty(release.body_html) ? release.body_html : release.body) ?? "";
+                if (prependTitle) bodyHtml = $"<h2>{release.name}</h2><hr/>{bodyHtml}";
 
-                var webView = new Microsoft.UI.Xaml.Controls.WebView2
-                {
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    VerticalAlignment = VerticalAlignment.Stretch,
-                    MinWidth = dlgW2 - 48,
-                    MinHeight = innerH2
-                };
+                string htmlContent = $@"
+                    <!DOCTYPE html>
+                    <html data-theme='{(actualTheme == ElementTheme.Dark ? "dark" : "light")}'>
+                    <head>
+                        <meta charset='utf-8'>
+                        <style>
+                            {WebViewStyles.MarkdownCss}
+                            @media (prefers-color-scheme: light), (prefers-color-scheme: dark) {{
+                                html[data-theme='dark'] .markdown-body {{ background-color: #0d1117; color: #e6edf3; }}
+                                html[data-theme='light'] .markdown-body {{ background-color: #ffffff; color: #1F2328; }}
+                            }}
+                            body {{
+                                box-sizing: border-box; overflow-x: hidden; margin: 0; padding: 25px;
+                                background-color: transparent !important;
+                            }}
+                            @media (max-width: 767px) {{ body {{ padding: 15px; width: 95%; }} }}
+                        </style>
+                    </head>
+                    <body class='markdown-body'>{bodyHtml}</body>
+                    </html>";
 
-                object dialogContent;
-                try
-                {
-                    await webView.EnsureCoreWebView2Async();
-                    
-                    var actualTheme = (this.Content as FrameworkElement)?.ActualTheme ?? ElementTheme.Default;
-                    if (actualTheme == ElementTheme.Default)
-                    {
-                        actualTheme = Application.Current.RequestedTheme == ApplicationTheme.Dark ? ElementTheme.Dark : ElementTheme.Light;
-                    }
-
-                    string cssContent = "";
-                    using (var stream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream($"EricGameLauncher.webview.css"))
-                    using (var reader = new System.IO.StreamReader(stream!))
-                    {
-                        cssContent = reader.ReadToEnd();
-                    }
-
-                    string htmlContent = $@"
-                        <!DOCTYPE html>
-                        <html data-theme='{(actualTheme == ElementTheme.Dark ? "dark" : "light")}'>
-                        <head>
-                            <meta charset='utf-8'>
-                            <style>
-                                {cssContent}
-                                /* Force the desired mode manually ignoring OS media scheme when needed */
-                                @media (prefers-color-scheme: light), (prefers-color-scheme: dark) {{
-                                    html[data-theme='dark'] .markdown-body {{ background-color: #0d1117; color: #e6edf3; }}
-                                    html[data-theme='light'] .markdown-body {{ background-color: #ffffff; color: #1F2328; }}
-                                }}
-                                body {{
-                                    box-sizing: border-box; overflow-x: hidden; margin: 0; padding: 25px;
-                                    background-color: transparent !important;
-                                }}
-                                @media (max-width: 767px) {{
-                                    body {{
-                                        padding: 15px; width: 95%;
-                                    }}
-                                }}
-                            </style>
-                        </head>
-                        <body class='markdown-body'>
-                            <h2>{release.name}</h2>
-                            <hr/>
-                            {(!string.IsNullOrEmpty(release.body_html) ? release.body_html : release.body)}
-                        </body>
-                        </html>";
-
-                    webView.NavigateToString(htmlContent);
-                    dialogContent = webView;
-                }
-                catch (Exception)
-                {
-                    var textFallback = new TextBlock
-                    {
-                        Text = $"# {release.name}\n\n{(release.body)}",
-                        TextWrapping = TextWrapping.Wrap
-                    };
-                    dialogContent = new ScrollViewer { Content = textFallback, Height = innerH2 };
-                }
-
-                string dlgChannelName = ConfigService.UpdateChannel == "latest"
-                    ? I18n.T("Settings_UpdateChannel_Latest")
-                    : I18n.T("Settings_UpdateChannel_Stable");
-                var dlgChannelNote = new TextBlock
-                {
-                    Text = string.Format(I18n.T("Update_ChannelNote"), dlgChannelName),
-                    TextWrapping = TextWrapping.Wrap,
-                    FontSize = 12,
-                    Opacity = 0.6,
-                    Margin = new Thickness(0, 10, 0, 0)
-                };
-                var dlgWrapper = new StackPanel();
-                dlgWrapper.Children.Add((UIElement)dialogContent);
-                dlgWrapper.Children.Add(dlgChannelNote);
-
-                ContentDialog confirmDialog = new ContentDialog
-                {
-                    Title = I18n.T("Update_DialogTitle"),
-                    Content = dlgWrapper,
-                    PrimaryButtonText = I18n.T("Update_DialogConfirm"),
-                    CloseButtonText = I18n.T("Update_DialogCancel"),
-                    DefaultButton = ContentDialogButton.Primary,
-                    XamlRoot = this.Content.XamlRoot
-                };
-
-                confirmDialog.Resources["ContentDialogMaxWidth"] = dlgW2;
-                confirmDialog.Resources["ContentDialogMaxHeight"] = dlgH2;
-
-                if (await confirmDialog.ShowAsync() != ContentDialogResult.Primary) return;
-
-                UpdateService.StartUpdater(downloadUrl);
+                webView.NavigateToString(htmlContent);
+                dialogContent = webView;
             }
-            catch { }
+            catch
+            {
+                string fallbackText = prependTitle ? $"# {release.name}\n\n{release.body}" : $"## {release.name}\n\n{release.body}";
+                dialogContent = new ScrollViewer
+                {
+                    Content = new TextBlock { Text = fallbackText, TextWrapping = TextWrapping.Wrap },
+                    Height = innerH
+                };
+            }
+
+            string channelName = ConfigService.UpdateChannel == "latest"
+                ? I18n.T("Settings_UpdateChannel_Latest")
+                : I18n.T("Settings_UpdateChannel_Stable");
+            var channelNote = new TextBlock
+            {
+                Text = string.Format(I18n.T("Update_ChannelNote"), channelName),
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 12,
+                Opacity = 0.6,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 4, 0, -20)
+            };
+
+            var grid = new Grid();
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            Grid.SetRow((FrameworkElement)dialogContent, 0);
+            Grid.SetRow(channelNote, 1);
+            grid.Children.Add((UIElement)dialogContent);
+            grid.Children.Add(channelNote);
+
+            return (grid, dialogW, dialogH);
         }
         private async void VersionText_PointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
