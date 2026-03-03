@@ -112,7 +112,6 @@
     <None Include="Package.appxmanifest" />
     <EmbeddedResource Include="ico.ico" />
     <EmbeddedResource Include="i18n.json" />
-    <EmbeddedResource Include="webview.css" />
   </ItemGroup>
 
   <ItemGroup>
