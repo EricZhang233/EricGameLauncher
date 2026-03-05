@@ -4,10 +4,6 @@ VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EricGameLauncher", "EricGameLauncher.csproj", "{F31679DE-D130-CBA4-24EE-84AFC30C5E70}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "updater.cfgver", "updater.cfgver\updater.cfgver.csproj", "{721109C3-9A5D-F4F9-B5D2-A05BC335222D}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "updater.main", "updater.main\updater.main.csproj", "{B37B54BF-C356-6A3C-D0E9-96BBCF1164F7}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,14 +14,6 @@ Global
 		{F31679DE-D130-CBA4-24EE-84AFC30C5E70}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F31679DE-D130-CBA4-24EE-84AFC30C5E70}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F31679DE-D130-CBA4-24EE-84AFC30C5E70}.Release|Any CPU.Build.0 = Release|Any CPU
-		{721109C3-9A5D-F4F9-B5D2-A05BC335222D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{721109C3-9A5D-F4F9-B5D2-A05BC335222D}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{721109C3-9A5D-F4F9-B5D2-A05BC335222D}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{721109C3-9A5D-F4F9-B5D2-A05BC335222D}.Release|Any CPU.Build.0 = Release|Any CPU
-		{B37B54BF-C356-6A3C-D0E9-96BBCF1164F7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{B37B54BF-C356-6A3C-D0E9-96BBCF1164F7}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{B37B54BF-C356-6A3C-D0E9-96BBCF1164F7}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{B37B54BF-C356-6A3C-D0E9-96BBCF1164F7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

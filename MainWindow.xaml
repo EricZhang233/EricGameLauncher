@@ -5,6 +5,7 @@
     xmlns:models="using:EricGameLauncher"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:controls="using:CommunityToolkit.WinUI.UI.Controls"
     mc:Ignorable="d"
     x:Name="RootWindow">
 
@@ -425,16 +426,18 @@
             </StackPanel>
         </Grid>
 
-        <GridView x:Name="AppGrid" Grid.Row="1" 
-                  Padding="20" 
+<controls:AdaptiveGridView x:Name="AppGrid" Grid.Row="1"
+                  Padding="20"
+                  DesiredWidth="{x:Bind IconSize, Mode=OneWay}"
+                  StretchContentForSingleRow="False"
                   SelectionMode="None"
                   CanReorderItems="False"
                   IsItemClickEnabled="True"
                   ItemClick="AppGrid_ItemClick"
                   ContainerContentChanging="AppGrid_ContainerContentChanging">
-            <GridView.ItemTemplate>
-                <DataTemplate x:DataType="models:AppItem">
-                    <StackPanel x:Name="ItemPanel" Width="118" Margin="4" Tag="{Binding}">
+              <controls:AdaptiveGridView.ItemTemplate>
+                  <DataTemplate x:DataType="models:AppItem">
+                      <StackPanel x:Name="ItemPanel" Width="118" Margin="4" Tag="{Binding}" HorizontalAlignment="Center">
                         
                         
                         <Grid x:Name="IconGrid" Width="118" Height="118" Margin="0,0,0,2">
@@ -487,9 +490,8 @@
                         </StackPanel.ContextFlyout>
                     </StackPanel>
                 </DataTemplate>
-            </GridView.ItemTemplate>
-        </GridView>
-
+              </controls:AdaptiveGridView.ItemTemplate>
+        </controls:AdaptiveGridView>
         
         <Grid x:Name="EmptyStatePanel"
               Grid.Row="1"
