@@ -25,7 +25,7 @@
 
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![WinUI 3](https://img.shields.io/badge/UI-WinUI%203-0078D4?logo=windows)](https://github.com/microsoft/microsoft-ui-xaml)
-[![Windows 11 25H2+](https://img.shields.io/badge/Windows-11%2025H2%2B-0078D4?logo=windows11)](https://www.microsoft.com/windows)
+[![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?logo=microsoft)](https://www.microsoft.com/windows)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?logo=gnu)](https://www.gnu.org/licenses/gpl-3.0.html)
 
 [简介](#简介) • [功能特性](#功能特性) • [技术亮点](#技术亮点) • [快速开始](#快速开始) • [已知问题](#已知问题) • [贡献与支持](#贡献与支持) • [特别致谢](#特别致谢--友情链接)
@@ -44,9 +44,6 @@
 
 无论您的游戏来自 Steam、Epic，还是独立的 exe，这里都是它们统一的家。
 
-> [!IMPORTANT]
-> **运行环境要求**：本程序仅支持 **Windows 11 25H2** 及以上版本。
-
 ## 功能特性
 
 ### 专为玩家打造
@@ -58,6 +55,7 @@
         *   **URL Protocol**：完美匹配 `steam://`、`epic://`、`starward://` 等协议，实现平台级交互。
         *   **Store Apps**：支持通过 `shell:AppsFolder\` 启动商店应用，并支持提权运行。
         *   **环境变量**：所有路径均支持 `%AppData%`、`%LocalAppData%` 等标准环境变量自动展开。
+*   **一键扫描**：支持Steam、Epic、XBox的游戏一键扫描导入，管理游戏更轻松！
 *   **极致轻量**：启动即用，用完即走。无后台服务，零广告打扰，系统资源占用几近于零。
 *   **高效搜索**：支持拼音全拼、拼音首字母、英文首字母、空格分隔首字母以及大写字母匹配搜索。
 *   **专业级属性控制**：这不是一个简陋的快捷方式。

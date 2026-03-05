@@ -24,7 +24,7 @@
 
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![WinUI 3](https://img.shields.io/badge/UI-WinUI%203-0078D4?logo=windows)](https://github.com/microsoft/microsoft-ui-xaml)
-[![Windows 11 25H2+](https://img.shields.io/badge/Windows-11%2025H2%2B-0078D4?logo=windows11)](https://www.microsoft.com/windows)
+[![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?logo=microsoft)](https://www.microsoft.com/windows)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?logo=gnu)](https://www.gnu.org/licenses/gpl-3.0.html)
 
 [Introduction](#introduction) • [Features](#features) • [Technical Highlights](#technical-highlights) • [Quick Start](#quick-start) • [Known Issues](#known-issues) • [Contribution & Support](#contribution--support) • [Special Thanks](#special-thanks--links)
@@ -43,9 +43,6 @@
 
 Whether your games are from Steam, Epic, or independent exe files, this is their unified home.
 
-> [!IMPORTANT]
-> **System Requirements**: This application only supports **Windows 11 25H2** and above.
-
 ## Features
 
 ### Built for Gamers
@@ -57,6 +54,7 @@ Whether your games are from Steam, Epic, or independent exe files, this is their
         *   **URL Protocol**: Perfectly matches `steam://`, `epic://`, `starward://`, etc., for platform-level interaction.
         *   **Windows Store Apps**: Supports launching apps via `shell:AppsFolder\` with optional elevation.
         *   **Environment Variables**: All paths support automatic expansion of variables like `%AppData%`.
+*   **One-Click Scan**: Supports one-click scan and import of Steam, Epic, and Xbox games, making game management easier!
 *   **Ultra-Lightweight**: Start as needed, leave when done. No background services, zero ads, and system resource usage is nearly zero.
 *   **Efficient Search**: Supports full Pinyin, Pinyin initials, English initials, space-separated initials, CamelCase, and uppercase letter matching search.  
 *   **Professional-Grade Property Control**: This isn't just a basic shortcut.
@@ -74,6 +72,7 @@ Whether your games are from Steam, Epic, or independent exe files, this is their
 *   **Intelligent Scan & Import**:
     -   **Automated Scanning**: Native support for automatic recognition, path extraction, and icon fetching for games installed on Steam, Epic Games, and Xbox (UWP).
     -   **One-Click Import All**: Supports batch importing all recognized local games with a single click after scanning, eliminating tedious manual additions.
+    -   **Xbox/UWP Full Recognition**: Deeply supports high-precision recognition and icon extraction of Xbox/Microsoft Store game packages, achieving 100% coverage accuracy.
 *   **Automatic Update Support**：
     *   **Built-in Update Check**: Automatically checks GitHub Releases on startup to ensure you are always using the latest version.  
     *   **Silent Notification**: When an update is available, the version number in the top-right corner turns red and displays an update icon — no intrusive pop-up alerts.  
