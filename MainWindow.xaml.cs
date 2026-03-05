@@ -50,9 +50,12 @@ namespace EricGameLauncher
                 {
                     _iconSize = value;
                     OnPropertyChanged(nameof(IconSize));
+                    OnPropertyChanged(nameof(DesiredIconWidth));
                 }
             }
         }
+
+        public double DesiredIconWidth => IconSize + 16;
 
         private bool _isFiltered;
         public bool IsFiltered
@@ -177,7 +180,7 @@ namespace EricGameLauncher
                 };
             }
 
-            this.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
+            this.SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
             this.ExtendsContentIntoTitleBar = true;
 
 
@@ -251,13 +254,17 @@ namespace EricGameLauncher
             _ = CheckForUpdatesQuietlyAsync();
         }
 
-        private async Task CheckForUpdatesQuietlyAsync()
+        private async Task CheckForUpdatesQuietlyAsync(bool skipDelay = false)
         {
             try
             {
-                await Task.Delay(3000);
+                if (!skipDelay)
+                {
+                    await Task.Delay(3000);
+                }
 
                 var release = await UpdateService.CheckForUpdateAsync(ConfigService.UpdateChannel);
+
                 if (release != null)
                 {
                     _pendingUpdate = release;
@@ -274,6 +281,10 @@ namespace EricGameLauncher
 
         private async void MenuCheckUpdate_Click(object sender, RoutedEventArgs e)
         {
+            _pendingUpdate = null;
+            HasUpdate = false;
+            UpdateIndicatorColor = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+
             var release = await UpdateService.GetReleaseAsync(ConfigService.UpdateChannel);
             if (release != null)
             {
@@ -1366,24 +1377,34 @@ namespace EricGameLauncher
             PropertyPanel.Visibility = Visibility.Visible;
             PopulateShortcutMenus();
 
-            var transform = new TranslateTransform { X = 400 };
+            var transform = new TranslateTransform { Y = -20 };
             PropertyPanel.RenderTransform = transform;
+            PropertyPanel.Opacity = 0;
 
             var storyboard = new Storyboard();
-            var panelAnimation = new DoubleAnimation
+            
+            var moveAnimation = new DoubleAnimation
             {
-                From = 400,
+                From = -20,
                 To = 0,
-                Duration = new Duration(TimeSpan.FromMilliseconds(300)),
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                Duration = new Duration(TimeSpan.FromMilliseconds(250)),
+                EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
             };
+            Storyboard.SetTarget(moveAnimation, transform);
+            Storyboard.SetTargetProperty(moveAnimation, "Y");
+            storyboard.Children.Add(moveAnimation);
 
-            Storyboard.SetTarget(panelAnimation, transform);
-            Storyboard.SetTargetProperty(panelAnimation, "X");
-            storyboard.Children.Add(panelAnimation);
+            var fadeAnimation = new DoubleAnimation
+            {
+                From = 0,
+                To = 1,
+                Duration = new Duration(TimeSpan.FromMilliseconds(200))
+            };
+            Storyboard.SetTarget(fadeAnimation, PropertyPanel);
+            Storyboard.SetTargetProperty(fadeAnimation, "Opacity");
+            storyboard.Children.Add(fadeAnimation);
+
             storyboard.Begin();
-
-            AppGrid.Padding = new Thickness(20, 20, 420, 20);
         }
 
         private async void PopulateShortcutMenus()
@@ -1594,39 +1615,43 @@ namespace EricGameLauncher
 
         private void HidePropertyPanel()
         {
-
             var transform = PropertyPanel.RenderTransform as TranslateTransform;
             if (transform == null)
             {
-                transform = new TranslateTransform { X = 0 };
+                transform = new TranslateTransform { Y = 0 };
                 PropertyPanel.RenderTransform = transform;
             }
 
-
             var storyboard = new Storyboard();
 
-
-            var panelAnimation = new DoubleAnimation
+            var moveAnimation = new DoubleAnimation
             {
                 From = 0,
-                To = 400,
-                Duration = new Duration(TimeSpan.FromMilliseconds(300)),
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+                To = -20,
+                Duration = new Duration(TimeSpan.FromMilliseconds(200)),
+                EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseIn }
             };
+            Storyboard.SetTarget(moveAnimation, transform);
+            Storyboard.SetTargetProperty(moveAnimation, "Y");
+            storyboard.Children.Add(moveAnimation);
 
-            Storyboard.SetTarget(panelAnimation, transform);
-            Storyboard.SetTargetProperty(panelAnimation, "X");
-            storyboard.Children.Add(panelAnimation);
+            var fadeAnimation = new DoubleAnimation
+            {
+                From = 1,
+                To = 0,
+                Duration = new Duration(TimeSpan.FromMilliseconds(150))
+            };
+            Storyboard.SetTarget(fadeAnimation, PropertyPanel);
+            Storyboard.SetTargetProperty(fadeAnimation, "Opacity");
+            storyboard.Children.Add(fadeAnimation);
 
             storyboard.Completed += (s, e) =>
             {
                 PropertyPanel.Visibility = Visibility.Collapsed;
                 PropertyPanel.RenderTransform = null;
+                PropertyPanel.Opacity = 1;
                 _currentEditingItem = null;
                 _isNewItemMode = false;
-
-
-                AppGrid.Padding = new Thickness(20);
             };
 
             storyboard.Begin();
@@ -1771,7 +1796,7 @@ namespace EricGameLauncher
 
 
                 IntPtr hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-                string? filePath = Win32FileDialog.ShowOpenFileDialog(hwnd, "Select Executable File");
+                string? filePath = Win32FileDialog.ShowOpenFileDialog(hwnd, "Select file");
 
                 if (!string.IsNullOrEmpty(filePath))
                 {
@@ -2206,7 +2231,28 @@ namespace EricGameLauncher
                 {
                     ConfigService.UpdateChannel = newChannel;
                     ConfigService.SaveConfig();
+
+                    _pendingUpdate = null;
+                    HasUpdate = false;
+                    UpdateIndicatorColor = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+                    _ = CheckForUpdatesQuietlyAsync(skipDelay: true);
                 }
+            }
+        }
+
+        private void BtnSizeDecrease_Click(object sender, RoutedEventArgs e)
+        {
+            if (SizeSlider != null && SizeSlider.Value > SizeSlider.Minimum)
+            {
+                SizeSlider.Value -= 1;
+            }
+        }
+
+        private void BtnSizeIncrease_Click(object sender, RoutedEventArgs e)
+        {
+            if (SizeSlider != null && SizeSlider.Value < SizeSlider.Maximum)
+            {
+                SizeSlider.Value += 1;
             }
         }
 
