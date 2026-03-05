@@ -57,7 +57,6 @@ namespace EricGameLauncher
 }
 @media (prefers-color-scheme: dark) {
   .markdown-body, [data-theme="dark"] {
-    /*dark */
     color-scheme: dark;
     --fgColor-accent: #4493f8;
     --bgColor-attention-muted: #bb800926;
@@ -113,7 +112,6 @@ namespace EricGameLauncher
 }
 @media (prefers-color-scheme: light) {
   .markdown-body, [data-theme="light"] {
-    /*light */
     color-scheme: light;
     --fgColor-danger: #d1242f;
     --bgColor-attention-muted: #fff8c5;
@@ -3133,7 +3131,7 @@ namespace EricGameLauncher
         }
 
         public static string? ShowOpenFileDialog(IntPtr hwnd, string title = "Select File",
-            string filter = "Executable Files (*.exe;*.lnk;*.url)\0*.exe;*.lnk;*.url\0All Files (*.*)\0*.*\0\0")
+            string filter = "All Files (*.*)\0*.*\0\0")
         {
             var ofn = new OpenFileName
             {
