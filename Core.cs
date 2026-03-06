@@ -3861,13 +3861,15 @@ namespace EricGameLauncher
                 var releases = await client.GetFromJsonAsync<List<ReleaseInfo>>(AllReleasesApiUrl);
                 if (releases == null || releases.Count == 0) return null;
 
-                return releases
+                var sortedReleases = releases
                     .OrderByDescending(r =>
                     {
                         var m = System.Text.RegularExpressions.Regex.Match(r.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
                         return m.Success ? new Version(m.Value) : new Version(0, 0, 0);
                     })
-                    .FirstOrDefault();
+                    .ToList();
+
+                return MergeReleases(sortedReleases);
             }
             catch { return null; }
         }
@@ -3884,16 +3886,57 @@ namespace EricGameLauncher
                 var releases = await client.GetFromJsonAsync<List<ReleaseInfo>>(AllReleasesApiUrl);
                 if (releases == null || releases.Count == 0) return null;
 
-                return releases
+                var sortedReleases = releases
                     .Where(r => !r.prerelease)
                     .OrderByDescending(r =>
                     {
                         var m = System.Text.RegularExpressions.Regex.Match(r.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
                         return m.Success ? new Version(m.Value) : new Version(0, 0, 0);
                     })
-                    .FirstOrDefault();
+                    .ToList();
+
+                return MergeReleases(sortedReleases);
             }
             catch { return null; }
+        }
+
+        private static ReleaseInfo? MergeReleases(List<ReleaseInfo> sortedReleases)
+        {
+            if (sortedReleases.Count == 0) return null;
+
+            Version currentVersion = new Version(AppVersion.Version);
+            var newerReleases = sortedReleases.Where(r =>
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(r.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
+                return m.Success && new Version(m.Value) > currentVersion;
+            }).ToList();
+
+            if (newerReleases.Count <= 1)
+                return sortedReleases.FirstOrDefault();
+
+            var latest = newerReleases.First();
+            var olderNew = newerReleases.Skip(1).ToList();
+
+            string mergedBody = latest.body;
+            string mergedBodyHtml = !string.IsNullOrEmpty(latest.body_html) ? latest.body_html : latest.body;
+
+            foreach (var r in olderNew)
+            {
+                mergedBody += $"\n\n---\n\n## {r.name}\n\n{r.body}";
+                string rBodyHtml = !string.IsNullOrEmpty(r.body_html) ? r.body_html : r.body;
+                mergedBodyHtml += $"<hr/><h2>{r.name}</h2>{rBodyHtml}";
+            }
+
+            return new ReleaseInfo
+            {
+                tag_name = latest.tag_name,
+                name = latest.name,
+                html_url = latest.html_url,
+                body = mergedBody,
+                body_html = mergedBodyHtml,
+                prerelease = latest.prerelease,
+                assets = latest.assets
+            };
         }
 
         public static Task<ReleaseInfo?> GetReleaseAsync(string channel)
