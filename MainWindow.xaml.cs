@@ -86,13 +86,6 @@ namespace EricGameLauncher
             }
         }
 
-        private Brush _updateIndicatorColor = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
-        public Brush UpdateIndicatorColor
-        {
-            get => _updateIndicatorColor;
-            set { if (_updateIndicatorColor != value) { _updateIndicatorColor = value; OnPropertyChanged(nameof(UpdateIndicatorColor)); } }
-        }
-
         private bool _hasUpdate;
         public bool HasUpdate
         {
@@ -211,8 +204,6 @@ namespace EricGameLauncher
             titleBar.ExtendsContentIntoTitleBar = true;
             titleBar.ButtonBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
             titleBar.ButtonInactiveBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
-            titleBar.InactiveBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
-            titleBar.BackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
 
             var inputNonClientPointerSource = Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(this.AppWindow.Id);
             inputNonClientPointerSource.SetRegionRects(Microsoft.UI.Input.NonClientRegionKind.Caption, new Windows.Graphics.RectInt32[] {
@@ -272,7 +263,6 @@ namespace EricGameLauncher
                     DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
                     {
                         HasUpdate = true;
-                        UpdateIndicatorColor = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 0, 0));
                     });
                 }
             }
@@ -283,7 +273,6 @@ namespace EricGameLauncher
         {
             _pendingUpdate = null;
             HasUpdate = false;
-            UpdateIndicatorColor = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
 
             var release = await UpdateService.GetReleaseAsync(ConfigService.UpdateChannel);
             if (release != null)
@@ -304,7 +293,6 @@ namespace EricGameLauncher
                     DispatcherQueue.TryEnqueue(() =>
                     {
                         HasUpdate = true;
-                        UpdateIndicatorColor = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 0, 0));
                     });
 
                     await StartUpdateFlowAsync(release);
@@ -1944,8 +1932,19 @@ namespace EricGameLauncher
         {
             try
             {
-
                 SearchBoxFlyout.Focus(FocusState.Programmatic);
+            }
+            catch (Exception) { }
+        }
+
+        private void SearchFlyout_Closing(Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase sender, Microsoft.UI.Xaml.Controls.Primitives.FlyoutBaseClosingEventArgs args)
+        {
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(SearchBoxFlyout.Text))
+                {
+                    args.Cancel = true;
+                }
             }
             catch (Exception) { }
         }
@@ -2234,7 +2233,6 @@ namespace EricGameLauncher
 
                     _pendingUpdate = null;
                     HasUpdate = false;
-                    UpdateIndicatorColor = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
                     _ = CheckForUpdatesQuietlyAsync(skipDelay: true);
                 }
             }
@@ -2614,12 +2612,12 @@ namespace EricGameLauncher
             string downloadUrl = release.assets.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.browser_download_url ?? "";
             if (hasUpdate && string.IsNullOrEmpty(downloadUrl)) return;
 
-            var (contentGrid, dlgW, dlgH) = await BuildReleaseContentAsync(release, prependTitle: hasUpdate);
+            var (contentGrid, dlgW, dlgH) = await BuildReleaseContentAsync(release, prependTitle: true);
             var dialog = new ContentDialog
             {
                 Title = hasUpdate
                     ? (object)I18n.T("Update_DialogTitle")
-                    : $"{I18n.T("Update_NoUpdateContent")}  ·  {release.name}",
+                    : I18n.T("Update_NoUpdateContent"),
                 Content = contentGrid,
                 PrimaryButtonText = hasUpdate ? I18n.T("Update_DialogConfirm") : (string.IsNullOrEmpty(downloadUrl) ? "" : I18n.T("Update_Repair")),
                 CloseButtonText = hasUpdate ? I18n.T("Update_DialogCancel") : I18n.T("Update_OK"),
@@ -2658,7 +2656,7 @@ namespace EricGameLauncher
                     actualTheme = Application.Current.RequestedTheme == ApplicationTheme.Dark ? ElementTheme.Dark : ElementTheme.Light;
 
                 string bodyHtml = (!string.IsNullOrEmpty(release.body_html) ? release.body_html : release.body) ?? "";
-                if (prependTitle) bodyHtml = $"<h2>{release.name}</h2><hr/>{bodyHtml}";
+                if (prependTitle) bodyHtml = $"<h2>{release.name}</h2>{bodyHtml}";
 
                 string htmlContent = $@"
                     <!DOCTYPE html>

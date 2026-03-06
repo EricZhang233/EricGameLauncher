@@ -58,7 +58,7 @@
                         CornerRadius="4">
                     <FontIcon Glyph="&#xE721;"/>
                     <Button.Flyout>
-                        <Flyout Placement="BottomEdgeAlignedLeft" Opened="SearchFlyout_Opened">
+                        <Flyout Placement="BottomEdgeAlignedRight" Opened="SearchFlyout_Opened" Closing="SearchFlyout_Closing">
                             <AutoSuggestBox x:Name="SearchBoxFlyout" 
                                             QueryIcon="Find" 
                                             PlaceholderText="" 
@@ -431,10 +431,10 @@
                 <FontIcon x:Name="UpdateSyncIcon"
                           Glyph="&#xE117;" 
                           FontSize="10" 
-                          Foreground="{Binding UpdateIndicatorColor, ElementName=RootWindow}"
+                          Foreground="Red"
                           Visibility="{Binding HasUpdate, ElementName=RootWindow, Converter={StaticResource BoolToVisibilityConverter}}"/>
                 <TextBlock x:Name="VersionText"
-                           Foreground="{Binding UpdateIndicatorColor, ElementName=RootWindow}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                            FontSize="10"
                            VerticalAlignment="Center"
                            PointerPressed="VersionText_PointerPressed"/>
