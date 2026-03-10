@@ -3998,8 +3998,6 @@ namespace EricGameLauncher
                 };
 
                 Process.Start(psi);
-
-                Application.Current.Exit();
             }
             catch { }
         }

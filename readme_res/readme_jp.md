@@ -27,7 +27,7 @@
 [![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?logo=microsoft)](https://www.microsoft.com/windows)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?logo=gnu)](https://www.gnu.org/licenses/gpl-3.0.html)
 
-[はじめに](#はじめに) • [機能特性](#機能特性) • [技術的なハイライト](#技術的なハイライト) • [クイックスタート](#クイックスタート) • [既知の問題](#既知の問題) • [貢献とサポート](#貢献とサポート) • [特別な感謝](#特別な感謝--関連リンク)
+[はじめに](#はじめに) • [機能特性](#機能特性) • [技術的なハイライト](#技術的なハイライト) • [クイックスタート](#クイックスタート) • [貢献とサポート](#貢献とサポート) • [特別な感謝](#特別な感謝--関連リンク)
 
 <div align="center">
   <img src="readme.overview.gif" width="100%" />
@@ -103,9 +103,6 @@
 1.  [GitHub Releases](https://github.com/EricZhang233/EricGameLauncher/releases) ページから最新バージョンをダウンロードします。
 2.  解凍して `EricGameLauncher.exe` を実行します。
 3.  右上の **「もっと見る」 -> 「スキャン」** をクリックしてローカルゲームを自動検索・インポートするか、**「追加」** からゲームのショートカットや実行ファイルを手動で選択します。
-
-## 既知の問題：
-1. **一部の入力法との不互換性**: WinUI 3 フレームワークの低レベル入力チャネルの特性により、一部の入力法（WeChat 入力法など）で候補ウィンドウが正常に表示されない場合があります。**システム標準の Microsoft 入力法の使用を推奨します**、または他の主要な入力法。WinUI 3 は従来の小窓ハンドル (HWND) を廃止し、純粋な TSF (Text Services Framework) アーキテクチャを採用しました。WinUI 3 の**未パッケージ (Unpackaged) モード**では、WeChat 入力法などの一部の入力法が、基盤となる適応が不完全なためにカーソルの物理画面座標を正しく解析・取得できず、候補ウィンドウの描画をサイレントに断念します。この互换性の欠陥は、他の未パッケージの WinUI 3 アプリケーションにも存在します。これは入力法側の低レベルな適応不足によるものであり、Eric Game Launcher とは関係ありません。
 
 ## 貢献とサポート
 
