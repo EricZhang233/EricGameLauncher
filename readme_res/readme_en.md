@@ -27,7 +27,7 @@
 [![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?logo=microsoft)](https://www.microsoft.com/windows)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?logo=gnu)](https://www.gnu.org/licenses/gpl-3.0.html)
 
-[Introduction](#introduction) • [Features](#features) • [Technical Highlights](#technical-highlights) • [Quick Start](#quick-start) • [Known Issues](#known-issues) • [Contribution & Support](#contribution--support) • [Special Thanks](#special-thanks--links)
+[Introduction](#introduction) • [Features](#features) • [Technical Highlights](#technical-highlights) • [Quick Start](#quick-start) • [Contribution & Support](#contribution--support) • [Special Thanks](#special-thanks--links)
 
 <div align="center">
   <img src="readme.overview.gif" width="100%" />
@@ -103,9 +103,6 @@ For developers, Eric Game Launcher demonstrates how to build modern Windows desk
 1.  Go to the [GitHub Releases](https://github.com/EricZhang233/EricGameLauncher/releases) page and download the latest version.
 2.  Extract and run `EricGameLauncher.exe`.
 3.  Click **"More" -> "Scan"** in the top right corner to automatically search and import local games, or use **"Add"** to manually select a game shortcut or executable.
-
-## Known Issues:
-1. **IME Incompatibility**: Due to the underlying input channel characteristics of the WinUI 3 framework, some input methods (e.g., WeChat IME) may not display the candidate box correctly. **It is recommended to use the native Microsoft IME** or other mainstream input methods. WinUI 3 has removed the traditional child window handle (HWND) in favor of a pure TSF (Text Services Framework) architecture. In WinUI 3's **Unpackaged mode**, some input methods like WeChat IME fail to correctly parse and retrieve the physical screen coordinates of the cursor due to incomplete underlying adaptation, causing them to silently give up drawing the candidate window. This compatibility defect also exists in other unpackaged WinUI 3 applications. This is a low-level adaptation issue on the input method side and is unrelated to Eric Game Launcher.
 
 ## Contribution & Support
 

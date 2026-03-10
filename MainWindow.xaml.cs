@@ -96,7 +96,6 @@ namespace EricGameLauncher
         private UpdateService.ReleaseInfo? _pendingUpdate;
         private bool _isUserInteracting = false;
         private bool _isRefreshPending = false;
-        private Microsoft.UI.Input.InputNonClientPointerSource? _inputSource;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -117,7 +116,7 @@ namespace EricGameLauncher
                 int index = i;
                 _customTitles[index].TextChanged += (s, e) => UpdateCustomVisibility();
                 _customCommands[index].TextChanged += (s, e) => UpdateCustomVisibility();
-                _customBrowses[index].Click += (s, e) => { /* Flyout handled in PopulateShortcutMenus */ };
+                _customBrowses[index].Click += (s, e) => { };
             }
 
             PropExePath.TextChanged += async (s, e) =>
@@ -201,14 +200,10 @@ namespace EricGameLauncher
 
 
             var titleBar = this.AppWindow.TitleBar;
-            titleBar.ExtendsContentIntoTitleBar = true;
             titleBar.ButtonBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
             titleBar.ButtonInactiveBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
 
-            var inputNonClientPointerSource = Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(this.AppWindow.Id);
-            inputNonClientPointerSource.SetRegionRects(Microsoft.UI.Input.NonClientRegionKind.Caption, new Windows.Graphics.RectInt32[] {
-                new Windows.Graphics.RectInt32(0, 0, (int)this.Bounds.Width, 48)
-            });
+            this.SetTitleBar(TitleBarGrid);
 
             ConfigService.Initialize();
 
@@ -227,12 +222,7 @@ namespace EricGameLauncher
 
             RestoreWindowState();
 
-
             this.Closed += MainWindow_Closed;
-
-
-            this.AppWindow.Changed += AppWindow_Changed;
-
 
             LoadSettings();
             ApplyLocalization();
@@ -353,21 +343,6 @@ namespace EricGameLauncher
             return CallWindowProc(_oldWndProc, hWnd, msg, wParam, lParam);
         }
         #endregion
-
-        private void AppWindow_Changed(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowChangedEventArgs args)
-        {
-            if (args.DidSizeChange && this.AppWindow != null)
-            {
-                _inputSource ??= Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(this.AppWindow.Id);
-
-                double scale = this.Content.XamlRoot?.RasterizationScale ?? 1.0;
-                int scaledHeight = (int)(48 * scale);
-
-                _inputSource.SetRegionRects(Microsoft.UI.Input.NonClientRegionKind.Caption, new Windows.Graphics.RectInt32[] {
-                    new Windows.Graphics.RectInt32(0, 0, this.AppWindow.Size.Width, scaledHeight)
-                });
-            }
-        }
 
         private void RestoreWindowState()
         {

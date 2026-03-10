@@ -28,7 +28,7 @@
 [![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?logo=microsoft)](https://www.microsoft.com/windows)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?logo=gnu)](https://www.gnu.org/licenses/gpl-3.0.html)
 
-[简介](#简介) • [功能特性](#功能特性) • [技术亮点](#技术亮点) • [快速开始](#快速开始) • [已知问题](#已知问题) • [贡献与支持](#贡献与支持) • [特别致谢](#特别致谢--友情链接)
+[简介](#简介) • [功能特性](#功能特性) • [技术亮点](#技术亮点) • [快速开始](#快速开始) • [贡献与支持](#贡献与支持) • [特别致谢](#特别致谢--友情链接)
 
 <div align="center">
   <img src="readme_res/readme.overview.gif" width="100%" />
@@ -104,10 +104,6 @@
 1.  前往 [GitHub Releases](https://github.com/EricZhang233/EricGameLauncher/releases) 页面下载最新版本。
 2.  解压并运行 `EricGameLauncher.exe`。
 3.  点击右上角 **“更多” -> “扫描”** 自动搜索并导入本地游戏，或通过 **“添加”** 手动选择游戏快捷方式或可执行文件。
-
-## 已知问题：
-1.  **部分输入法不兼容**：由于 WinUI 3 框架的底层输入通道特性，部分输入法（如微信输入法）可能无法正常显示候选框，**推荐使用系统原生微软输入法**或其他主流输入法。WinUI 3 移除了传统子窗口句柄 (HWND)，转而采用纯 TSF (Text Services Framework) 架构。在 WinUI 3 的未打包 (Unpackaged) 模式下，微信输入法等部分输入法因底层适配不完善，无法正确解析和获取光标的物理屏幕坐标，导致其静默放弃绘制候选窗。此兼容性缺陷同样存在于其他未打包的 WinUI 3 应用中。这是输入法端的底层适配缺陷，与 Eric Game Launcher 无关。
-
 
 ## 贡献与支持
 
