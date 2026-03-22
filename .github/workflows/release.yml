@@ -13,7 +13,6 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
       
-      # 验证是否是 v 开头的 tag，如果是，拿到纯数字版本
       - name: Extract base version from tag
         id: get_version
         run: |
@@ -26,7 +25,7 @@ jobs:
           echo "VERSION=$BASE_VERSION" >> $GITHUB_OUTPUT
           echo "Expected version is $BASE_VERSION"
 
-      # 验证 zip 文件是否在仓库里
+
       - name: Check Zip File Existence
         if: steps.get_version.outputs.VERSION != ''
         run: |
@@ -38,10 +37,22 @@ jobs:
             echo "✅ Found zip file: $ZIP_PATH"
           fi
 
-      # 仅向现有的 GitHub Release 追加预打包好的附件，并覆盖正文内容为 .releasenote.md
       - name: Upload Asset to Release
         if: steps.get_version.outputs.VERSION != ''
         uses: softprops/action-gh-release@v1
         with:
           body_path: .releasenote.md
           files: output/EricGameLauncher_${{ steps.get_version.outputs.VERSION }}.zip
+
+      - name: Cleanup output directory
+        if: steps.get_version.outputs.VERSION != ''
+        run: |
+          git config user.name "eric-bot"
+          git config user.email "ericzhang233@outlook.com"
+          git fetch origin master
+          git checkout master
+          if [ -d "output" ]; then
+            git rm -r output/
+            git commit -m "chore: auto-remove output directory after release"
+            git push origin master
+          fi

@@ -1,4 +1,4 @@
-﻿using EricGameLauncher;
+using EricGameLauncher;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -231,7 +231,12 @@ namespace EricGameLauncher
             _oldWndProc = SetWindowLongPtr(_hWnd, GWLP_WNDPROC, Marshal.GetFunctionPointerForDelegate(_wndProcDelegate = new WndProc(WindowProcess)));
 
             _ = LoadData();
+            _ = InitializeNetworkTasksAsync();
+        }
 
+        private async Task InitializeNetworkTasksAsync()
+        {
+            await ServerConfigManager.FetchConfigAsync();
             _ = CheckForUpdatesQuietlyAsync();
         }
 
@@ -246,14 +251,34 @@ namespace EricGameLauncher
 
                 var release = await UpdateService.CheckForUpdateAsync(ConfigService.UpdateChannel);
 
+                bool isForced = false;
                 if (release != null)
                 {
+                    var match = System.Text.RegularExpressions.Regex.Match(release.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
+                    if (match.Success)
+                    {
+                        Version latestVersion = UpdateService.NormalizeVersion(match.Value);
+                        isForced = UpdateService.CheckForceUpdateAsync(latestVersion);
+                    }
+                    else
+                    {
+                        isForced = UpdateService.CheckForceUpdateAsync();
+                    }
+
                     _pendingUpdate = release;
 
                     DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
                     {
                         HasUpdate = true;
                     });
+
+                    if (isForced)
+                    {
+                        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal, async () =>
+                        {
+                            await StartUpdateFlowAsync(release, isForced);
+                        });
+                    }
                 }
             }
             catch { }
@@ -268,24 +293,26 @@ namespace EricGameLauncher
             if (release != null)
             {
                 bool hasUpdate = false;
+                Version latestVersion = new Version(0, 0, 0, 0);
                 var match = System.Text.RegularExpressions.Regex.Match(release.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
                 if (match.Success)
                 {
-                    Version latestVersion = new Version(match.Value);
-                    Version currentVersion = new Version(AppVersion.Version);
+                    latestVersion = UpdateService.NormalizeVersion(match.Value);
+                    Version currentVersion = UpdateService.NormalizeVersion(AppVersion.Version);
                     hasUpdate = latestVersion > currentVersion;
                 }
 
                 if (hasUpdate)
                 {
                     _pendingUpdate = release;
+                    bool isForced = UpdateService.CheckForceUpdateAsync(latestVersion);
 
                     DispatcherQueue.TryEnqueue(() =>
                     {
                         HasUpdate = true;
                     });
 
-                    await StartUpdateFlowAsync(release);
+                    await StartUpdateFlowAsync(release, isForced);
                 }
                 else
                 {
@@ -304,6 +331,27 @@ namespace EricGameLauncher
                 };
                 await noUpdateDialog.ShowAsync();
             }
+        }
+
+        private async void MenuPrivacyItem_Click(object sender, RoutedEventArgs e)
+        {
+            ContentDialog privacyDialog = new ContentDialog
+            {
+                Title = I18n.T("Privacy_DialogTitle"),
+                Content = new Microsoft.UI.Xaml.Controls.ScrollViewer
+                {
+                    VerticalScrollBarVisibility = Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Auto,
+                    Content = new Microsoft.UI.Xaml.Controls.TextBlock
+                    {
+                        Text = I18n.T("Privacy_DialogContent"),
+                        TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap
+                    }
+                },
+                CloseButtonText = I18n.T("Privacy_DialogClose"),
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = this.Content.XamlRoot
+            };
+            await privacyDialog.ShowAsync();
         }
 
         #region Win32 Message Interception
@@ -465,6 +513,10 @@ namespace EricGameLauncher
                     ToggleCloseAfterLaunch.IsOn = ConfigService.CloseAfterLaunch;
                 }
 
+                if (ComboLaunchMode != null)
+                {
+                    ComboLaunchMode.SelectedIndex = ConfigService.LaunchMode == "double" ? 1 : 0; AppGrid.IsItemClickEnabled = ConfigService.LaunchMode != "double";
+                }
 
                 if (_sizeSlider != null)
                 {
@@ -595,14 +647,132 @@ namespace EricGameLauncher
         }
 
 
+        private DispatcherTimer? _tooltipTimer;
+        private AppItem? _hoveredItem;
+        private FrameworkElement? _hoveredElement;
+
+        private void ItemPanel_PointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            if (sender is FrameworkElement fe && fe.DataContext is AppItem item)
+            {
+                _hoveredItem = item;
+                _hoveredElement = fe;
+
+                if (_tooltipTimer == null)
+                {
+                    _tooltipTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+                    _tooltipTimer.Tick += TooltipTimer_Tick;
+                }
+                _tooltipTimer.Stop();
+                _tooltipTimer.Start();
+            }
+        }
+
+        private void TooltipTimer_Tick(object? sender, object e)
+        {
+            _tooltipTimer?.Stop();
+            if (_hoveredItem != null && _hoveredElement != null && CustomIconToolTip != null && CustomIconToolTipText != null)
+            {
+                CustomIconToolTipText.Text = _hoveredItem.Title;
+
+                if (this.Content != null)
+                {
+                    try
+                    {
+                        var border = CustomIconToolTip.Child as FrameworkElement;
+                        var titleText = (_hoveredElement as StackPanel)?.Children.OfType<TextBlock>().FirstOrDefault();
+                        
+                        if (border != null && titleText != null)
+                        {
+                            border.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+                            double popupWidth = border.DesiredSize.Width;
+                            double popupHeight = border.DesiredSize.Height;
+
+                            var transform = _hoveredElement.TransformToVisual(this.Content);
+                            
+                            var targetCenter = transform.TransformPoint(new Windows.Foundation.Point(
+                                _hoveredElement.ActualWidth / 2,
+                                _hoveredElement.ActualHeight - (titleText.ActualHeight / 2)
+                            ));
+
+                            double targetX = targetCenter.X - (popupWidth / 2);
+                            double targetY = targetCenter.Y - (popupHeight / 2);
+
+                            if (this.Content is FrameworkElement contentFE)
+                            {
+                                double maxWidth = contentFE.ActualWidth;
+                                double padding = 8.0;
+
+                                if (targetX < padding)
+                                {
+                                    targetX = padding;
+                                }
+                                else if (targetX + popupWidth > maxWidth - padding)
+                                {
+                                    targetX = maxWidth - popupWidth - padding;
+                                }
+                            }
+
+                            CustomIconToolTip.HorizontalOffset = targetX;
+                            CustomIconToolTip.VerticalOffset = targetY;
+                            CustomIconToolTip.IsOpen = true;
+                        }
+                    }
+                    catch { }
+                }
+            }
+        }
+
+        private void ItemPanel_PointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            if (sender is FrameworkElement fe && fe.DataContext is AppItem item)
+            {
+                if (_hoveredItem == item)
+                {
+                    HideCustomToolTip();
+                }
+            }
+        }
+
         private void AppGrid_ItemClick(object sender, ItemClickEventArgs e)
         {
+            if (ConfigService.LaunchMode == "double") return;
             try
             {
                 var item = e.ClickedItem as AppItem;
                 if (item != null)
                 {
                     LaunchItem(item);
+                }
+            }
+            catch (Exception) { }
+        }
+
+        private void HideCustomToolTip()
+        {
+            _hoveredItem = null;
+            _hoveredElement = null;
+            _tooltipTimer?.Stop();
+            if (CustomIconToolTip != null) CustomIconToolTip.IsOpen = false;
+        }
+
+        private void AppGrid_PointerWheelChanged(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            HideCustomToolTip();
+        }
+
+        private void AppGrid_DoubleTapped(object sender, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs e)
+        {
+            if (ConfigService.LaunchMode != "double") return;
+            try
+            {
+                if (AppGrid.SelectedItem is AppItem item)
+                {
+                    LaunchItem(item);
+                }
+                else if (e.OriginalSource is FrameworkElement fe && fe.DataContext is AppItem ctxItem)
+                {
+                    LaunchItem(ctxItem);
                 }
             }
             catch (Exception) { }
@@ -808,6 +978,8 @@ namespace EricGameLauncher
 
         private void ContextMenu_Opening(object sender, object e)
         {
+            HideCustomToolTip();
+
             if (sender is MenuFlyout menu)
             {
                 var item = GetTag(menu);
@@ -2196,6 +2368,15 @@ namespace EricGameLauncher
             }
         }
 
+        private void ComboLaunchMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (ComboLaunchMode.SelectedItem is ComboBoxItem item && item.Tag is string val)
+            {
+                ConfigService.LaunchMode = val; AppGrid.IsItemClickEnabled = ConfigService.LaunchMode != "double";
+                Task.Run(() => ConfigService.SaveConfig());
+            }
+        }
+
         private void ComboUpdateChannel_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (sender is ComboBox combo)
@@ -2391,6 +2572,7 @@ namespace EricGameLauncher
                 MenuSortItem.Text = I18n.T("Menu_Sort");
                 MenuSettingsItem.Text = I18n.T("Menu_Settings");
                 MenuCheckUpdateItem.Text = I18n.T("Menu_CheckUpdate");
+                MenuPrivacyItem.Text = I18n.T("Privacy_MenuTitle");
                 MenuSystemIntegrationItem.Text = I18n.T("Menu_SystemIntegration");
                 MenuInstallItem.Text = I18n.T("Menu_Install");
                 MenuUninstallItem.Text = I18n.T("Menu_Uninstall");
@@ -2400,6 +2582,13 @@ namespace EricGameLauncher
                 SettingsTitle.Text = I18n.T("Settings_Title");
                 SettingsGeneralLabel.Text = I18n.T("Settings_General");
                 SettingsCloseAfterLaunchLabel.Text = I18n.T("Settings_CloseAfterLaunch");
+                SettingsLaunchModeLabel.Text = I18n.T("Settings_LaunchMode");
+                ComboLaunchMode.SelectionChanged -= ComboLaunchMode_SelectionChanged;
+                ComboLaunchMode.Items.Clear();
+                ComboLaunchMode.Items.Add(new ComboBoxItem { Content = I18n.T("Settings_LaunchMode_Single"), Tag = "single" });
+                ComboLaunchMode.Items.Add(new ComboBoxItem { Content = I18n.T("Settings_LaunchMode_Double"), Tag = "double" });
+                ComboLaunchMode.SelectedIndex = ConfigService.LaunchMode == "double" ? 1 : 0; AppGrid.IsItemClickEnabled = ConfigService.LaunchMode != "double";
+                ComboLaunchMode.SelectionChanged += ComboLaunchMode_SelectionChanged;
                 SettingsUpdateChannelLabel.Text = I18n.T("Settings_UpdateChannel");
                 ComboUpdateChannel.SelectionChanged -= ComboUpdateChannel_SelectionChanged;
                 ComboUpdateChannel.Items.Clear();
@@ -2576,13 +2765,13 @@ namespace EricGameLauncher
             }
         }
 
-        private async Task StartUpdateFlowAsync(UpdateService.ReleaseInfo release)
+        private async Task StartUpdateFlowAsync(UpdateService.ReleaseInfo release, bool isForced = false)
         {
-            try { await ShowReleaseDialogAsync(release, hasUpdate: true); }
+            try { await ShowReleaseDialogAsync(release, hasUpdate: true, isForced); }
             catch { }
         }
 
-        private async Task ShowReleaseDialogAsync(UpdateService.ReleaseInfo release, bool hasUpdate)
+        private async Task ShowReleaseDialogAsync(UpdateService.ReleaseInfo release, bool hasUpdate, bool isForced = false)
         {
             string downloadUrl = release.assets.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.browser_download_url ?? "";
             if (hasUpdate && string.IsNullOrEmpty(downloadUrl)) return;
@@ -2595,16 +2784,32 @@ namespace EricGameLauncher
                     : I18n.T("Update_NoUpdateContent"),
                 Content = contentGrid,
                 PrimaryButtonText = hasUpdate ? I18n.T("Update_DialogConfirm") : (string.IsNullOrEmpty(downloadUrl) ? "" : I18n.T("Update_Repair")),
-                CloseButtonText = hasUpdate ? I18n.T("Update_DialogCancel") : I18n.T("Update_OK"),
+                CloseButtonText = isForced ? I18n.T("Update_Exit") : (hasUpdate ? I18n.T("Update_DialogCancel") : I18n.T("Update_OK")),
                 DefaultButton = hasUpdate ? ContentDialogButton.Primary : ContentDialogButton.Close,
                 XamlRoot = this.Content.XamlRoot
             };
+
+            if (isForced)
+            {
+                dialog.Closing += (s, e) =>
+                {
+                    if (e.Result != ContentDialogResult.Primary)
+                    {
+                        e.Cancel = true;
+                        Application.Current.Exit();
+                    }
+                };
+            }
+
             dialog.Resources["ContentDialogMaxWidth"] = dlgW;
             dialog.Resources["ContentDialogMaxHeight"] = dlgH;
 
             var result = await dialog.ShowAsync();
             if (result == ContentDialogResult.Primary && !string.IsNullOrEmpty(downloadUrl))
+            {
                 UpdateService.StartUpdater(downloadUrl);
+                Application.Current.Exit();
+            }
         }
 
         private async Task<(Grid contentGrid, double dialogW, double dialogH)> BuildReleaseContentAsync(UpdateService.ReleaseInfo release, bool prependTitle)
@@ -2694,7 +2899,18 @@ namespace EricGameLauncher
         {
             if (HasUpdate && _pendingUpdate != null)
             {
-                await StartUpdateFlowAsync(_pendingUpdate);
+                bool isForced = false;
+                var match = System.Text.RegularExpressions.Regex.Match(_pendingUpdate.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
+                if (match.Success)
+                {
+                    Version latestVersion = UpdateService.NormalizeVersion(match.Value);
+                    isForced = UpdateService.CheckForceUpdateAsync(latestVersion);
+                }
+                else
+                {
+                    isForced = UpdateService.CheckForceUpdateAsync();
+                }
+                await StartUpdateFlowAsync(_pendingUpdate, isForced);
             }
         }
     }
