@@ -1406,6 +1406,13 @@ namespace EricGameLauncher
         public static string FixedCachePath => Path.Combine(CurrentDataPath, IconFolderName);
         public static string CurrentDataPath { get; private set; } = "";
         private static ConfigData? _configData;
+
+        public static string LaunchMode
+        {
+            get => _configData?.Settings?.LaunchMode ?? "single";
+            set { if (_configData?.Settings != null) _configData.Settings.LaunchMode = value; }
+        }
+
         private static readonly SemaphoreSlim _saveSemaphore = new(1, 1);
         public static event Action? DataChanged;
 
@@ -2301,6 +2308,9 @@ namespace EricGameLauncher
 
     public class AppSettings
     {
+        [JsonPropertyName("launchMode")]
+        public string LaunchMode { get; set; } = "single";
+
         [JsonPropertyName("closeAfterLaunch")]
         public bool CloseAfterLaunch { get; set; } = false;
 
@@ -3865,7 +3875,7 @@ namespace EricGameLauncher
                     .OrderByDescending(r =>
                     {
                         var m = System.Text.RegularExpressions.Regex.Match(r.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
-                        return m.Success ? new Version(m.Value) : new Version(0, 0, 0);
+                        return m.Success ? NormalizeVersion(m.Value) : new Version(0, 0, 0);
                     })
                     .ToList();
 
@@ -3891,7 +3901,7 @@ namespace EricGameLauncher
                     .OrderByDescending(r =>
                     {
                         var m = System.Text.RegularExpressions.Regex.Match(r.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
-                        return m.Success ? new Version(m.Value) : new Version(0, 0, 0);
+                        return m.Success ? NormalizeVersion(m.Value) : new Version(0, 0, 0);
                     })
                     .ToList();
 
@@ -3904,11 +3914,11 @@ namespace EricGameLauncher
         {
             if (sortedReleases.Count == 0) return null;
 
-            Version currentVersion = new Version(AppVersion.Version);
+            Version currentVersion = NormalizeVersion(AppVersion.Version);
             var newerReleases = sortedReleases.Where(r =>
             {
                 var m = System.Text.RegularExpressions.Regex.Match(r.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
-                return m.Success && new Version(m.Value) > currentVersion;
+                return m.Success && NormalizeVersion(m.Value) > currentVersion;
             }).ToList();
 
             if (newerReleases.Count <= 1)
@@ -3942,6 +3952,41 @@ namespace EricGameLauncher
         public static Task<ReleaseInfo?> GetReleaseAsync(string channel)
             => channel == "latest" ? GetLatestReleaseAsync() : GetLatestStableReleaseAsync();
 
+        public static bool CheckForceUpdateAsync(Version? latestAvailableVersion = null)
+        {
+            try
+            {
+                var info = ServerConfigManager.CurrentConfig;
+                if (info?.ForceUpdate != null && !string.IsNullOrEmpty(info.ForceUpdate.MinVersion))
+                {
+                    Version minV = NormalizeVersion(info.ForceUpdate.MinVersion);
+                    Version currentV = NormalizeVersion(AppVersion.Version);
+                    
+                    if (latestAvailableVersion != null && minV > latestAvailableVersion)
+                    {
+                        return false;
+                    }
+
+                    return currentV < minV;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        public static Version NormalizeVersion(string versionStr)
+        {
+            if (Version.TryParse(versionStr, out Version? v) && v != null)
+            {
+                int major = v.Major >= 0 ? v.Major : 0;
+                int minor = v.Minor >= 0 ? v.Minor : 0;
+                int build = v.Build >= 0 ? v.Build : 0;
+                int revision = v.Revision >= 0 ? v.Revision : 0;
+                return new Version(major, minor, build, revision);
+            }
+            return new Version(0, 0, 0, 0);
+        }
+
         public static async Task<ReleaseInfo?> CheckForUpdateAsync(string channel = "stable")
         {
             try
@@ -3952,8 +3997,8 @@ namespace EricGameLauncher
                 var match = System.Text.RegularExpressions.Regex.Match(release.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
                 if (!match.Success) return null;
 
-                Version latestVersion = new Version(match.Value);
-                Version currentVersion = new Version(AppVersion.Version);
+                Version latestVersion = NormalizeVersion(match.Value);
+                Version currentVersion = NormalizeVersion(AppVersion.Version);
 
                 return latestVersion > currentVersion ? release : null;
             }
@@ -4000,6 +4045,42 @@ namespace EricGameLauncher
                 Process.Start(psi);
             }
             catch { }
+        }
+    }
+
+    #endregion
+
+    #region ServerConfig
+
+    public class ServerConfigInfo
+    {
+        [JsonPropertyName("forceUpdate")]
+        public ForceUpdateInfo? ForceUpdate { get; set; }
+    }
+
+    public class ForceUpdateInfo
+    {
+        [JsonPropertyName("minVersion")]
+        public string MinVersion { get; set; } = "";
+    }
+
+    public static class ServerConfigManager
+    {
+        private static readonly HttpClient client = new HttpClient();
+        public static ServerConfigInfo? CurrentConfig { get; private set; }
+
+        public static async Task FetchConfigAsync()
+        {
+            try
+            {
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("EricGameLauncher");
+                var json = await client.GetStringAsync("https://raw.githubusercontent.com/EricZhang233/EricGameLauncher/master/ServerCfg.json");
+                CurrentConfig = JsonSerializer.Deserialize<ServerConfigInfo>(json);
+            }
+            catch
+            {
+                CurrentConfig = null;
+            }
         }
     }
 

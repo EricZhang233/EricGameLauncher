@@ -132,6 +132,12 @@
                                     <FontIcon Glyph="&#xE895;"/>
                                 </MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
+
+                            <MenuFlyoutItem x:Name="MenuPrivacyItem" Text="" Click="MenuPrivacyItem_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE8D7;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
                             
                             <MenuFlyoutSeparator />
                             
@@ -323,10 +329,30 @@
                                 <Grid ColumnDefinitions="Auto,*">
                                     <FontIcon Glyph="&#xE774;" FontSize="16"
                                               VerticalAlignment="Center" Margin="0,0,12,0"/>
-                                    <ComboBox x:Name="LanguageComboBox" 
+                                    <ComboBox x:Name="LanguageComboBox"
                                               Grid.Column="1"
                                               SelectionChanged="LanguageComboBox_SelectionChanged"
                                               HorizontalAlignment="Stretch"/>
+                                </Grid>
+                                <Border Height="1" Margin="0,4,0,4" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+                                <Grid HorizontalAlignment="Stretch">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="12"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="&#xE8B0;" FontSize="16"
+                                              VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="SettingsLaunchModeLabel"
+                                               Grid.Column="2"
+                                               Text=""
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,8,0"/>
+                                    <ComboBox x:Name="ComboLaunchMode"
+                                              Grid.Column="3"
+                                              HorizontalAlignment="Stretch"
+                                              SelectionChanged="ComboLaunchMode_SelectionChanged"/>
                                 </Grid>
                                 <Border Height="1" Margin="0,4,0,4" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
                                 <Grid ColumnDefinitions="Auto,*,Auto">
@@ -452,11 +478,15 @@
                   CanReorderItems="False"
                   IsItemClickEnabled="True"
                   ItemClick="AppGrid_ItemClick"
+                  DoubleTapped="AppGrid_DoubleTapped"
+                  PointerWheelChanged="AppGrid_PointerWheelChanged"
                   ContainerContentChanging="AppGrid_ContainerContentChanging">
               <controls:AdaptiveGridView.ItemTemplate>
                   <DataTemplate x:DataType="models:AppItem">
-                      <StackPanel x:Name="ItemPanel" Width="118" Margin="4" Tag="{Binding}" HorizontalAlignment="Center">
-                        
+                        <StackPanel x:Name="ItemPanel" Width="118" Margin="4" Tag="{Binding}" HorizontalAlignment="Center"
+                                    PointerEntered="ItemPanel_PointerEntered"
+                                    PointerExited="ItemPanel_PointerExited"
+                                    PointerCanceled="ItemPanel_PointerExited">
                         
                         <Grid x:Name="IconGrid" Width="118" Height="118" Margin="0,0,0,2">
                             
@@ -481,15 +511,13 @@
                         </Grid>
 
                         
-                        <TextBlock Text="{Binding Title}" 
+                        <TextBlock Text="{Binding Title}"
                                    x:Name="TitleText"
                                    Width="118"
                                    TextAlignment="Center"
                                    TextTrimming="CharacterEllipsis"
                                    Padding="6,0"
-                                   FontSize="12"
-                                   FontWeight="SemiBold"
-                                   ToolTipService.ToolTip="{Binding Title}"/>
+                                   FontSize="12" />
 
                         <StackPanel.ContextFlyout>
                             <MenuFlyout Opening="ContextMenu_Opening">
@@ -1162,6 +1190,16 @@
 
             </Grid>
         </ContentDialog>
+
+        <Popup x:Name="CustomIconToolTip" IsHitTestVisible="False">
+            <Border Background="{ThemeResource FlyoutPresenterBackground}"
+                    BorderBrush="{ThemeResource FlyoutBorderThemeBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="8,4">
+                <TextBlock x:Name="CustomIconToolTipText" FontSize="12" />
+            </Border>
+        </Popup>
     </Grid>
 </Window>
 

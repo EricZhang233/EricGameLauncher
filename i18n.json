@@ -32,6 +32,9 @@
 		"Settings_Title": "设置",
 		"Settings_General": "常规",
 		"Settings_CloseAfterLaunch": "启动程序后自动退出",
+		"Settings_LaunchMode": "启动方式",
+		"Settings_LaunchMode_Single": "单击启动",
+		"Settings_LaunchMode_Double": "双击启动",
 		"Settings_UpdateChannel": "更新通道",
 		"Settings_UpdateChannel_Stable": "稳定版",
 		"Settings_UpdateChannel_Latest": "开发版",
@@ -89,7 +92,12 @@
 		"Scanner_ImportAll": "导入全部新增项目",
 		"Update_Repair": "强制重装",
 		"Update_ChannelNote": "当前更新通道：{0}。可前往「设置」中切换。",
-		"Update_OK": "确定"
+		"Update_OK": "确定",
+		"Update_Exit": "退出",
+		"Privacy_MenuTitle": "隐私/权限",
+		"Privacy_DialogTitle": "隐私政策与权限说明",
+		"Privacy_DialogContent": "【隐私声明】\n本应用程序不会收集或上传个人身份、账号、游戏库等隐私信息。所有配置与缓存原则上仅保存在本地。\n\n【权限与用途说明】\n1. 存储与注册表访问\n  • 游戏扫描：读取本地磁盘与注册表，定位已安装游戏目录并解析本地清单（如 AppxManifest）。\n  • 缓存管理：提取游戏执行文件或快捷方式图标并保存至本地，以提升加载性能。\n2. 进程控制与执行\n  • 程序启动：根据您的操作，启动游戏进程、平台协议（如 steam://）或自定义脚本。\n  • 权限提升：仅在您明确启用时，使用管理员权限 (RunAs) 启动。\n  • 组件运行：执行应用更新时，会在系统临时目录释放并运行更新组件。\n3. 网络访问（不上传隐私数据）\n  • 版本更新：与 GitHub 等开源平台建立单向连接，获取版本与更新信息。\n  • 分类校验：本地特征不足时，仅发送应用的 UWP 包名 (PFN) 至微软官方接口验证分类。该过程为单向，不包含第三方追踪、分析或隐私数据上载。\n\n【云控系统】\n部分应用配置由云端开发团队管理。以下是云控项，未列出的配置不受云控。\n  • 强制更新：作为独立能力，仅在紧急情况（T0 级别严重事故、关键安全/稳定修复）启用。我们鼓励用户主动更新，强制更新为最后手段并尽量降低对用户的影响。",
+		"Privacy_DialogClose": "关闭"
 	},
 	"EN": {
 		"_LangName": "English",
@@ -124,6 +132,9 @@
 		"Settings_Title": "Settings",
 		"Settings_General": "General",
 		"Settings_CloseAfterLaunch": "Close after launching app",
+		"Settings_LaunchMode": "Launch Mode",
+		"Settings_LaunchMode_Single": "Single Click",
+		"Settings_LaunchMode_Double": "Double Click",
 		"Settings_UpdateChannel": "Update Channel",
 		"Settings_UpdateChannel_Stable": "Stable",
 		"Settings_UpdateChannel_Latest": "Dev",
@@ -181,7 +192,12 @@
 		"Scanner_ImportAll": "Import All New Items",
 		"Update_Repair": "Force Reinstall",
 		"Update_ChannelNote": "Current update channel: {0}. You can switch it in Settings.",
-		"Update_OK": "OK"
+		"Update_OK": "OK",
+		"Update_Exit": "Exit",
+		"Privacy_MenuTitle": "Privacy & Permissions",
+		"Privacy_DialogTitle": "Privacy Policy & Permissions",
+		"Privacy_DialogContent": "【Privacy Statement】\nThis application never collects or secretly uploads your personal identification, account, or game library data. All configurations and caches are stored locally by default.\n\n【Required permissions and usage】\n1. Storage & Registry Access\n  • Game Scanning: Reads local drives and registries to locate installed games and parse local manifests (e.g., AppxManifest).\n  • Cache Management: Extracts executable or shortcut icons and caches them locally to improve load performance.\n2. Process Control & Execution\n  • App Launching: Reacts to your actions by launching game processes, platform protocols (e.g., steam://), or custom scripts.\n  • Permission Elevation: Only enters Administrator (RunAs) mode when explicitly configured by the user.\n  • Component Execution: During application updates, extracts and runs an update component from the system temporary directory.\n3. Network Access (No privacy data upload)\n  • Updates: One-way connection to open-source hosting platforms (e.g., GitHub) to fetch version metadata.\n  • Category Verification: When local data is insufficient, only the app’s UWP Package Family Name (PFN) is sent to Microsoft’s official interface for category verification. This is a one-way query with no third-party tracking, analytics, or privacy uploads.\n\n【Cloud control system】\nSome in-app configurations are managed by the cloud development team. The following settings are cloud-managed; settings not listed are not.\n  • Forced update: An independent capability enabled for critical T0 incidents and key security/stability fixes. Voluntary updates are encouraged; forced updates are a last resort and minimize user disruption.",
+		"Privacy_DialogClose": "Close"
 	},
 	"Zh-TW": {
 		"_LangName": "繁體中文",
@@ -216,6 +232,9 @@
 		"Settings_Title": "設定",
 		"Settings_General": "一般",
 		"Settings_CloseAfterLaunch": "啟動應用程式後自動關閉",
+		"Settings_LaunchMode": "啟動方式",
+		"Settings_LaunchMode_Single": "按一下啟動",
+		"Settings_LaunchMode_Double": "連按兩下啟動",
 		"Settings_UpdateChannel": "更新通道",
 		"Settings_UpdateChannel_Stable": "穩定版",
 		"Settings_UpdateChannel_Latest": "開發版",
@@ -255,11 +274,11 @@
 		"Menu_CheckUpdate": "檢查更新",
 		"Menu_PlatformManager": "{0}",
 		"Migration_OverlayTitle": "正在升級配置引擎...",
-		"Migration_OverlaySubTitle": "這可能需要幾秒鐘，完成后應用將自動重啟。",
+		"Migration_OverlaySubTitle": "這可能需要幾秒鐘，完成後應用程式將自動重新啟動。",
 		"Menu_Scan": "掃描",
 		"Scanner_Description": "支援自動掃描 Steam、Epic Games 和 Xbox (UWP) 平台已安裝的遊戲。",
 		"Scanner_Title": "掃描本地遊戲",
-		"Scanner_ImportSelected": "導入選中的項目",
+		"Scanner_ImportSelected": "匯入選取的項目",
 		"Scanner_Cancel": "取消",
 		"Scanner_Loading": "正在掃描本地遊戲...",
 		"Scanner_NewGames": "新增 ({0})",
@@ -273,7 +292,12 @@
 		"Update_NoUpdateContent": "您目前使用的是最新版本。",
 		"Update_Repair": "強制重新安裝",
 		"Update_ChannelNote": "目前更新通道：{0}。可前往「設定」中切換。",
-		"Update_OK": "確定"
+		"Update_OK": "確定",
+		"Update_Exit": "退出",
+		"Privacy_MenuTitle": "隱私 / 權限",
+		"Privacy_DialogTitle": "隱私權政策與權限說明",
+		"Privacy_DialogContent": "【隱私聲明】\n本應用程式絕不收集或私自上傳個人身份、帳號或遊戲庫資料。所有設定與快取原則上僅保存在本地端。\n\n【所需權限與用途說明】\n1. 儲存空間與註冊表存取\n  • 遊戲掃描：讀取本機磁碟與註冊表，以定位已安裝遊戲目錄並解析本機清單（如 AppxManifest）。\n  • 快取管理：提取遊戲執行檔或捷徑圖示，並保存在本地以提升載入效能。\n2. 程式控制與執行\n  • 應用啟動：回應您的操作啟動遊戲進程、平台協定（如 steam://）或自訂腳本。\n  • 權限提升：僅在您明確設定時，才以管理員權限 (RunAs) 啟動。\n  • 元件執行：更新期間，會在系統暫存目錄提取並執行專用更新元件。\n3. 網路存取（不上傳隱私數據）\n  • 版本更新：與 GitHub 等開源平台建立單向連線以獲取版本及更新策略。\n  • 類別驗證：本機資料不足時，僅傳送應用 UWP 套件名稱 (PFN) 至微軟官方接口驗證分類。此為單向檢查，不含第三方追蹤、分析或隱私資料上傳。\n\n【雲端控管系統】\n部分應用設定由雲端開發團隊管理，以下為控管項目，未列項目不受控管。\n  • 強制更新：於重大 T0 事件及安全/穩定性關鍵修復時啟用的獨立能力。鼓勵使用者主動更新，僅將強制更新作為最後手段並降低對使用者影響。",
+		"Privacy_DialogClose": "關閉"
 	},
 	"JA": {
 		"_LangName": "日本語",
@@ -309,6 +333,9 @@
 		"Settings_Title": "設定",
 		"Settings_General": "一般",
 		"Settings_CloseAfterLaunch": "起動後に自動終了",
+		"Settings_LaunchMode": "起動モード",
+		"Settings_LaunchMode_Single": "シングルクリック",
+		"Settings_LaunchMode_Double": "ダブルクリック",
 		"Settings_UpdateChannel": "更新チャンネル",
 		"Settings_UpdateChannel_Stable": "安定版",
 		"Settings_UpdateChannel_Latest": "開発版",
@@ -365,7 +392,12 @@
 		"Update_NoUpdateContent": "現在の最新バージョンをお使いです。",
 		"Update_Repair": "強制再インストール",
 		"Update_ChannelNote": "現在の更新チャンネル：{0}。設定から変更できます。",
-		"Update_OK": "OK"
+		"Update_OK": "OK",
+		"Update_Exit": "終了",
+		"Privacy_MenuTitle": "プライバシー / 権限",
+		"Privacy_DialogTitle": "プライバシーポリシーと権限の表記",
+		"Privacy_DialogContent": "【プライバシーステートメント】\n本アプリは個人識別情報、アカウント情報、ゲームライブラリデータを一切収集または無断アップロードしません。すべての設定とキャッシュは原則としてローカルに保存されます。\n\n【必要な権限と用途の説明】\n1. ストレージとレジストリアクセス\n  • ゲームスキャン：ローカルディスクとレジストリを読み取り、インストール済みゲームのディレクトリを特定し、ローカルマニフェスト（AppxManifestなど）を解析します。\n  • キャッシュ管理：ゲーム実行ファイルやショートカットのアイコンを抽出してローカルに保存し、読み込みパフォーマンスを向上させます。\n2. プロセス制御と実行\n  • プログラム起動：操作に応じてゲームプロセス、プラットフォームプロトコル（steam://など）、またはカスタムスクリプトを起動します。\n  • 権限昇格：ユーザーが明示的に設定した場合にのみ、管理者権限 (RunAs) で起動します。\n  • コンポーネント実行：アプリ更新時に、システムの一時ディレクトリに専用の更新プログラムを展開して実行します。\n3. ネットワークアクセス通信（プライバシーデータはアップロードしません）\n  • バージョン更新：GitHubなどのオープンソースホスティングプラットフォームへ一方向接続してバージョンと更新戦略を取得します。\n  • カテゴリ検証：ローカル情報が不足する場合、アプリの UWP パッケージ名 (PFN) だけを Microsoft の公式 API に送信してアプリカテゴリを検証します。これは一方向の検証であり、サードパーティの追跡分析やプライバシーデータのアップロードは含まれません。\n\n【クラウドコントロールシステム】\nアプリ内の一部設定はクラウド開発チームによって管理されます。以下は管理対象の設定で、ここに挙げたもの以外はクラウド管理対象外です。\n  • 強制更新：緊急時の T0 レベルの重大インシデントと重要なセキュリティ/安定性修正に対応するために有効化される独立機能です。ユーザー主導の更新を推奨し、強制更新は最終手段として実施され、ユーザーへの影響を最小限に抑えます。",
+		"Privacy_DialogClose": "閉じる"
 	},
 	"KO": {
 		"_LangName": "한국어",
@@ -380,7 +412,7 @@
 		"Menu_Install": "만들기",
 		"Menu_Uninstall": "제거",
 		"Menu_Run": "실행",
-		"Menu_RunManager": "관리자 실행",
+		"Menu_RunManager": "매니저 실행",
 		"Menu_OpenFileLocation": "파일 위치 열기",
 		"Menu_Properties": "속성",
 		"Menu_Delete": "삭제",
@@ -391,6 +423,9 @@
 		"Settings_Title": "설정",
 		"Settings_General": "일반",
 		"Settings_CloseAfterLaunch": "앱 실행 후 자동 종료",
+		"Settings_LaunchMode": "실행 모드",
+		"Settings_LaunchMode_Single": "한 번 클릭",
+		"Settings_LaunchMode_Double": "두 번 클릭",
 		"Settings_UpdateChannel": "업데이트 채널",
 		"Settings_UpdateChannel_Stable": "안정 버전",
 		"Settings_UpdateChannel_Latest": "개발 버전",
@@ -448,7 +483,12 @@
 		"Update_NoUpdateContent": "현재 최신 버전을 사용 중입니다.",
 		"Update_Repair": "강제 재설치",
 		"Update_ChannelNote": "현재 업데이트 채널: {0}. 설정에서 변경할 수 있습니다.",
-		"Update_OK": "확인"
+		"Update_OK": "확인",
+		"Update_Exit": "종료",
+		"Privacy_MenuTitle": "개인정보 / 권한",
+		"Privacy_DialogTitle": "개인정보 처리방침 및 권한 안내",
+		"Privacy_DialogContent": "【개인정보 보호 선언】\n본 앱은 개인 식별 정보, 계정 정보, 게임 라이브러리 데이터를 절대 수집하거나 무단 업로드하지 않습니다. 모든 설정과 캐시는 원칙적으로 로컬에만 저장됩니다.\n\n【필요 권한 및 용도 설명】\n1. 저장소 및 레지스트리 액세스\n  • 게임 스캔: 로컬 드라이브와 레지스트리를 읽어 설치된 게임 디렉토리를 찾고 로컬 매니페스트(AppxManifest 등)를 분석합니다.\n  • 캐시 관리: 게임 실행 파일 및 바로가기 아이콘을 추출하여 로컬에 저장하고 로딩 성능을 향상시킵니다.\n2. 프로세스 제어 및 실행\n  • 프로그램 실행: 사용자 조작에 따라 게임 프로세스, 플랫폼 프로토콜(steam:// 등) 또는 커스텀 스크립트를 실행합니다.\n  • 권한 상승: 사용자가 명시적으로 설정한 경우에만 관리자 권한(RunAs)으로 실행합니다.\n  • 구성 요소 실행: 앱 업데이트 시 시스템 임시 디렉토리에 전용 업데이트 구성 요소를 추출 및 실행합니다.\n3. 네트워크 액세스 통신(개인정보 업로드 없음)\n  • 버전 업데이트: GitHub 등 오픈소스 호스팅 플랫폼에 단방향으로 연결하여 버전 및 업데이트 전략을 가져옵니다.\n  • 카테고리 검증: 로컬 정보가 부족할 경우 앱의 UWP 패키지 이름(PFN)만 Microsoft 공식 API로 보내 앱 카테고리를 검증합니다. 이는 단방향 검증이며, 제3자 추적·분석 및 개인정보 업로드는 포함되지 않습니다.\n\n【클라우드 제어 시스템】\n앱 내 일부 설정은 클라우드 개발팀이 관리합니다. 아래는 관리 대상 설정이며, 이 목록에 없는 설정은 클라우드 관리 대상이 아닙니다.\n  • 강제 업데이트: 긴급 상황의 T0급 심각 사고 및 핵심 보안/안정성 수정을 처리하기 위해 활성화되는 독립 기능입니다. 사용자가 편리한 시점에 자발적으로 업데이트하도록 권장하며, 강제 업데이트는 최후 수단으로 적용되어 사용자 방해를 최소화합니다.",
+		"Privacy_DialogClose": "닫기"
 	},
 	"FR": {
 		"_LangName": "Français",
@@ -475,6 +515,9 @@
 		"Settings_Title": "Paramètres",
 		"Settings_General": "Général",
 		"Settings_CloseAfterLaunch": "Fermer après le lancement",
+		"Settings_LaunchMode": "Mode de lancement",
+		"Settings_LaunchMode_Single": "Simple clic",
+		"Settings_LaunchMode_Double": "Double clic",
 		"Settings_UpdateChannel": "Canal de mise à jour",
 		"Settings_UpdateChannel_Stable": "Stable",
 		"Settings_UpdateChannel_Latest": "Dev",
@@ -532,7 +575,12 @@
 		"Update_NoUpdateContent": "Vous utilisez déjà la dernière version.",
 		"Update_Repair": "Réinstallation Forcée",
 		"Update_ChannelNote": "Canal actuel : {0}. Modifiable dans Paramètres.",
-		"Update_OK": "OK"
+		"Update_OK": "OK",
+		"Update_Exit": "Quitter",
+		"Privacy_MenuTitle": "Confidentialité & Autorisations",
+		"Privacy_DialogTitle": "Politique de confidentialité et autorisations",
+		"Privacy_DialogContent": "【Déclaration de confidentialité】\nCette application ne collecte ni ne télécharge jamais en secret des données personnelles, des comptes ou des bibliothèques de jeux. Toutes les configurations et les caches sont en principe stockés localement.\n\n【Permissions requises et utilisation】\n1. Accès au stockage et au registre\n  • Analyse des jeux : Lit les disques locaux et le registre pour localiser les répertoires de jeux installés et analyser les manifestes locaux (ex. AppxManifest).\n  • Gestion du cache : Extrait les icônes des exécutables ou des raccourcis et les enregistre localement pour améliorer les performances de chargement.\n2. Contrôle et exécution des processus\n  • Lancement de l’application : Réagit à vos actions en lançant des processus de jeu, des protocoles de plate-forme (ex. steam://) ou des scripts personnalisés.\n  • Élévation de privilèges : N’exécute en tant qu’administrateur (RunAs) que si vous l’avez configuré explicitement.\n  • Exécution des composants : Lors des mises à jour de l’application, un composant de mise à jour dédié est extrait et exécuté dans le dossier temporaire système.\n3. Accès réseau (aucun envoi de données privées)\n  • Mises à jour : Connexion unidirectionnelle vers des plateformes open source (GitHub, etc.) pour récupérer les métadonnées de version.\n  • Vérification de catégorie : Si les informations locales sont insuffisantes, seul le nom de la famille de packages UWP (PFN) est envoyé à l’API officielle Microsoft pour vérifier la catégorie. C’est une requête unidirectionnelle sans traceurs tiers ni envoi de données privées.\n\n【Système de contrôle cloud】\nCertaines configurations de l’application sont gérées par l’équipe cloud. Les éléments suivants sont contrôlés ; ceux non listés ne le sont pas.\n  • Mise à jour forcée : Capacité indépendante activée en cas d’incident critique T0 et de correctifs majeurs de sécurité/stabilité. La mise à jour volontaire est encouragée. La mise à jour forcée reste un dernier recours et minimise les perturbations pour l’utilisateur.",
+		"Privacy_DialogClose": "Fermer"
 	},
 	"DE": {
 		"_LangName": "Deutsch",
@@ -559,6 +607,9 @@
 		"Settings_Title": "Einstellungen",
 		"Settings_General": "Allgemein",
 		"Settings_CloseAfterLaunch": "Nach dem Start schließen",
+		"Settings_LaunchMode": "Startmodus",
+		"Settings_LaunchMode_Single": "Einfacher Klick",
+		"Settings_LaunchMode_Double": "Doppelklick",
 		"Settings_UpdateChannel": "Updatekanal",
 		"Settings_UpdateChannel_Stable": "Stabil",
 		"Settings_UpdateChannel_Latest": "Dev",
@@ -614,9 +665,12 @@
 		"Update_DialogCancel": "Später",
 		"Update_NoUpdateTitle": "Nach Updates suchen",
 		"Update_NoUpdateContent": "Sie verwenden bereits die neueste Version.",
-		"Update_Repair": "Neuinstallation",
+		"Update_Repair": "Erzwungene Neuinstallation",
 		"Update_ChannelNote": "Aktueller Updatekanal: {0}. \u00c4nderbar in den Einstellungen.",
-		"Update_OK": "OK"
+		"Update_OK": "OK",		"Update_Exit": "Beenden",		"Privacy_MenuTitle": "Datenschutz & Berechtigungen",
+		"Privacy_DialogTitle": "Datenschutzrichtlinie & Berechtigungen",
+		"Privacy_DialogContent": "【Datenschutzerklärung】\nDiese App sammelt oder lädt niemals heimlich persönliche Identitätsdaten, Konto- oder Spielbibliotheksdaten hoch. Alle Einstellungen und Caches werden grundsätzlich lokal gespeichert.\n\n【Erforderliche Berechtigungen und Verwendungszweck】\n1. Speicher- und Registrierungszugriff\n  • Spielscan: Liest lokale Laufwerke und die Registrierung, um installierte Spielverzeichnisse zu finden und lokale Manifeste (z. B. AppxManifest) zu analysieren.\n  • Cache-Verwaltung: Extrahiert Symbole aus Spielexecutables oder Verknüpfungen und speichert sie lokal, um die Ladeleistung zu verbessern.\n2. Prozesssteuerung und Ausführung\n  • Programmstart: Reagiert auf Ihre Aktionen, indem es Spielprozesse, Plattformprotokolle (z. B. steam://) oder benutzerdefinierte Skripte startet.\n  • Rechteerhöhung: Führt eine Administrator-Ausführung (RunAs) nur aus, wenn Sie dies explizit konfiguriert haben.\n  • Komponenten-Ausführung: Bei App-Updates wird eine dedizierte Aktualisierungskomponente im temporären Systemverzeichnis extrahiert und gestartet.\n3. Netzwerkzugriff (Keine Übertragung privater Daten)\n  • Versionsupdates: Verbindet einseitig mit Open-Source-Hosting-Plattformen (z. B. GitHub), um Versionsmetadaten abzurufen.\n  • Kategoriebestätigung: Wenn lokale Informationen nicht ausreichen, wird nur der UWP-Paketfamilienname (PFN) an die offizielle Microsoft-Schnittstelle gesendet, um die App-Kategorie zu prüfen. Dies ist eine rein einseitige Abfrage ohne Drittanbieter-Tracking oder Upload privater Daten.\n\n【Cloud-Steuerungssystem】\nEinige App-Konfigurationen werden vom Cloud-Entwicklungsteam verwaltet. Nachfolgend aufgeführte Einstellungen gehören zur Steuerung; alle nicht aufgeführten Einstellungen sind nicht cloud-gesteuert.\n  • Erzwinge Update: Eine unabhängige Funktion, die in kritischen T0-Fällen und bei wichtigen Sicherheits-/Stabilitätsfixes aktiviert wird. Nutzer werden zur freiwilligen Aktualisierung ermutigt, eine erzwungene Aktualisierung bleibt das letzte Mittel und minimiert die Beeinträchtigung. ",
+		"Privacy_DialogClose": "Schließen"
 	},
 	"ES": {
 		"_LangName": "Español",
@@ -632,7 +686,7 @@
 		"Menu_Install": "Crear",
 		"Menu_Uninstall": "Desinstalar",
 		"Menu_Run": "Ejecutar",
-		"Menu_RunManager": "Ejecutar administrador",
+		"Menu_RunManager": "Ejecutar gestor",
 		"Menu_OpenFileLocation": "Abrir ubicación del archivo",
 		"Menu_Properties": "Propiedades",
 		"Menu_Delete": "Eliminar",
@@ -643,6 +697,9 @@
 		"Settings_Title": "Configuración",
 		"Settings_General": "General",
 		"Settings_CloseAfterLaunch": "Cerrar al lanzar la aplicación",
+		"Settings_LaunchMode": "Modo de inicio",
+		"Settings_LaunchMode_Single": "Un solo clic",
+		"Settings_LaunchMode_Double": "Doble clic",
 		"Settings_UpdateChannel": "Canal de actualización",
 		"Settings_UpdateChannel_Stable": "Estable",
 		"Settings_UpdateChannel_Latest": "Dev",
@@ -700,6 +757,9 @@
 		"Update_NoUpdateContent": "Ya está usando la última versión.",
 		"Update_Repair": "Reinstalación Forzada",
 		"Update_ChannelNote": "Canal actual: {0}. Se puede cambiar en Configuraci\u00f3n.",
-		"Update_OK": "OK"
+		"Update_OK": "OK",		"Update_Exit": "Salir",		"Privacy_MenuTitle": "Privacidad y permisos",
+		"Privacy_DialogTitle": "Política de privacidad y permisos",
+		"Privacy_DialogContent": "【Declaración de privacidad】\nEsta aplicación nunca recopila ni carga en secreto datos de identificación personal, cuentas o bibliotecas de juegos. Todas las configuraciones y cachés se almacenan en principio de forma local.\n\n【Permisos necesarios y uso】\n1. Acceso al almacenamiento y al registro\n  • Escaneo de juegos: Lee las unidades locales y el registro para localizar directorios de juegos instalados y analizar manifiestos locales (ej. AppxManifest).\n  • Gestión de caché: Extrae iconos de ejecutables o accesos directos y los guarda localmente para mejorar el rendimiento de carga.\n2. Control y ejecución de procesos\n  • Inicio de programa: Responde a sus acciones iniciando procesos de juegos, protocolos de plataforma (ej. steam://) o scripts personalizados.\n  • Elevación de privilegios: Solo ejecuta como Administrador (RunAs) si usted lo ha configurado explícitamente.\n  • Ejecución de componentes: Durante las actualizaciones de la aplicación, extrae y ejecuta un componente de actualización dedicado en el directorio temporal del sistema.\n3. Acceso a la red (sin carga de datos de privacidad)\n  • Actualizaciones: Conexión unidireccional a plataformas de código abierto (ej. GitHub) para obtener metadatos de versión.\n  • Verificación de categoría: Si la información local es insuficiente, solo se envía el nombre de la familia de paquetes UWP (PFN) a la API oficial de Microsoft para verificar la categoría. Es una consulta unidireccional sin seguimiento de terceros ni carga de datos privados.\n\n【Sistema de control en la nube】\nAlgunas configuraciones de la aplicación son gestionadas por el equipo de desarrollo en la nube. Los siguientes elementos están gestionados; los no listados no lo están.\n  • Actualización forzada: función independiente habilitada para incidentes críticos de nivel T0 y correcciones importantes de seguridad/estabilidad. Se fomenta la actualización voluntaria; la forzada es último recurso y minimiza la molestia al usuario.",
+		"Privacy_DialogClose": "Cerrar"
 	}
 }
