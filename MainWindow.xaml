@@ -508,6 +508,24 @@
                                        Opacity="0.3"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        Visibility="{Binding IconPath, Converter={StaticResource NullToVisibilityConverter}}"/>
+
+                            <Grid HorizontalAlignment="Left"
+                                  VerticalAlignment="Top"
+                                  Margin="2"
+                                  Width="20"
+                                  Height="20"
+                                  IsHitTestVisible="False"
+                                  Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibilityConverter}}"
+                                  Opacity="{Binding LoadingOpacity}">
+                                <Ellipse Fill="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                         Stroke="{ThemeResource SurfaceStrokeColorDefaultBrush}"
+                                         StrokeThickness="1" />
+                                <ProgressRing IsActive="{Binding IsLoading}"
+                                              Width="16"
+                                              Height="16"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                            </Grid>
                         </Grid>
 
                         
@@ -1124,11 +1142,7 @@
         
         <ContentDialog x:Name="ScannerDialog" 
                        Grid.RowSpan="2"
-                       PrimaryButtonText="" 
-                       SecondaryButtonText="" 
-                       CloseButtonText=""
-                       PrimaryButtonClick="ScannerDialog_PrimaryButtonClick"
-                       SecondaryButtonClick="ScannerDialog_SecondaryButtonClick">
+                       CloseButtonText="">
             <Grid MinWidth="450" MinHeight="350">
                 <Grid x:Name="ScannerLoadingPanel" VerticalAlignment="Center" HorizontalAlignment="Center">
                     <StackPanel Spacing="16">
@@ -1146,8 +1160,14 @@
                                    TextWrapping="Wrap"/>
                         
                         <StackPanel x:Name="ScannerNewGamesSection">
-                            <TextBlock x:Name="ScannerNewGamesHeader" Text="" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                            <ListView x:Name="ScannerNewGamesList" SelectionMode="Multiple" ScrollViewer.VerticalScrollMode="Disabled" ItemContainerStyle="{StaticResource DefaultListViewItemStyle}">
+                            <Grid Margin="0,0,0,8">
+                                <TextBlock x:Name="ScannerNewGamesHeader" Text="" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                                    <Button x:Name="ScannerNewSelectAllBtn" Content="Select All" FontSize="12" Padding="8,4" Click="ScannerNewSelectAllBtn_Click" />
+                                    <Button x:Name="ScannerImportSelectedBtn" Content="Import Selected" Style="{StaticResource AccentButtonStyle}" FontSize="12" Padding="8,4" Click="ScannerImportSelectedBtn_Click" />
+                                </StackPanel>
+                            </Grid>
+                            <ListView x:Name="ScannerNewGamesList" SelectionMode="Multiple" ScrollViewer.VerticalScrollMode="Disabled" ItemContainerStyle="{StaticResource DefaultListViewItemStyle}" SelectionChanged="ScannerNewGamesList_SelectionChanged">
                                 <ListView.ItemTemplate>
                                     <DataTemplate x:DataType="models:ScannedGame">
                                         <Grid Margin="0,4">
@@ -1184,10 +1204,34 @@
                                 </ListView.ItemTemplate>
                             </ListView>
                         </StackPanel>
+
+                          <StackPanel x:Name="ScannerInvalidGamesSection">
+                              <Grid Margin="0,0,0,8">
+                                  <TextBlock x:Name="ScannerInvalidGamesHeader" Text="" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                  <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                                      <Button x:Name="ScannerInvalidSelectAllBtn" Content="Select All" FontSize="12" Padding="8,4" Click="ScannerInvalidSelectAllBtn_Click" Foreground="IndianRed" />
+                                      <Button x:Name="ScannerDeleteInvalidBtn" Content="Delete Invalid" FontSize="12" Padding="8,4" Click="ScannerDeleteInvalidBtn_Click" Foreground="White" Background="IndianRed" />
+                                  </StackPanel>
+                              </Grid>
+                              <ListView x:Name="ScannerInvalidGamesList" SelectionMode="Multiple" ScrollViewer.VerticalScrollMode="Disabled" ItemContainerStyle="{StaticResource DefaultListViewItemStyle}" Opacity="0.8" SelectionChanged="ScannerInvalidGamesList_SelectionChanged">
+                                  <ListView.ItemTemplate>
+                                      <DataTemplate x:DataType="models:ScannedGame">
+                                          <Grid Margin="0,4">
+                                              <Grid.ColumnDefinitions>
+                                                  <ColumnDefinition Width="*"/>
+                                                  <ColumnDefinition Width="Auto"/>
+                                              </Grid.ColumnDefinitions>
+                                              <TextBlock Grid.Column="0" Text="{x:Bind Title}" Foreground="IndianRed" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextDecorations="Strikethrough"/>
+                                              <Border Grid.Column="1" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" BorderBrush="IndianRed" BorderThickness="1" Padding="6,2" CornerRadius="4" Margin="12,0,0,0">
+                                                  <TextBlock Text="{x:Bind PlatformBadge}" FontSize="10" Foreground="IndianRed" FontWeight="SemiBold"/>
+                                              </Border>
+                                          </Grid>
+                                      </DataTemplate>
+                                  </ListView.ItemTemplate>
+                              </ListView>
+                          </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
-                
-
             </Grid>
         </ContentDialog>
 
@@ -1202,4 +1246,3 @@
         </Popup>
     </Grid>
 </Window>
-

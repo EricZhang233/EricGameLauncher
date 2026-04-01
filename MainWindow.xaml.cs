@@ -344,7 +344,8 @@ namespace EricGameLauncher
                     Content = new Microsoft.UI.Xaml.Controls.TextBlock
                     {
                         Text = I18n.T("Privacy_DialogContent"),
-                        TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap
+                        TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
+                        Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 16, 0)
                     }
                 },
                 CloseButtonText = I18n.T("Privacy_DialogClose"),
@@ -781,13 +782,26 @@ namespace EricGameLauncher
 
 
 
-        private void LaunchItem(AppItem item)
+        private async void LaunchItem(AppItem item)
         {
             if ((DateTime.Now - _lastLaunchTime).TotalMilliseconds < 500) return;
             _lastLaunchTime = DateTime.Now;
 
             try
             {
+                item.IsLoading = true;
+                item.LoadingOpacity = 1.0;
+                
+                _ = Task.Delay(3000).ContinueWith(async _ => 
+                {
+                    // Fade out animation over 0.5 seconds
+                    for (int i = 0; i <= 10; i++)
+                    {
+                        DispatcherQueue.TryEnqueue(() => item.LoadingOpacity = 1.0 - (i / 10.0));
+                        await Task.Delay(50);
+                    }
+                    DispatcherQueue.TryEnqueue(() => item.IsLoading = false);
+                });
 
                 if (item.UseAlternativeLaunch && !string.IsNullOrEmpty(item.AlternativeLaunchCommand))
                 {
@@ -1121,6 +1135,20 @@ namespace EricGameLauncher
                     if ((DateTime.Now - _lastLaunchTime).TotalMilliseconds < 500) return;
                     _lastLaunchTime = DateTime.Now;
 
+                    item.IsLoading = true;
+                    item.LoadingOpacity = 1.0;
+                    
+                    _ = Task.Delay(3000).ContinueWith(async _ => 
+                    {
+                        // Fade out animation over 0.5 seconds
+                        for (int i = 0; i <= 10; i++)
+                        {
+                            DispatcherQueue.TryEnqueue(() => item.LoadingOpacity = 1.0 - (i / 10.0));
+                            await Task.Delay(50);
+                        }
+                        DispatcherQueue.TryEnqueue(() => item.IsLoading = false);
+                    });
+
                     RunProcess(managerPath, item.IsMgrAdmin);
                 }
             }
@@ -1179,6 +1207,7 @@ namespace EricGameLauncher
                 ScannerLoadingPanel.Visibility = Visibility.Visible;
                 ScannerNewGamesList.ItemsSource = null;
                 ScannerExistingGamesList.ItemsSource = null;
+                ScannerInvalidGamesList.ItemsSource = null;
 
                 var dialogTask = ScannerDialog.ShowAsync();
 
@@ -1223,14 +1252,70 @@ namespace EricGameLauncher
                     else newGames.Add(game);
                 }
 
+                var invalidGames = new List<ScannedGame>();
+                foreach (var item in _allItems)
+                {
+                    string? platformName = item.PlatformName;
+                    if (platformName == "Steam" || platformName == "Epic Games" || platformName == "Xbox")
+                    {
+                        bool found = false;
+                        foreach (var game in scannedGames)
+                        {
+                            if (platformName == "Xbox" && game.PlatformBadge == "Xbox")
+                            {
+                                string gameId = game.ExePath.Replace(LauncherConstants.UwpAppsFolderPrefix, "");
+                                if (!string.IsNullOrEmpty(item.ExePath) && item.ExePath.Contains(gameId, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    found = true; break;
+                                }
+                            }
+                            else if (game.PlatformBadge == platformName)
+                            {
+                                static string NormalizePath(string? p)
+                                {
+                                    if (string.IsNullOrEmpty(p)) return string.Empty;
+                                    try { return Path.GetFullPath(p).ToUpperInvariant(); }
+                                    catch { return p.ToUpperInvariant(); }
+                                }
+                                string itemNorm = NormalizePath(item.ExePath);
+                                string gameNorm = NormalizePath(game.ExePath);
+                                if ((!string.IsNullOrEmpty(item.ExePath) && itemNorm == gameNorm) ||
+                                    string.Equals(item.Title, game.Title, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    found = true; break;
+                                }
+                            }
+                        }
+
+                        if (!found)
+                        {
+                            invalidGames.Add(new ScannedGame
+                            {
+                                Title = item.Title ?? "Unknown",
+                                ExePath = item.Id, // Hijack ExePath to store AppItem Id for deletion
+                                PlatformBadge = platformName
+                            });
+                        }
+                    }
+                }
+
                 ScannerNewGamesList.ItemsSource = new ObservableCollection<ScannedGame>(newGames);
                 ScannerExistingGamesList.ItemsSource = new ObservableCollection<ScannedGame>(existingGames);
+                ScannerInvalidGamesList.ItemsSource = new ObservableCollection<ScannedGame>(invalidGames);
 
                 ScannerNewGamesHeader.Text = string.Format(I18n.T("Scanner_NewGames"), newGames.Count);
                 ScannerExistingGamesHeader.Text = string.Format(I18n.T("Scanner_ExistingGames"), existingGames.Count);
+                ScannerInvalidGamesHeader.Text = string.Format(I18n.T("Scanner_InvalidGames") ?? "已失效 ({0})", invalidGames.Count);
+                ScannerDeleteInvalidBtn.Content = I18n.T("Scanner_DeleteInvalid") ?? "删除所选项";
 
                 ScannerNewGamesSection.Visibility = newGames.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
                 ScannerExistingGamesSection.Visibility = existingGames.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+                ScannerInvalidGamesSection.Visibility = invalidGames.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+                if (invalidGames.Count > 0)
+                {
+                    ScannerInvalidGamesList.SelectAll();
+                }
 
                 ScannerLoadingPanel.Visibility = Visibility.Collapsed;
                 ScannerResultPanel.Visibility = Visibility.Visible;
@@ -1238,24 +1323,141 @@ namespace EricGameLauncher
             catch (Exception) { }
         }
 
-        private void ScannerDialog_PrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+        private void ScannerImportSelectedBtn_Click(object sender, RoutedEventArgs e)
         {
             try
             {
                 var selectedItems = ScannerNewGamesList.SelectedItems.Cast<ScannedGame>().ToList();
                 if (selectedItems.Count == 0) return;
+
                 ImportScannedGames(selectedItems);
+
+                var source = ScannerNewGamesList.ItemsSource as ObservableCollection<ScannedGame>;
+                if (source != null)
+                {
+                    foreach (var item in selectedItems)
+                    {
+                        source.Remove(item);
+                    }
+                    ScannerNewGamesHeader.Text = string.Format(I18n.T("Scanner_NewGames"), source.Count);
+                    if (source.Count == 0)
+                    {
+                        ScannerNewGamesSection.Visibility = Visibility.Collapsed;
+                    }
+                }
             }
             catch (Exception) { }
         }
 
-        private void ScannerDialog_SecondaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+        private void ScannerNewGamesList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             try
             {
-                var allNewItems = ScannerNewGamesList.ItemsSource as ObservableCollection<ScannedGame>;
-                if (allNewItems == null || allNewItems.Count == 0) return;
-                ImportScannedGames(allNewItems.ToList());
+                if (ScannerNewGamesList.Items.Count > 0 && ScannerNewGamesList.SelectedItems.Count == ScannerNewGamesList.Items.Count)
+                {
+                    ScannerNewSelectAllBtn.Content = I18n.T("Scanner_DeselectAll") ?? "Deselect All";
+                }
+                else
+                {
+                    ScannerNewSelectAllBtn.Content = I18n.T("Scanner_SelectAll") ?? "Select All";
+                }
+            }
+            catch { }
+        }
+
+        private void ScannerNewSelectAllBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (ScannerNewGamesList.Items.Count > 0 && ScannerNewGamesList.SelectedItems.Count == ScannerNewGamesList.Items.Count)
+                {
+                    ScannerNewGamesList.SelectedItems.Clear();
+                }
+                else
+                {
+                    ScannerNewGamesList.SelectAll();
+                }
+            }
+            catch { }
+        }
+
+        private void ScannerInvalidGamesList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            try
+            {
+                if (ScannerInvalidGamesList.Items.Count > 0 && ScannerInvalidGamesList.SelectedItems.Count == ScannerInvalidGamesList.Items.Count)
+                {
+                    ScannerInvalidSelectAllBtn.Content = I18n.T("Scanner_DeselectAll") ?? "Deselect All";
+                }
+                else
+                {
+                    ScannerInvalidSelectAllBtn.Content = I18n.T("Scanner_SelectAll") ?? "Select All";
+                }
+            }
+            catch { }
+        }
+
+        private void ScannerInvalidSelectAllBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (ScannerInvalidGamesList.Items.Count > 0 && ScannerInvalidGamesList.SelectedItems.Count == ScannerInvalidGamesList.Items.Count)
+                {
+                    ScannerInvalidGamesList.SelectedItems.Clear();
+                }
+                else
+                {
+                    ScannerInvalidGamesList.SelectAll();
+                }
+            }
+            catch { }
+        }
+
+        private void ScannerDeleteInvalidBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var selectedInvalid = ScannerInvalidGamesList.SelectedItems.Cast<ScannedGame>().ToList();
+                if (selectedInvalid.Count == 0) return;
+
+                DeleteInvalidGames(selectedInvalid);
+                
+                var source = ScannerInvalidGamesList.ItemsSource as ObservableCollection<ScannedGame>;
+                if (source != null)
+                {
+                    foreach (var item in selectedInvalid)
+                    {
+                        source.Remove(item);
+                    }
+                    ScannerInvalidGamesHeader.Text = string.Format(I18n.T("Scanner_InvalidGames") ?? "已失效 ({0})", source.Count);
+                    if (source.Count == 0)
+                    {
+                        ScannerInvalidGamesSection.Visibility = Visibility.Collapsed;
+                    }
+                }
+            }
+            catch (Exception) { }
+        }
+
+        private void DeleteInvalidGames(List<ScannedGame> games)
+        {
+            try
+            {
+                bool deleted = false;
+                foreach (var game in games)
+                {
+                    var itemToDelete = _allItems.FirstOrDefault(a => a.Id == game.ExePath); // ExePath is hijacked as AppItem.Id
+                    if (itemToDelete != null)
+                    {
+                        _allItems.Remove(itemToDelete);
+                        deleted = true;
+                    }
+                }
+
+                if (deleted)
+                {
+                    SaveData();
+                }
             }
             catch (Exception) { }
         }
@@ -2563,9 +2765,10 @@ namespace EricGameLauncher
                 if (ScannerDialog != null)
                 {
                     ScannerDialog.Title = I18n.T("Scanner_Title");
-                    ScannerDialog.PrimaryButtonText = I18n.T("Scanner_ImportSelected");
-                    ScannerDialog.SecondaryButtonText = I18n.T("Scanner_ImportAll");
-                    ScannerDialog.CloseButtonText = I18n.T("Scanner_Cancel");
+                    if (ScannerImportSelectedBtn != null) ScannerImportSelectedBtn.Content = I18n.T("Scanner_ImportSelected");
+                    if (ScannerNewSelectAllBtn != null) ScannerNewSelectAllBtn.Content = ScannerNewGamesList?.Items.Count > 0 && ScannerNewGamesList.SelectedItems.Count == ScannerNewGamesList.Items.Count ? I18n.T("Scanner_DeselectAll") : I18n.T("Scanner_SelectAll");
+                    if (ScannerInvalidSelectAllBtn != null) ScannerInvalidSelectAllBtn.Content = ScannerInvalidGamesList?.Items.Count > 0 && ScannerInvalidGamesList.SelectedItems.Count == ScannerInvalidGamesList.Items.Count ? I18n.T("Scanner_DeselectAll") : I18n.T("Scanner_SelectAll");
+                    ScannerDialog.CloseButtonText = I18n.T("Property_Close") ?? "Close";
                     if (ScannerLoadingText != null) ScannerLoadingText.Text = I18n.T("Scanner_Loading");
                     if (ScannerDescriptionText != null) ScannerDescriptionText.Text = I18n.T("Scanner_Description");
                 }
