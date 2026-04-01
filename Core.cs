@@ -1861,6 +1861,34 @@ namespace EricGameLauncher
 
     public class AppItem : INotifyPropertyChanged
     {
+        private bool _isLoading;
+        public bool IsLoading
+        {
+            get => _isLoading;
+            set
+            {
+                if (_isLoading != value)
+                {
+                    _isLoading = value;
+                    OnPropertyChanged(nameof(IsLoading));
+                }
+            }
+        }
+
+        private double _loadingOpacity = 0.0;
+        public double LoadingOpacity
+        {
+            get => _loadingOpacity;
+            set
+            {
+                if (_loadingOpacity != value)
+                {
+                    _loadingOpacity = value;
+                    OnPropertyChanged(nameof(LoadingOpacity));
+                }
+            }
+        }
+
         private string _id = string.Empty;
         private string? _title;
         private string? _iconPath;
@@ -2451,6 +2479,15 @@ namespace EricGameLauncher
 
         public object ConvertBack(object value, Type targetType, object parameter, string language)
             => value is Visibility visibility && visibility == Visibility.Visible;
+    }
+
+    public sealed class BoolToOpacityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+            => value is bool boolValue && boolValue ? 1.0 : 0.0;
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+            => value is double opacity && opacity > 0;
     }
 
     public sealed class SizeToCornerRadiusConverter : IValueConverter
