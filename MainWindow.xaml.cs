@@ -131,6 +131,11 @@ namespace EricGameLauncher
                         PropPlatformBadge.Text = platform.PlatformName;
                         PropPlatformBadgeContainer.Visibility = Visibility.Visible;
                     }
+                    else if (!string.IsNullOrEmpty(path))
+                    {
+                        PropPlatformBadge.Text = "User";
+                        PropPlatformBadgeContainer.Visibility = Visibility.Visible;
+                    }
                     else
                     {
                         PropPlatformBadgeContainer.Visibility = Visibility.Collapsed;
@@ -1255,21 +1260,53 @@ namespace EricGameLauncher
                 var invalidGames = new List<ScannedGame>();
                 foreach (var item in _allItems)
                 {
+                    bool isFileOrDirExists = false;
+                    string? pureExePath = item.ExePath;
+                    bool isExeFile = false;
+
+                    if (!string.IsNullOrEmpty(item.ExePath))
+                    {
+                        try
+                        {
+                            if (item.ExePath.Contains(".exe", StringComparison.OrdinalIgnoreCase))
+                            {
+                                isExeFile = true;
+                                int exeIndex = item.ExePath.IndexOf(".exe", StringComparison.OrdinalIgnoreCase) + 4;
+                                pureExePath = item.ExePath.Substring(0, exeIndex).Trim('\"', ' ', '\'');
+                            }
+
+                            if (File.Exists(pureExePath) || Directory.Exists(pureExePath))
+                            {
+                                isFileOrDirExists = true;
+                            }
+                        }
+                        catch { }
+                    }
+
+                    // If the item actually exists on disk natively, it's definitely not invalid
+                    if (isFileOrDirExists) continue;
+
                     string? platformName = item.PlatformName;
                     if (platformName == "Steam" || platformName == "Epic Games" || platformName == "Xbox")
                     {
+                        if (platformName == "Xbox")
+                        {
+                            if (!StoreHelper.IsAppInstalled(item.ExePath))
+                            {
+                                invalidGames.Add(new ScannedGame
+                                {
+                                    Title = item.Title ?? "Unknown",
+                                    ExePath = item.Id, // Hijack ExePath to store AppItem Id for deletion
+                                    PlatformBadge = platformName
+                                });
+                            }
+                            continue;
+                        }
+                        
                         bool found = false;
                         foreach (var game in scannedGames)
                         {
-                            if (platformName == "Xbox" && game.PlatformBadge == "Xbox")
-                            {
-                                string gameId = game.ExePath.Replace(LauncherConstants.UwpAppsFolderPrefix, "");
-                                if (!string.IsNullOrEmpty(item.ExePath) && item.ExePath.Contains(gameId, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    found = true; break;
-                                }
-                            }
-                            else if (game.PlatformBadge == platformName)
+                            if (game.PlatformBadge == platformName)
                             {
                                 static string NormalizePath(string? p)
                                 {
@@ -1297,6 +1334,18 @@ namespace EricGameLauncher
                             });
                         }
                     }
+                    else
+                    {
+                        if (isExeFile && !isFileOrDirExists)
+                        {
+                            invalidGames.Add(new ScannedGame
+                            {
+                                Title = item.Title ?? "Unknown",
+                                ExePath = item.Id, // Hijack ExePath to store AppItem Id for deletion
+                                PlatformBadge = "User"
+                            });
+                        }
+                    }
                 }
 
                 ScannerNewGamesList.ItemsSource = new ObservableCollection<ScannedGame>(newGames);
@@ -1321,6 +1370,11 @@ namespace EricGameLauncher
                 ScannerResultPanel.Visibility = Visibility.Visible;
             }
             catch (Exception) { }
+        }
+
+        private void ScannerDialogCloseBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ScannerDialog.Hide();
         }
 
         private void ScannerImportSelectedBtn_Click(object sender, RoutedEventArgs e)
@@ -1533,6 +1587,11 @@ namespace EricGameLauncher
                         if (platform != null)
                         {
                             PropPlatformBadge.Text = platform.PlatformName;
+                            PropPlatformBadgeContainer.Visibility = Visibility.Visible;
+                        }
+                        else if (!string.IsNullOrEmpty(exePathSnapshot))
+                        {
+                            PropPlatformBadge.Text = "User";
                             PropPlatformBadgeContainer.Visibility = Visibility.Visible;
                         }
                         else
@@ -2764,11 +2823,11 @@ namespace EricGameLauncher
                 if (MenuScanItem != null) MenuScanItem.Text = I18n.T("Menu_Scan");
                 if (ScannerDialog != null)
                 {
-                    ScannerDialog.Title = I18n.T("Scanner_Title");
+                    if (ScannerDialogTitle != null) ScannerDialogTitle.Text = I18n.T("Scanner_Title");
+                    ToolTipService.SetToolTip(ScannerDialogCloseBtn, I18n.T("Property_Close") ?? "Close");
                     if (ScannerImportSelectedBtn != null) ScannerImportSelectedBtn.Content = I18n.T("Scanner_ImportSelected");
                     if (ScannerNewSelectAllBtn != null) ScannerNewSelectAllBtn.Content = ScannerNewGamesList?.Items.Count > 0 && ScannerNewGamesList.SelectedItems.Count == ScannerNewGamesList.Items.Count ? I18n.T("Scanner_DeselectAll") : I18n.T("Scanner_SelectAll");
                     if (ScannerInvalidSelectAllBtn != null) ScannerInvalidSelectAllBtn.Content = ScannerInvalidGamesList?.Items.Count > 0 && ScannerInvalidGamesList.SelectedItems.Count == ScannerInvalidGamesList.Items.Count ? I18n.T("Scanner_DeselectAll") : I18n.T("Scanner_SelectAll");
-                    ScannerDialog.CloseButtonText = I18n.T("Property_Close") ?? "Close";
                     if (ScannerLoadingText != null) ScannerLoadingText.Text = I18n.T("Scanner_Loading");
                     if (ScannerDescriptionText != null) ScannerDescriptionText.Text = I18n.T("Scanner_Description");
                 }

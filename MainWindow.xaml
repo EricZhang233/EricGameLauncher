@@ -1141,24 +1141,42 @@
         </Grid>
         
         <ContentDialog x:Name="ScannerDialog" 
-                       Grid.RowSpan="2"
-                       CloseButtonText="">
+                       Grid.RowSpan="2">
             <Grid MinWidth="450" MinHeight="350">
-                <Grid x:Name="ScannerLoadingPanel" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                
+                <Grid Grid.Row="0" Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="4" Margin="0,0,12,0">
+                        <TextBlock x:Name="ScannerDialogTitle" Text="" FontSize="20" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="ScannerDescriptionText" 
+                                   Text="" 
+                                   Style="{ThemeResource CaptionTextBlockStyle}" 
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                    
+                    <Button Grid.Column="1" Background="Transparent" BorderThickness="0" VerticalAlignment="Top" x:Name="ScannerDialogCloseBtn" Click="ScannerDialogCloseBtn_Click" Height="36" Width="36" Padding="0">
+                        <FontIcon Glyph="&#xE711;" FontSize="14"/>
+                    </Button>
+                </Grid>
+
+                <Grid x:Name="ScannerLoadingPanel" Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center">
                     <StackPanel Spacing="16">
                         <ProgressRing Width="48" Height="48" IsActive="True"/>
                         <TextBlock x:Name="ScannerLoadingText" Text="" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                     </StackPanel>
                 </Grid>
                 
-                <ScrollViewer x:Name="ScannerResultPanel" Visibility="Collapsed" MaxHeight="450">
+                <ScrollViewer x:Name="ScannerResultPanel" Grid.Row="1" Visibility="Collapsed" MaxHeight="450">
                     <StackPanel Spacing="24" Margin="0,0,12,0">
-                        <TextBlock x:Name="ScannerDescriptionText" 
-                                   Text="" 
-                                   Style="{ThemeResource CaptionTextBlockStyle}" 
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   TextWrapping="Wrap"/>
-                        
                         <StackPanel x:Name="ScannerNewGamesSection">
                             <Grid Margin="0,0,0,8">
                                 <TextBlock x:Name="ScannerNewGamesHeader" Text="" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />

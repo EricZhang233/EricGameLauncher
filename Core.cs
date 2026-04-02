@@ -3636,6 +3636,21 @@ namespace EricGameLauncher
         private static readonly PackageManager _packageManager = new PackageManager();
         private static readonly HttpClient _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
 
+        public static bool IsAppInstalled(string? path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            if (!path.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase)) return false;
+
+            try
+            {
+                string aumid = path.Substring(LauncherConstants.UwpAppsFolderPrefix.Length);
+                string pfn = aumid.Contains("!") ? aumid.Split('!')[0] : aumid;
+                var package = _packageManager.FindPackageForUser("", pfn);
+                return package != null;
+            }
+            catch { return false; }
+        }
+
         public static async Task<bool> IsGameAsync(string path)
         {
             if (string.IsNullOrEmpty(path)) return false;
