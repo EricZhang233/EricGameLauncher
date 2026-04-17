@@ -1,7 +1,7 @@
 DEVELOPMENT ENVIRONMENT REQUIREMENTS (WINDOWS 11 25H2 & .NET 10)
 
 1. SYSTEM REQUIREMENTS
-- OS: Windows 11 Insider Preview (Build 26200 or higher)
+- OS: Windows 11 (Build 26200 or higher)
 - IDE: Visual Studio
 
 2. VISUAL STUDIO WORKLOADS
