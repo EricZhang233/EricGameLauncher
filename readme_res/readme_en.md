@@ -55,6 +55,7 @@ Whether your games are from Steam, Epic, or independent exe files, this is their
         *   **Windows Store Apps**: Supports launching apps via `shell:AppsFolder\` with optional elevation.
         *   **Environment Variables**: All paths support automatic expansion of variables like `%AppData%`.
 *   **One-Click Scan**: Supports one-click scan and import of Steam, Epic, and Xbox games, making game management easier!
+*   **Three-Step Deletion Protection**: Deleting in the main list moves items to Recycle Bin; deleting in Recycle Bin starts a 72-hour countdown; expired items are purged on next launch, with restore available anytime.
 *   **Ultra-Lightweight**: Start as needed, leave when done. No background services, zero ads, and system resource usage is nearly zero.
 *   **Efficient Search**: Supports full Pinyin, Pinyin initials, English initials, space-separated initials, CamelCase, and uppercase letter matching search.  
 *   **Professional-Grade Property Control**: This isn't just a basic shortcut.

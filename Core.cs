@@ -1395,7 +1395,7 @@ namespace EricGameLauncher
         private const string DataFileName = "config.json";
         private const string IconFolderName = "ico";
 
-        public const int CurrentConfigVersion = 2;
+        public const int CurrentConfigVersion = 3;
 
         public static bool RequiresMigration { get; private set; } = false;
         private static bool _blockSaving = false;
@@ -1477,12 +1477,18 @@ namespace EricGameLauncher
 
         public static Task SwitchStorageModeAsync(bool useSystemPath) => Task.Run(() => SwitchStorageMode(useSystemPath));
 
-        public static void SaveItems(List<AppItem> items, bool triggerEvent = true)
+        public static void SaveItems(List<AppItem> items, List<AppItem> recycleItems, bool triggerEvent = true)
         {
             if (_configData == null) return;
             lock (_configData)
             {
+                foreach (var item in items)
+                {
+                    item.Status = (int)AppItemStatus.Normal;
+                    item.DeletedAt = null;
+                }
                 _configData.Items = items.Select(AppItemDto.FromViewModel).ToList();
+                _configData.RecycleBinItems = recycleItems.Select(AppItemDto.FromViewModel).ToList();
             }
             SaveConfig();
             if (triggerEvent) DataChanged?.Invoke();
@@ -1491,6 +1497,12 @@ namespace EricGameLauncher
         public static List<AppItem> LoadItems()
         {
             var dtos = _configData?.Items ?? [];
+            return dtos.Select(dto => dto.ToViewModel(FixedCachePath)).ToList();
+        }
+
+        public static List<AppItem> LoadRecycleBinItems()
+        {
+            var dtos = _configData?.RecycleBinItems ?? [];
             return dtos.Select(dto => dto.ToViewModel(FixedCachePath)).ToList();
         }
 
@@ -1524,6 +1536,42 @@ namespace EricGameLauncher
                 _configData = JsonSerializer.Deserialize<ConfigData>(jsonString) ?? new ConfigData();
                 _configData.Settings ??= new AppSettings();
                 _configData.Items ??= [];
+                _configData.RecycleBinItems ??= [];
+                if (_configData.RecycleBinItems.Count == 0 && _configData.Items.Any(x => x.Status != (int)AppItemStatus.Normal))
+                {
+                    var normalItems = _configData.Items.Where(x => x.Status == (int)AppItemStatus.Normal).ToList();
+                    var recycleItems = _configData.Items.Where(x => x.Status != (int)AppItemStatus.Normal).ToList();
+                    _configData.Items = normalItems;
+                    _configData.RecycleBinItems = recycleItems;
+                }
+                bool normalized = false;
+                if (_configData.Items.Any(x => x.Status != (int)AppItemStatus.Normal))
+                {
+                    var recycleIds = new HashSet<string>(_configData.RecycleBinItems.Select(x => x.Id));
+                    var moveItems = _configData.Items.Where(x => x.Status != (int)AppItemStatus.Normal).ToList();
+                    _configData.Items = _configData.Items.Where(x => x.Status == (int)AppItemStatus.Normal).ToList();
+                    foreach (var item in moveItems)
+                    {
+                        if (recycleIds.Add(item.Id))
+                        {
+                            _configData.RecycleBinItems.Add(item);
+                        }
+                    }
+                    normalized = true;
+                }
+                foreach (var item in _configData.RecycleBinItems)
+                {
+                    if (item.Status == (int)AppItemStatus.Normal)
+                    {
+                        item.Status = (int)AppItemStatus.Recycled;
+                        item.DeletedAt = null;
+                        normalized = true;
+                    }
+                }
+                if (normalized)
+                {
+                    SaveConfigData();
+                }
             }
             catch (Exception ex)
             {
@@ -1606,10 +1654,14 @@ namespace EricGameLauncher
 
         public static async Task<bool> ReconstructMissingConfigAsync()
         {
-            if (_configData == null || _configData.Items == null || _configData.Items.Count == 0) return false;
+            if (_configData == null) return false;
+
+            var items = _configData.Items ?? [];
+            var recycleItems = _configData.RecycleBinItems ?? [];
+            if (items.Count == 0 && recycleItems.Count == 0) return false;
 
             bool modified = false;
-            foreach (var item in _configData.Items)
+            foreach (var item in items.Concat(recycleItems))
             {
                 bool itemChanged = false;
 
@@ -1647,10 +1699,12 @@ namespace EricGameLauncher
         public static async Task RefreshGlobalAsync()
         {
             var items = LoadItems();
+            var recycleItems = LoadRecycleBinItems();
+            var allItems = items.Concat(recycleItems).ToList();
             var rebuildTasks = new List<Task>();
             int successfulRebuilds = 0;
 
-            foreach (var item in items)
+            foreach (var item in allItems)
             {
                 if (string.IsNullOrEmpty(item.IconPath) || !File.Exists(item.IconPath))
                 {
@@ -1730,7 +1784,7 @@ namespace EricGameLauncher
                 await Task.WhenAll(rebuildTasks);
                 if (successfulRebuilds > 0)
                 {
-                    SaveItems(items, false);
+                    SaveItems(items, recycleItems, false);
                 }
             }
 
@@ -1757,9 +1811,23 @@ namespace EricGameLauncher
 
     #region Data Models & DTOs
 
+    public enum AppItemStatus
+    {
+        Normal = 0,
+        Recycled = 1,
+        PendingDeletion = 2
+    }
+
     public class AppItemDto
     {
         public string Id { get; set; } = string.Empty;
+        
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public int Status { get; set; } = 0;
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public DateTimeOffset? DeletedAt { get; set; }
+
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Title { get; set; }
 
@@ -1788,6 +1856,8 @@ namespace EricGameLauncher
         public static AppItemDto FromViewModel(AppItem vm) => new AppItemDto
         {
             Id = vm.Id,
+            Status = vm.Status,
+            DeletedAt = vm.DeletedAt,
             Title = vm.Title,
             IconPath = !string.IsNullOrEmpty(vm.IconPath) ? Path.GetFileName(vm.IconPath) : null,
             CustomMenu = vm.CustomMenu,
@@ -1808,6 +1878,8 @@ namespace EricGameLauncher
             ExePath = MainAction?.Path,
             IsAdmin = MainAction?.IsAdmin ?? false,
             Id = Id,
+            Status = Status,
+            DeletedAt = DeletedAt,
             Title = Title,
             IconPath = (string.IsNullOrEmpty(IconPath) || Path.IsPathRooted(IconPath))
                          ? IconPath
@@ -1890,6 +1962,55 @@ namespace EricGameLauncher
         }
 
         private string _id = string.Empty;
+        
+        private int _status = (int)AppItemStatus.Normal;
+        public int Status
+        {
+            get => _status;
+            set
+            {
+                if (SetProperty(ref _status, value))
+                {
+                    OnPropertyChanged(nameof(Status));
+                    OnPropertyChanged(nameof(TitleTextDecorations));
+                    OnPropertyChanged(nameof(TimeRemainingText));
+                    OnPropertyChanged(nameof(TimeBadgeVisibility));
+                }
+            }
+        }
+
+        private DateTimeOffset? _deletedAt;
+        public DateTimeOffset? DeletedAt
+        {
+            get => _deletedAt;
+            set
+            {
+                if (SetProperty(ref _deletedAt, value))
+                {
+                    OnPropertyChanged(nameof(DeletedAt));
+                    OnPropertyChanged(nameof(TimeRemainingText));
+                    OnPropertyChanged(nameof(TimeBadgeVisibility));
+                }
+            }
+        }
+
+        public Windows.UI.Text.TextDecorations TitleTextDecorations => Status == (int)AppItemStatus.PendingDeletion ? Windows.UI.Text.TextDecorations.Strikethrough : Windows.UI.Text.TextDecorations.None;
+
+        public Visibility TimeBadgeVisibility => Status == (int)AppItemStatus.PendingDeletion ? Visibility.Visible : Visibility.Collapsed;
+
+        public string TimeRemainingText
+        {
+            get
+            {
+                if (Status == (int)AppItemStatus.PendingDeletion && DeletedAt.HasValue)
+                {
+                    var remaining = DeletedAt.Value.AddHours(72) - DateTimeOffset.UtcNow;
+                    return $"{(int)Math.Max(0, remaining.TotalHours)}h";
+                }
+                return "";
+            }
+        }
+
         private string? _title;
         private string? _iconPath;
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -2322,7 +2443,7 @@ namespace EricGameLauncher
         [JsonIgnore]
         public BitmapImage? DisplayIcon { get; set; }
 
-        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        public virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
         protected bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
@@ -2366,6 +2487,9 @@ namespace EricGameLauncher
 
         [JsonPropertyName("items")]
         public List<AppItemDto> Items { get; set; } = [];
+
+        [JsonPropertyName("recycleBinItems")]
+        public List<AppItemDto> RecycleBinItems { get; set; } = [];
     }
 
     public class ShortcutInfo

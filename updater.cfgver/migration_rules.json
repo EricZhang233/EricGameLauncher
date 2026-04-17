@@ -38,5 +38,18 @@
                 }
             }
         ]
+    },
+    {
+        "From": 2,
+        "To": 3,
+        "Transformations": [
+            {
+                "Type": "SplitRecycleBin",
+                "ItemsKey": "items",
+                "RecycleKey": "recycleBinItems",
+                "StatusField": "Status",
+                "NormalValue": 0
+            }
+        ]
     }
 ]
