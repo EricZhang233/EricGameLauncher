@@ -22,6 +22,7 @@ namespace EricGameLauncher
     public sealed partial class MainWindow : Window, INotifyPropertyChanged
     {
         private ObservableCollection<AppItem> _allItems = new();
+        private ObservableCollection<AppItem> _recycleItems = new();
         private ObservableCollection<AppItem> _viewItems = new();
         private AppItem? _currentEditingItem = null;
         private bool _isNewItemMode = false;
@@ -235,8 +236,14 @@ namespace EricGameLauncher
             _hWnd = WindowNative.GetWindowHandle(this);
             _oldWndProc = SetWindowLongPtr(_hWnd, GWLP_WNDPROC, Marshal.GetFunctionPointerForDelegate(_wndProcDelegate = new WndProc(WindowProcess)));
 
-            _ = LoadData();
+            _ = LoadDataAsync();
             _ = InitializeNetworkTasksAsync();
+        }
+
+        private async Task LoadDataAsync()
+        {
+            await LoadData();
+            AutoCleanRecycleBin();
         }
 
         private async Task InitializeNetworkTasksAsync()
@@ -542,7 +549,39 @@ namespace EricGameLauncher
             _isRefreshPending = false;
 
             var items = ConfigService.LoadItems();
-            _allItems = new ObservableCollection<AppItem>(items);
+            var recycleItems = ConfigService.LoadRecycleBinItems();
+            var normalItems = items.Where(x => x.Status == (int)AppItemStatus.Normal).ToList();
+            var normalizedRecycle = new List<AppItem>();
+            bool normalized = false;
+            foreach (var item in recycleItems)
+            {
+                if (item.Status == (int)AppItemStatus.Normal)
+                {
+                    item.Status = (int)AppItemStatus.Recycled;
+                    item.DeletedAt = null;
+                    normalized = true;
+                }
+                normalizedRecycle.Add(item);
+            }
+            var misplaced = items.Where(x => x.Status != (int)AppItemStatus.Normal).ToList();
+            if (misplaced.Count > 0)
+            {
+                var recycleIds = new HashSet<string>(normalizedRecycle.Select(x => x.Id));
+                foreach (var item in misplaced)
+                {
+                    if (recycleIds.Add(item.Id))
+                    {
+                        normalizedRecycle.Add(item);
+                    }
+                }
+                normalized = true;
+            }
+            if (normalized)
+            {
+                ConfigService.SaveItems(normalItems, normalizedRecycle, false);
+            }
+            _allItems = new ObservableCollection<AppItem>(normalItems);
+            _recycleItems = new ObservableCollection<AppItem>(normalizedRecycle);
             _viewItems = new ObservableCollection<AppItem>(_allItems);
             AppGrid.ItemsSource = _viewItems;
             UpdateEmptyState();
@@ -647,7 +686,7 @@ namespace EricGameLauncher
         {
             try
             {
-                ConfigService.SaveItems(_allItems.ToList());
+                ConfigService.SaveItems(_allItems.ToList(), _recycleItems.ToList());
             }
             catch (Exception) { }
         }
@@ -1185,7 +1224,11 @@ namespace EricGameLauncher
                 if (item != null)
                 {
                     _allItems.Remove(item);
+                    item.Status = (int)AppItemStatus.Recycled;
+                    item.DeletedAt = null;
+                    _recycleItems.Add(item);
                     SaveData();
+                    RefreshView();
                 }
             }
             catch (Exception) { }
@@ -1227,6 +1270,7 @@ namespace EricGameLauncher
 
                 var existingGames = new List<ScannedGame>();
                 var newGames = new List<ScannedGame>();
+                var allItems = _allItems.Concat(_recycleItems).ToList();
 
                 foreach (var game in scannedGames)
                 {
@@ -1235,7 +1279,7 @@ namespace EricGameLauncher
                     if (game.PlatformBadge == "Xbox")
                     {
                         string gameId = game.ExePath.Replace(LauncherConstants.UwpAppsFolderPrefix, "");
-                        exists = _allItems.Any(a => !string.IsNullOrEmpty(a.ExePath) && a.ExePath.Contains(gameId, StringComparison.OrdinalIgnoreCase));
+                        exists = allItems.Any(a => !string.IsNullOrEmpty(a.ExePath) && a.ExePath.Contains(gameId, StringComparison.OrdinalIgnoreCase));
                     }
                     else
                     {
@@ -1247,7 +1291,7 @@ namespace EricGameLauncher
                         }
 
                         string gameNorm = NormalizePath(game.ExePath);
-                        exists = _allItems.Any(a =>
+                        exists = allItems.Any(a =>
                             (!string.IsNullOrEmpty(a.ExePath) && NormalizePath(a.ExePath) == gameNorm) ||
                             string.Equals(a.Title, game.Title, StringComparison.OrdinalIgnoreCase)
                         );
@@ -1504,6 +1548,9 @@ namespace EricGameLauncher
                     if (itemToDelete != null)
                     {
                         _allItems.Remove(itemToDelete);
+                        itemToDelete.Status = (int)AppItemStatus.Recycled;
+                        itemToDelete.DeletedAt = null;
+                        _recycleItems.Add(itemToDelete);
                         deleted = true;
                     }
                 }
@@ -1514,6 +1561,159 @@ namespace EricGameLauncher
                 }
             }
             catch (Exception) { }
+        }
+
+        private void RestoreRecycledItem(AppItem item)
+        {
+            try
+            {
+                var removeItem = _recycleItems.FirstOrDefault(x => x.Id == item.Id);
+                if (removeItem != null)
+                {
+                    _recycleItems.Remove(removeItem);
+                }
+                var existing = _allItems.FirstOrDefault(x => x.Id == item.Id);
+                if (existing != null)
+                {
+                    _allItems.Remove(existing);
+                }
+                item.Status = (int)AppItemStatus.Normal;
+                item.DeletedAt = null;
+                _allItems.Add(item);
+                SaveData();
+                RefreshView();
+            }
+            catch (Exception) { }
+        }
+
+        private void MarkItemForDeletion(AppItem item)
+        {
+            try
+            {
+                item.Status = (int)AppItemStatus.PendingDeletion;
+                item.DeletedAt = DateTimeOffset.UtcNow;
+                SaveData();
+            }
+            catch (Exception) { }
+        }
+
+        private void EmptyRecycleBin()
+        {
+            try
+            {
+                var recycledItems = _recycleItems.Where(i => i.Status == (int)AppItemStatus.Recycled).ToList();
+                var now = DateTimeOffset.UtcNow;
+                foreach (var item in recycledItems)
+                {
+                    item.Status = (int)AppItemStatus.PendingDeletion;
+                    item.DeletedAt = now;
+                }
+                
+                if (recycledItems.Count > 0)
+                {
+                    SaveData();
+                }
+            }
+            catch (Exception) { }
+        }
+
+        private void RecycleBinFlyout_Opening(object sender, object e)
+        {
+            try
+            {
+                var recycledItems = _recycleItems.Where(x => x.Status == (int)AppItemStatus.Recycled || x.Status == (int)AppItemStatus.PendingDeletion).ToList();
+                RecycleItemsControl.ItemsSource = new ObservableCollection<AppItem>(recycledItems);
+                
+                foreach(var item in recycledItems)
+                {
+                    item.OnPropertyChanged("TimeRemainingText");
+                    item.OnPropertyChanged("TimeBadgeVisibility");
+                    item.OnPropertyChanged("TitleTextDecorations");
+                }
+            }
+            catch (Exception) { }
+        }
+
+        private void RecycleBinFlyout_Closed(object sender, object e)
+        {
+            RecycleItemsControl.ItemsSource = null;
+        }
+
+        private void AutoCleanRecycleBin()
+        {
+            try
+            {
+                var items = ConfigService.LoadItems();
+                var recycleItems = ConfigService.LoadRecycleBinItems();
+                bool changed = false;
+                var now = DateTimeOffset.UtcNow;
+                var newRecycleItems = new List<AppItem>(recycleItems);
+                foreach (var item in recycleItems)
+                {
+                    if (item.Status == (int)AppItemStatus.PendingDeletion && item.DeletedAt.HasValue)
+                    {
+                        if ((now - item.DeletedAt.Value).TotalHours >= 72)
+                        {
+                            newRecycleItems.Remove(item);
+                            changed = true;
+                        }
+                    }
+                }
+                if (changed)
+                {
+                    ConfigService.SaveItems(items, newRecycleItems);
+                }
+            }
+            catch (Exception) { }
+        }
+
+        private void BtnEmptyRecycleBin_Click(object sender, RoutedEventArgs e)
+        {
+            EmptyRecycleBin();
+            RecycleBinFlyout_Opening(RecycleBinFlyout, new object());
+        }
+
+        private void RecycleMenuFlyout_Opening(object sender, object e)
+        {
+            if (sender is MenuFlyout flyout && RecycleItemsControl.SelectedItem is AppItem selectedItem)
+            {
+                if (flyout.Items.Count >= 2)
+                {
+                    if (flyout.Items[0] is MenuFlyoutItem restoreItem)
+                        restoreItem.Text = I18n.T("RecycleBin_Restore");
+                    if (flyout.Items[1] is MenuFlyoutItem deleteItem)
+                    {
+                        deleteItem.Text = I18n.T("RecycleBin_Delete");
+                        deleteItem.Visibility = selectedItem.Status == (int)AppItemStatus.PendingDeletion ? Visibility.Collapsed : Visibility.Visible;
+                    }
+                }
+            }
+        }
+
+        private void MenuRestore_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuFlyoutItem menuItem && menuItem.Tag is AppItem item)
+            {
+                RestoreRecycledItem(item);
+                RecycleBinFlyout_Opening(RecycleBinFlyout, new object());
+            }
+        }
+
+        private void MenuDeletePerm_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuFlyoutItem menuItem && menuItem.Tag is AppItem item)
+            {
+                MarkItemForDeletion(item);
+                RecycleBinFlyout_Opening(RecycleBinFlyout, new object());
+            }
+        }
+
+        private void RecycleItem_RightTapped(object sender, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs e)
+        {
+            if (sender is Grid grid && grid.DataContext is AppItem item)
+            {
+                RecycleItemsControl.SelectedItem = item;
+            }
         }
 
         private void ImportScannedGames(List<ScannedGame> games)
@@ -1559,7 +1759,7 @@ namespace EricGameLauncher
                     }
                 }
 
-                ConfigService.SaveItems(_allItems.ToList());
+                ConfigService.SaveItems(_allItems.ToList(), _recycleItems.ToList());
 
                 _ = ConfigService.RefreshGlobalAsync();
             }
@@ -2083,7 +2283,7 @@ namespace EricGameLauncher
 
                 if (_isNewItemMode)
                 {
-                    var existing = _allItems.FirstOrDefault(x =>
+                    var existing = _allItems.Concat(_recycleItems).FirstOrDefault(x =>
                         !string.IsNullOrEmpty(x.ExePath) &&
                         x.ExePath.Equals(PropExePath.Text, StringComparison.OrdinalIgnoreCase));
 
@@ -2122,8 +2322,20 @@ namespace EricGameLauncher
             {
                 if (_currentEditingItem == null) return;
 
-                _allItems.Remove(_currentEditingItem);
+                if (!_isNewItemMode)
+                {
+                    _allItems.Remove(_currentEditingItem);
+                    _currentEditingItem.Status = (int)AppItemStatus.Recycled;
+                    _currentEditingItem.DeletedAt = null;
+                    _recycleItems.Add(_currentEditingItem);
+                }
+                else
+                {
+                    _allItems.Remove(_currentEditingItem);
+                }
+                
                 SaveData();
+                RefreshView();
                 HidePropertyPanel();
             }
             catch (Exception) { }
@@ -2446,7 +2658,8 @@ namespace EricGameLauncher
             {
                 if (_tempOrderCollection != null)
                 {
-                    ConfigService.SaveItems(_tempOrderCollection.ToList());
+                    var newOrder = _tempOrderCollection.ToList();
+                    ConfigService.SaveItems(newOrder, _recycleItems.ToList());
                     RefreshView();
                     _tempOrderCollection = null;
                 }
@@ -2546,6 +2759,11 @@ namespace EricGameLauncher
         private void MenuSort_Click(object sender, RoutedEventArgs e)
         {
             EditOrderFlyout.ShowAt(BtnMore);
+        }
+
+        private void MenuRecycleBin_Click(object sender, RoutedEventArgs e)
+        {
+            RecycleBinFlyout.ShowAt(BtnMore);
         }
 
 
@@ -2832,6 +3050,10 @@ namespace EricGameLauncher
                     if (ScannerDescriptionText != null) ScannerDescriptionText.Text = I18n.T("Scanner_Description");
                 }
                 MenuSortItem.Text = I18n.T("Menu_Sort");
+                MenuRecycleBinItem.Text = I18n.T("Menu_RecycleBin");
+                if(RecycleTitle != null) RecycleTitle.Text = I18n.T("RecycleBin_Title");
+                if(RecycleDescription != null) RecycleDescription.Text = I18n.T("RecycleBin_Desc");
+                if(BtnEmptyRecycleBin != null) BtnEmptyRecycleBin.Content = I18n.T("RecycleBin_Empty");
                 MenuSettingsItem.Text = I18n.T("Menu_Settings");
                 MenuCheckUpdateItem.Text = I18n.T("Menu_CheckUpdate");
                 MenuPrivacyItem.Text = I18n.T("Privacy_MenuTitle");

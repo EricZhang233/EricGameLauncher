@@ -127,6 +127,43 @@ namespace updater.cfgver
                                         }
                                     }
                                 }
+                                else if (tfType == "SplitRecycleBin")
+                                {
+                                    string itemsKey = tfObj["ItemsKey"]?.GetValue<string>() ?? "items";
+                                    string recycleKey = tfObj["RecycleKey"]?.GetValue<string>() ?? "recycleBinItems";
+                                    string statusField = tfObj["StatusField"]?.GetValue<string>() ?? "Status";
+                                    int normalValue = tfObj["NormalValue"]?.GetValue<int>() ?? 0;
+
+                                    if (configRoot.TryGetPropertyValue(itemsKey, out var itemsRoot) && itemsRoot is JsonArray itemsArray)
+                                    {
+                                        JsonArray recycleArray;
+                                        if (configRoot.TryGetPropertyValue(recycleKey, out var recycleRoot) && recycleRoot is JsonArray existingRecycle)
+                                        {
+                                            recycleArray = existingRecycle;
+                                        }
+                                        else
+                                        {
+                                            recycleArray = new JsonArray();
+                                            configRoot[recycleKey] = recycleArray;
+                                        }
+
+                                        for (int i = itemsArray.Count - 1; i >= 0; i--)
+                                        {
+                                            if (itemsArray[i] is not JsonObject obj) continue;
+                                            int statusValue = normalValue;
+                                            if (obj.TryGetPropertyValue(statusField, out var statusNode) && statusNode != null)
+                                            {
+                                                try { statusValue = statusNode.GetValue<int>(); } catch { statusValue = normalValue; }
+                                            }
+
+                                            if (statusValue != normalValue)
+                                            {
+                                                recycleArray.Add(obj.DeepClone());
+                                                itemsArray.RemoveAt(i);
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

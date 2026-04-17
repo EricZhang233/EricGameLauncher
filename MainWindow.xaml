@@ -102,6 +102,12 @@
                                 </MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
                             
+                            <MenuFlyoutItem x:Name="MenuRecycleBinItem" Text="Recycle Bin" Click="MenuRecycleBin_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE74D;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            
                             <MenuFlyoutSeparator />
                             
                             
@@ -317,6 +323,79 @@
                 </Button.Flyout>
             </Button>
             
+            <Button x:Name="RecycleBinFlyoutHost" Visibility="Collapsed">
+                <Button.Flyout>
+                    <Flyout x:Name="RecycleBinFlyout" 
+                            Placement="Bottom"
+                            Opening="RecycleBinFlyout_Opening"
+                            Closed="RecycleBinFlyout_Closed">
+                        <Flyout.FlyoutPresenterStyle>
+                            <Style TargetType="FlyoutPresenter">
+                                <Setter Property="Padding" Value="0"/>
+                            </Style>
+                        </Flyout.FlyoutPresenterStyle>
+                        <StackPanel Width="340" Spacing="12" Padding="16">
+                            <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                                <TextBlock x:Name="RecycleTitle" Text="Recycle Bin" 
+                                           FontSize="20" FontWeight="SemiBold"/>
+                                <Button x:Name="BtnEmptyRecycleBin" Content="Delete All" 
+                                        Grid.Column="1" Click="BtnEmptyRecycleBin_Click"/>
+                            </Grid>
+                            <TextBlock x:Name="RecycleDescription" Text="Three-step deletion: delete moves to Recycle Bin; delete in Recycle Bin starts 72h countdown; expired items purge on next launch."
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Style="{ThemeResource CaptionTextBlockStyle}" TextWrapping="Wrap"/>
+                            
+                            <ListView x:Name="RecycleItemsControl" MaxHeight="400" 
+                                      ScrollViewer.VerticalScrollBarVisibility="Auto" SelectionMode="Single">
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                        <Setter Property="Margin" Value="0,0,0,4"/>
+                                        <Setter Property="Padding" Value="0"/>
+                                        <Setter Property="CornerRadius" Value="6"/>
+                                        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}"/>
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="models:AppItem">
+                                        <Grid Padding="10" Background="Transparent" RightTapped="RecycleItem_RightTapped">
+                                            <Grid.ContextFlyout>
+                                                <MenuFlyout Opening="RecycleMenuFlyout_Opening">
+                                                    <MenuFlyoutItem Text="Restore" Icon="Undo" Click="MenuRestore_Click" Tag="{Binding}"/>
+                                                    <MenuFlyoutItem x:Name="MenuDeletePerm" Text="Delete" Icon="Delete" Click="MenuDeletePerm_Click" Tag="{Binding}"/>
+                                                </MenuFlyout>
+                                            </Grid.ContextFlyout>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="32"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            
+                                            <Border Grid.Column="0" Width="28" Height="28" CornerRadius="6"
+                                                    Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}">
+                                                <Image Source="{Binding IconPath, Converter={StaticResource ImagePathConverter}, TargetNullValue={x:Null}}" 
+                                                       Stretch="Uniform" Margin="2"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="{Binding Title}" 
+                                                       TextDecorations="{Binding TitleTextDecorations}"
+                                                       VerticalAlignment="Center" Margin="10,0,0,0"
+                                                       Style="{ThemeResource BodyTextBlockStyle}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                                       
+                                            <Border Grid.Column="2" CornerRadius="4" Padding="6,2" VerticalAlignment="Center"
+                                                    Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}"
+                                                    Visibility="{Binding TimeBadgeVisibility}">
+                                                <TextBlock Text="{Binding TimeRemainingText}" FontSize="12" FontWeight="SemiBold"
+                                                           Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                                            </Border>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
             
             <Button x:Name="SettingsFlyoutHost" Visibility="Collapsed">
                 <Button.Flyout>
