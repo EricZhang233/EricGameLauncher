@@ -833,19 +833,7 @@ namespace EricGameLauncher
 
             try
             {
-                item.IsLoading = true;
-                item.LoadingOpacity = 1.0;
-                
-                _ = Task.Delay(3000).ContinueWith(async _ => 
-                {
-                    // Fade out animation over 0.5 seconds
-                    for (int i = 0; i <= 10; i++)
-                    {
-                        DispatcherQueue.TryEnqueue(() => item.LoadingOpacity = 1.0 - (i / 10.0));
-                        await Task.Delay(50);
-                    }
-                    DispatcherQueue.TryEnqueue(() => item.IsLoading = false);
-                });
+                TriggerItemLoadingAnimation(item);
 
                 if (item.UseAlternativeLaunch && !string.IsNullOrEmpty(item.AlternativeLaunchCommand))
                 {
@@ -1179,24 +1167,27 @@ namespace EricGameLauncher
                     if ((DateTime.Now - _lastLaunchTime).TotalMilliseconds < 500) return;
                     _lastLaunchTime = DateTime.Now;
 
-                    item.IsLoading = true;
-                    item.LoadingOpacity = 1.0;
-                    
-                    _ = Task.Delay(3000).ContinueWith(async _ => 
-                    {
-                        // Fade out animation over 0.5 seconds
-                        for (int i = 0; i <= 10; i++)
-                        {
-                            DispatcherQueue.TryEnqueue(() => item.LoadingOpacity = 1.0 - (i / 10.0));
-                            await Task.Delay(50);
-                        }
-                        DispatcherQueue.TryEnqueue(() => item.IsLoading = false);
-                    });
+                    TriggerItemLoadingAnimation(item);
 
                     RunProcess(managerPath, item.IsMgrAdmin);
                 }
             }
             catch (Exception) { }
+        }
+
+        private void TriggerItemLoadingAnimation(AppItem item)
+        {
+            item.IsLoading = true;
+            item.LoadingOpacity = 1.0;
+            _ = Task.Delay(3000).ContinueWith(async _ => 
+            {
+                for (int i = 0; i <= 10; i++)
+                {
+                    DispatcherQueue.TryEnqueue(() => item.LoadingOpacity = 1.0 - (i / 10.0));
+                    await Task.Delay(50);
+                }
+                DispatcherQueue.TryEnqueue(() => item.IsLoading = false);
+            });
         }
 
         private void MenuLoc_Click(object sender, RoutedEventArgs e)
@@ -1302,6 +1293,16 @@ namespace EricGameLauncher
                 }
 
                 var invalidGames = new List<ScannedGame>();
+                void TrackInvalidGame(AppItem i, string? badge)
+                {
+                    invalidGames.Add(new ScannedGame
+                    {
+                        Title = i.Title ?? "Unknown",
+                        ExePath = i.Id,
+                        PlatformBadge = badge ?? ""
+                    });
+                }
+
                 foreach (var item in _allItems)
                 {
                     bool isFileOrDirExists = false;
@@ -1327,7 +1328,6 @@ namespace EricGameLauncher
                         catch { }
                     }
 
-                    // If the item actually exists on disk natively, it's definitely not invalid
                     if (isFileOrDirExists) continue;
 
                     string? platformName = item.PlatformName;
@@ -1337,12 +1337,7 @@ namespace EricGameLauncher
                         {
                             if (!StoreHelper.IsAppInstalled(item.ExePath))
                             {
-                                invalidGames.Add(new ScannedGame
-                                {
-                                    Title = item.Title ?? "Unknown",
-                                    ExePath = item.Id, // Hijack ExePath to store AppItem Id for deletion
-                                    PlatformBadge = platformName
-                                });
+                                TrackInvalidGame(item, platformName);
                             }
                             continue;
                         }
@@ -1370,24 +1365,14 @@ namespace EricGameLauncher
 
                         if (!found)
                         {
-                            invalidGames.Add(new ScannedGame
-                            {
-                                Title = item.Title ?? "Unknown",
-                                ExePath = item.Id, // Hijack ExePath to store AppItem Id for deletion
-                                PlatformBadge = platformName
-                            });
+                            TrackInvalidGame(item, platformName);
                         }
                     }
                     else
                     {
                         if (isExeFile && !isFileOrDirExists)
                         {
-                            invalidGames.Add(new ScannedGame
-                            {
-                                Title = item.Title ?? "Unknown",
-                                ExePath = item.Id, // Hijack ExePath to store AppItem Id for deletion
-                                PlatformBadge = "User"
-                            });
+                            TrackInvalidGame(item, "User");
                         }
                     }
                 }
@@ -1544,7 +1529,8 @@ namespace EricGameLauncher
                 bool deleted = false;
                 foreach (var game in games)
                 {
-                    var itemToDelete = _allItems.FirstOrDefault(a => a.Id == game.ExePath); // ExePath is hijacked as AppItem.Id
+                    if (string.IsNullOrEmpty(game.ExePath)) continue;
+                    var itemToDelete = _allItems.FirstOrDefault(a => a.Id == game.ExePath);
                     if (itemToDelete != null)
                     {
                         _allItems.Remove(itemToDelete);
@@ -1826,36 +1812,10 @@ namespace EricGameLauncher
                 }
                 UpdateCustomVisibility();
 
-
-                if (!string.IsNullOrEmpty(_currentEditingItem.IconPath) && File.Exists(_currentEditingItem.IconPath))
-                {
-                    this.DispatcherQueue.TryEnqueue(() =>
-                    {
-                        try
-                        {
-                            var bitmap = new BitmapImage();
-                            long cacheKey = new FileInfo(_currentEditingItem!.IconPath!).LastWriteTime.Ticks;
-                            var uri = new Uri($"file:///{_currentEditingItem.IconPath.Replace("\\", "/")}?t={cacheKey}");
-                            bitmap.UriSource = uri;
-                            PropIcon.Source = bitmap;
-                        }
-                        catch
-                        {
-                            PropIcon.Source = null;
-                        }
-                    });
-                }
-                else
-                {
-                    PropIcon.Source = null;
-                }
+                UpdatePropIconView(_currentEditingItem.IconPath);
             }
             catch (Exception) { }
         }
-
-
-
-
 
         private void SaveToItem()
         {
@@ -1916,18 +1876,17 @@ namespace EricGameLauncher
 
 
 
-        private void RefreshIconDisplay(string iconPath)
+        private void UpdatePropIconView(string? iconPath)
         {
             try
             {
                 if (string.IsNullOrEmpty(iconPath) || !File.Exists(iconPath))
                 {
-                    PropIcon.Source = null;
+                    DispatcherQueue.TryEnqueue(() => { PropIcon.Source = null; });
                     return;
                 }
 
-
-                this.DispatcherQueue.TryEnqueue(() =>
+                DispatcherQueue.TryEnqueue(() =>
                 {
                     try
                     {
@@ -1945,8 +1904,13 @@ namespace EricGameLauncher
             }
             catch
             {
-                PropIcon.Source = null;
+                DispatcherQueue.TryEnqueue(() => { PropIcon.Source = null; });
             }
+        }
+
+        private void RefreshIconDisplay(string iconPath)
+        {
+            UpdatePropIconView(iconPath);
         }
 
         private void OpenPropertyWindow(AppItem item)
@@ -2070,7 +2034,7 @@ namespace EricGameLauncher
 
         private void BtnBrowseCustom_Click(int index)
         {
-            BrowseFile(_customCommands[index]);
+            BrowseFile(_customCommands[index], Win32FileDialog.BuildFilter(Win32FileDialog.FilterAll));
         }
 
         private void PopulateMenuItems(MenuFlyoutSubItem parent, List<ShortcutScanner.FileItem> items, TextBox targetTextBox)
@@ -2347,8 +2311,8 @@ namespace EricGameLauncher
             {
 
                 IntPtr hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-                string filter = "Image Files (*.png;*.ico;*.exe;*.dll;*.lnk)\0*.png;*.ico;*.exe;*.dll;*.lnk\0All Files (*.*)\0*.*\0\0";
-                string? filePath = Win32FileDialog.ShowOpenFileDialog(hwnd, "Select Icon File", filter);
+                string filter = Win32FileDialog.BuildFilter(Win32FileDialog.FilterImages, Win32FileDialog.FilterAll);
+                string? filePath = Win32FileDialog.ShowOpenFileDialog(hwnd, I18n.T("FileDialog_SelectIconFile"), filter);
 
                 if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
                 {
@@ -2361,26 +2325,9 @@ namespace EricGameLauncher
 
                     if (!string.IsNullOrEmpty(newPath) && File.Exists(newPath))
                     {
-
                         _currentEditingItem.IconPath = null;
                         _currentEditingItem.IconPath = newPath;
-
-
-                        this.DispatcherQueue.TryEnqueue(() =>
-                        {
-                            try
-                            {
-                                var bitmap = new BitmapImage();
-                                long cacheKey = new FileInfo(newPath).LastWriteTime.Ticks;
-                                var uri = new Uri($"file:///{newPath.Replace("\\", "/")}?t={cacheKey}");
-                                bitmap.UriSource = uri;
-                                PropIcon.Source = bitmap;
-                            }
-                            catch
-                            {
-                                PropIcon.Source = null;
-                            }
-                        });
+                        UpdatePropIconView(newPath);
                     }
                     else
                     {
@@ -2393,7 +2340,7 @@ namespace EricGameLauncher
 
 
 
-        private async void BrowseFile(Microsoft.UI.Xaml.Controls.TextBox target)
+        private async void BrowseFile(Microsoft.UI.Xaml.Controls.TextBox target, string? filter = null)
         {
             try
             {
@@ -2404,7 +2351,11 @@ namespace EricGameLauncher
 
 
                 IntPtr hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-                string? filePath = Win32FileDialog.ShowOpenFileDialog(hwnd, "Select file");
+                if (string.IsNullOrEmpty(filter))
+                {
+                    filter = Win32FileDialog.BuildFilter(Win32FileDialog.FilterExecutables, Win32FileDialog.FilterAll);
+                }
+                string? filePath = Win32FileDialog.ShowOpenFileDialog(hwnd, I18n.T("FileDialog_SelectFile"), filter);
 
                 if (!string.IsNullOrEmpty(filePath))
                 {

@@ -102,7 +102,7 @@
                                 </MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
                             
-                            <MenuFlyoutItem x:Name="MenuRecycleBinItem" Text="Recycle Bin" Click="MenuRecycleBin_Click">
+                            <MenuFlyoutItem x:Name="MenuRecycleBinItem" Text="" Click="MenuRecycleBin_Click">
                                 <MenuFlyoutItem.Icon>
                                     <FontIcon Glyph="&#xE74D;"/>
                                 </MenuFlyoutItem.Icon>
@@ -336,12 +336,12 @@
                         </Flyout.FlyoutPresenterStyle>
                         <StackPanel Width="340" Spacing="12" Padding="16">
                             <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
-                                <TextBlock x:Name="RecycleTitle" Text="Recycle Bin" 
+                                <TextBlock x:Name="RecycleTitle" Text="" 
                                            FontSize="20" FontWeight="SemiBold"/>
-                                <Button x:Name="BtnEmptyRecycleBin" Content="Delete All" 
+                                <Button x:Name="BtnEmptyRecycleBin" Content="" 
                                         Grid.Column="1" Click="BtnEmptyRecycleBin_Click"/>
                             </Grid>
-                            <TextBlock x:Name="RecycleDescription" Text="Three-step deletion: delete moves to Recycle Bin; delete in Recycle Bin starts 72h countdown; expired items purge on next launch."
+                            <TextBlock x:Name="RecycleDescription" Text=""
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        Style="{ThemeResource CaptionTextBlockStyle}" TextWrapping="Wrap"/>
                             
@@ -361,8 +361,8 @@
                                         <Grid Padding="10" Background="Transparent" RightTapped="RecycleItem_RightTapped">
                                             <Grid.ContextFlyout>
                                                 <MenuFlyout Opening="RecycleMenuFlyout_Opening">
-                                                    <MenuFlyoutItem Text="Restore" Icon="Undo" Click="MenuRestore_Click" Tag="{Binding}"/>
-                                                    <MenuFlyoutItem x:Name="MenuDeletePerm" Text="Delete" Icon="Delete" Click="MenuDeletePerm_Click" Tag="{Binding}"/>
+                                                    <MenuFlyoutItem Text="" Icon="Undo" Click="MenuRestore_Click" Tag="{Binding}"/>
+                                                    <MenuFlyoutItem x:Name="MenuDeletePerm" Text="" Icon="Delete" Click="MenuDeletePerm_Click" Tag="{Binding}"/>
                                                 </MenuFlyout>
                                             </Grid.ContextFlyout>
                                             <Grid.ColumnDefinitions>
@@ -618,17 +618,17 @@
 
                         <StackPanel.ContextFlyout>
                             <MenuFlyout Opening="ContextMenu_Opening">
-                                <MenuFlyoutItem Text="&#36816;&#34892;" Click="MenuRun_Click" Tag="{Binding}" Icon="Play"/>
-                                <MenuFlyoutItem Text="&#36816;&#34892;&#31649;&#29702;&#22120;" 
+                                <MenuFlyoutItem Text="" Click="MenuRun_Click" Tag="{Binding}" Icon="Play"/>
+                                <MenuFlyoutItem Text="" 
                                                 Click="MenuRunMgr_Click" 
                                                 Tag="{Binding}"
                                                 Icon="Repair"
                                                 Visibility="{Binding HasManagerOrDefault, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                 <MenuFlyoutSeparator />
-                                <MenuFlyoutItem Text="&#25171;&#24320;&#25991;&#20214;&#20301;&#32622;" Click="MenuLoc_Click" Tag="{Binding}" Icon="Folder"/>
+                                <MenuFlyoutItem Text="" Click="MenuLoc_Click" Tag="{Binding}" Icon="Folder"/>
                                 <MenuFlyoutSeparator />
-                                <MenuFlyoutItem Text="&#23646;&#24615;" Click="MenuProp_Click" Tag="{Binding}" Icon="Edit"/>
-                                <MenuFlyoutItem Text="&#21024;&#38500;" Click="MenuDel_Click" Tag="{Binding}" Icon="Delete" Foreground="Red"/>
+                                <MenuFlyoutItem Text="" Click="MenuProp_Click" Tag="{Binding}" Icon="Edit"/>
+                                <MenuFlyoutItem Text="" Click="MenuDel_Click" Tag="{Binding}" Icon="Delete" Foreground="Red"/>
                             </MenuFlyout>
                         </StackPanel.ContextFlyout>
                     </StackPanel>
@@ -1260,8 +1260,8 @@
                             <Grid Margin="0,0,0,8">
                                 <TextBlock x:Name="ScannerNewGamesHeader" Text="" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-                                    <Button x:Name="ScannerNewSelectAllBtn" Content="Select All" FontSize="12" Padding="8,4" Click="ScannerNewSelectAllBtn_Click" />
-                                    <Button x:Name="ScannerImportSelectedBtn" Content="Import Selected" Style="{StaticResource AccentButtonStyle}" FontSize="12" Padding="8,4" Click="ScannerImportSelectedBtn_Click" />
+                                    <Button x:Name="ScannerNewSelectAllBtn" Content="" FontSize="12" Padding="8,4" Click="ScannerNewSelectAllBtn_Click" />
+                                    <Button x:Name="ScannerImportSelectedBtn" Content="" Style="{StaticResource AccentButtonStyle}" FontSize="12" Padding="8,4" Click="ScannerImportSelectedBtn_Click" />
                                 </StackPanel>
                             </Grid>
                             <ListView x:Name="ScannerNewGamesList" SelectionMode="Multiple" ScrollViewer.VerticalScrollMode="Disabled" ItemContainerStyle="{StaticResource DefaultListViewItemStyle}" SelectionChanged="ScannerNewGamesList_SelectionChanged">
@@ -1306,8 +1306,8 @@
                               <Grid Margin="0,0,0,8">
                                   <TextBlock x:Name="ScannerInvalidGamesHeader" Text="" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
                                   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-                                      <Button x:Name="ScannerInvalidSelectAllBtn" Content="Select All" FontSize="12" Padding="8,4" Click="ScannerInvalidSelectAllBtn_Click" Foreground="IndianRed" />
-                                      <Button x:Name="ScannerDeleteInvalidBtn" Content="Delete Invalid" FontSize="12" Padding="8,4" Click="ScannerDeleteInvalidBtn_Click" Foreground="White" Background="IndianRed" />
+                                      <Button x:Name="ScannerInvalidSelectAllBtn" Content="" FontSize="12" Padding="8,4" Click="ScannerInvalidSelectAllBtn_Click" Foreground="IndianRed" />
+                                      <Button x:Name="ScannerDeleteInvalidBtn" Content="" FontSize="12" Padding="8,4" Click="ScannerDeleteInvalidBtn_Click" Foreground="White" Background="IndianRed" />
                                   </StackPanel>
                               </Grid>
                               <ListView x:Name="ScannerInvalidGamesList" SelectionMode="Multiple" ScrollViewer.VerticalScrollMode="Disabled" ItemContainerStyle="{StaticResource DefaultListViewItemStyle}" Opacity="0.8" SelectionChanged="ScannerInvalidGamesList_SelectionChanged">
