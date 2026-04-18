@@ -1877,7 +1877,7 @@ namespace EricGameLauncher
         {
             ExePath = MainAction?.Path,
             IsAdmin = MainAction?.IsAdmin ?? false,
-            Id = Id,
+            Id = string.IsNullOrEmpty(Id) ? PathHashHelper.GetPathHash(MainAction?.Path ?? "") : Id,
             Status = Status,
             DeletedAt = DeletedAt,
             Title = Title,
@@ -3270,6 +3270,11 @@ namespace EricGameLauncher
 
     public static class Win32FileDialog
     {
+        public static string FilterExecutables => I18n.T("FileDialog_FilterExecutables") + "\0*.exe;*.com;*.bat;*.cmd;*.lnk;*.url\0";
+        public static string FilterImages => I18n.T("FileDialog_FilterImages") + "\0*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.ico;*.tif;*.tiff;*.webp;*.svg\0";
+        public static string FilterAll => I18n.T("FileDialog_FilterAll") + "\0*.*\0";
+        public static string DefaultFilter => BuildFilter(FilterExecutables, FilterImages, FilterAll);
+
         [DllImport("comdlg32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
         private static extern bool GetOpenFileNameW(ref OpenFileName ofn);
 
@@ -3301,8 +3306,16 @@ namespace EricGameLauncher
             public int FlagsEx;
         }
 
-        public static string? ShowOpenFileDialog(IntPtr hwnd, string title = "Select File",
-            string filter = "All Files (*.*)\0*.*\0\0")
+        public static string? ShowOpenFileDialog(IntPtr hwnd, string title = "")
+        {
+            if (string.IsNullOrEmpty(title))
+            {
+                title = I18n.T("FileDialog_SelectFile");
+            }
+            return ShowOpenFileDialog(hwnd, title, DefaultFilter);
+        }
+
+        public static string? ShowOpenFileDialog(IntPtr hwnd, string title, string filter)
         {
             var ofn = new OpenFileName
             {
@@ -3325,6 +3338,11 @@ namespace EricGameLauncher
             }
             catch (Exception) { }
             return null;
+        }
+
+        public static string BuildFilter(params string[] parts)
+        {
+            return string.Concat(parts) + "\0";
         }
     }
 
