@@ -619,7 +619,7 @@ namespace EricGameLauncher
                     string configPath = System.IO.Path.Combine(ConfigService.CurrentDataPath, "config.json");
                     try
                     {
-                        string tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "EricGameLauncher");
+                        string tempDir = System.IO.Path.Combine(ConfigService.SystemCachePath, "updater.cfgver");
                         if (!System.IO.Directory.Exists(tempDir)) System.IO.Directory.CreateDirectory(tempDir);
                         string cfgUpdaterPath = System.IO.Path.Combine(tempDir, "updater.cfgver.exe");
 
@@ -3358,7 +3358,9 @@ namespace EricGameLauncher
 
         private async Task<(Grid contentGrid, double dialogW, double dialogH)> BuildReleaseContentAsync(UpdateService.ReleaseInfo release, bool prependTitle)
         {
-            Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", System.IO.Path.Combine(System.IO.Path.GetTempPath(), "EricGameLauncher_WebView2"));
+            if (!System.IO.Directory.Exists(ConfigService.SystemCachePath))
+                System.IO.Directory.CreateDirectory(ConfigService.SystemCachePath);
+            Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", System.IO.Path.Combine(ConfigService.SystemCachePath, "WebView2"));
             double dialogW = Math.Max(560, this.Bounds.Width * 0.80);
             double dialogH = Math.Max(420, this.Bounds.Height * 0.78);
             double innerH = Math.Max(280, dialogH - 150) - 48;
