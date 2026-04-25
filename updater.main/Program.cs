@@ -31,7 +31,9 @@ namespace updater.main
 
             string installDir = args[0];
             string downloadUrl = args[1];
-            string tempZip = Path.Combine(Path.GetTempPath(), $"update_{Guid.NewGuid():N}.zip");
+            string cacheDir = Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher");
+            if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
+            string tempZip = Path.Combine(cacheDir, $"update_{Guid.NewGuid():N}.zip");
 
             if (!HasWriteAccess(installDir))
             {
@@ -267,3 +269,4 @@ namespace updater.main
         }
     }
 }
+

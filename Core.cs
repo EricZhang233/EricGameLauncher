@@ -1402,6 +1402,8 @@ namespace EricGameLauncher
 
         private static string SystemBasePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "eric", AppFolderName);
         private static string PortableBasePath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data");
+        
+        public static string SystemCachePath => Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher");
 
         public static string FixedCachePath => Path.Combine(CurrentDataPath, IconFolderName);
         public static string CurrentDataPath { get; private set; } = "";
@@ -4205,7 +4207,7 @@ namespace EricGameLauncher
         {
             try
             {
-                string tempDir = Path.Combine(Path.GetTempPath(), "EricGameLauncher");
+                string tempDir = Path.Combine(ConfigService.SystemCachePath, "updater.main");
                 if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
 
                 string mainUpdaterPath = Path.Combine(tempDir, "updater.main.exe");
