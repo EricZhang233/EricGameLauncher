@@ -14,7 +14,7 @@
 -->
 
 <div align="right">
-  <a href="readme_res/readme_en.md">English</a> • <a href="readme_res/readme_jp.md">日本語</a>
+  <a href=".github/readme_res/readme_en.md">English</a> • <a href=".github/readme_res/readme_jp.md">日本語</a>
 </div>
 <div align="center">
   <img src="ico.ico" />
@@ -31,7 +31,7 @@
 [简介](#简介) • [功能特性](#功能特性) • [技术亮点](#技术亮点) • [快速开始](#快速开始) • [贡献与支持](#贡献与支持) • [特别致谢](#特别致谢--友情链接)
 
 <div align="center">
-  <img src="readme_res/readme.overview.gif" width="100%" />
+  <img src=".github/readme_res/readme.overview.gif" width="100%" />
 </div>
 
 </div>

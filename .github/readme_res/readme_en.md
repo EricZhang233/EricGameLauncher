@@ -13,10 +13,10 @@
   8. 非中文版本的readme顶部的语言切换器仅保留指向主readme(中文版)的链接，不互相跳转。非中文版本的入口仅在主readme中统一显示。
 -->
 <div align="right">
-  <a href="../readme.md">For the latest updates, please refer to the Chinese README.</a>
+  <a href="../../readme.md">For the latest updates, please refer to the Chinese README.</a>
 </div>
 <div align="center">
-  <img src="../ico.ico" />
+  <img src="../../ico.ico" />
 
 # Eric Game Launcher
 
