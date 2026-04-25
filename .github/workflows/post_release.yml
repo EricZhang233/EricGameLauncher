@@ -54,5 +54,6 @@ jobs:
           if [ -d "output" ]; then
             git rm -r output/
             git commit -m "chore: auto-remove output directory after release"
+            git pull --rebase origin master
             git push origin master
           fi

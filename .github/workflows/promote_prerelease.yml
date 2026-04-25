@@ -1,0 +1,49 @@
+name: Promote Prerelease to Latest
+
+on:
+  schedule:
+    - cron: '0 22 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Promote Prereleases older than 48 hours
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const now = new Date();
+            
+            const { data: releases } = await github.rest.repos.listReleases({ owner, repo, per_page: 20 });
+            
+            const latestPre = releases.find(r => r.prerelease);
+            
+            if (latestPre && latestPre.published_at) {
+              if (latestPre.body && latestPre.body.toLowerCase().includes('[no-release]')) {
+                console.log(`Skipping latest prerelease ${latestPre.tag_name} due to [no-release] tag.`);
+              } else {
+                const publishedAt = new Date(latestPre.published_at);
+                const hoursSincePublish = (now - publishedAt) / (1000 * 60 * 60);
+                
+                if (hoursSincePublish >= 48) {
+                  console.log(`Promoting release ${latestPre.tag_name} to latest`);
+                  await github.rest.repos.updateRelease({
+                    owner,
+                    repo,
+                    release_id: latestPre.id,
+                    prerelease: false,
+                    make_latest: "true"
+                  });
+                } else {
+                  console.log(`Latest prerelease ${latestPre.tag_name} has not reached 48 hours yet (${hoursSincePublish.toFixed(1)}h).`);
+                }
+              }
+            } else {
+              console.log("No prerelease found.");
+            }

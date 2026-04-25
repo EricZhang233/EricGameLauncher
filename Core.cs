@@ -1929,6 +1929,8 @@ namespace EricGameLauncher
         public string Title { get; set; } = string.Empty;
         public string ExePath { get; set; } = string.Empty;
         public string PlatformBadge { get; set; } = string.Empty;
+        [JsonIgnore]
+        public string? ItemId { get; set; }
     }
 
     public class AppItem : INotifyPropertyChanged
