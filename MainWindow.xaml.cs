@@ -1259,6 +1259,9 @@ namespace EricGameLauncher
                     return games;
                 });
 
+                bool canValidateSteam = !string.IsNullOrEmpty(SteamHelper.DetectSteamPath());
+                bool canValidateEpic = !string.IsNullOrEmpty(EpicGamesHelper.DetectEpicManifestDir());
+
                 var existingGames = new List<ScannedGame>();
                 var newGames = new List<ScannedGame>();
                 var allItems = _allItems.Concat(_recycleItems).ToList();
@@ -1298,8 +1301,9 @@ namespace EricGameLauncher
                     invalidGames.Add(new ScannedGame
                     {
                         Title = i.Title ?? "Unknown",
-                        ExePath = i.Id,
-                        PlatformBadge = badge ?? ""
+                        ExePath = i.ExePath ?? string.Empty,
+                        PlatformBadge = badge ?? "",
+                        ItemId = i.Id
                     });
                 }
 
@@ -1307,18 +1311,13 @@ namespace EricGameLauncher
                 {
                     bool isFileOrDirExists = false;
                     string? pureExePath = item.ExePath;
-                    bool isExeFile = false;
 
                     if (!string.IsNullOrEmpty(item.ExePath))
                     {
                         try
                         {
-                            if (item.ExePath.Contains(".exe", StringComparison.OrdinalIgnoreCase))
-                            {
-                                isExeFile = true;
-                                int exeIndex = item.ExePath.IndexOf(".exe", StringComparison.OrdinalIgnoreCase) + 4;
-                                pureExePath = item.ExePath.Substring(0, exeIndex).Trim('\"', ' ', '\'');
-                            }
+                            string expandedPath = Environment.ExpandEnvironmentVariables(item.ExePath);
+                            pureExePath = expandedPath;
 
                             if (File.Exists(pureExePath) || Directory.Exists(pureExePath))
                             {
@@ -1333,6 +1332,16 @@ namespace EricGameLauncher
                     string? platformName = item.PlatformName;
                     if (platformName == "Steam" || platformName == "Epic Games" || platformName == "Xbox")
                     {
+                        if (platformName == "Steam" && !canValidateSteam)
+                        {
+                            continue;
+                        }
+
+                        if (platformName == "Epic Games" && !canValidateEpic)
+                        {
+                            continue;
+                        }
+
                         if (platformName == "Xbox")
                         {
                             if (!StoreHelper.IsAppInstalled(item.ExePath))
@@ -1370,7 +1379,7 @@ namespace EricGameLauncher
                     }
                     else
                     {
-                        if (isExeFile && !isFileOrDirExists)
+                        if (IsUserLaunchTargetInvalid(item.ExePath))
                         {
                             TrackInvalidGame(item, "User");
                         }
@@ -1389,11 +1398,6 @@ namespace EricGameLauncher
                 ScannerNewGamesSection.Visibility = newGames.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
                 ScannerExistingGamesSection.Visibility = existingGames.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
                 ScannerInvalidGamesSection.Visibility = invalidGames.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-
-                if (invalidGames.Count > 0)
-                {
-                    ScannerInvalidGamesList.SelectAll();
-                }
 
                 ScannerLoadingPanel.Visibility = Visibility.Collapsed;
                 ScannerResultPanel.Visibility = Visibility.Visible;
@@ -1527,10 +1531,26 @@ namespace EricGameLauncher
             try
             {
                 bool deleted = false;
+                var processedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                bool canValidateSteam = !string.IsNullOrEmpty(SteamHelper.DetectSteamPath());
+                bool canValidateEpic = !string.IsNullOrEmpty(EpicGamesHelper.DetectEpicManifestDir());
+                var steamInstalledUrls = canValidateSteam
+                    ? new HashSet<string>(SteamHelper.GetAllInstalledGames().Select(x => x.ExePath), StringComparer.OrdinalIgnoreCase)
+                    : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var epicInstalledUrls = canValidateEpic
+                    ? new HashSet<string>(EpicGamesHelper.GetAllInstalledGames().Select(x => x.ExePath), StringComparer.OrdinalIgnoreCase)
+                    : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
                 foreach (var game in games)
                 {
-                    if (string.IsNullOrEmpty(game.ExePath)) continue;
-                    var itemToDelete = _allItems.FirstOrDefault(a => a.Id == game.ExePath);
+                    if (string.IsNullOrEmpty(game.ItemId) || !processedIds.Add(game.ItemId)) continue;
+
+                    var itemToDelete = _allItems.FirstOrDefault(a => a.Id == game.ItemId);
+                    if (itemToDelete == null) continue;
+
+                    if (!IsItemStillInvalid(itemToDelete, canValidateSteam, canValidateEpic, steamInstalledUrls, epicInstalledUrls)) continue;
+
                     if (itemToDelete != null)
                     {
                         _allItems.Remove(itemToDelete);
@@ -1547,6 +1567,95 @@ namespace EricGameLauncher
                 }
             }
             catch (Exception) { }
+        }
+
+        private bool IsItemStillInvalid(AppItem item, bool canValidateSteam, bool canValidateEpic, HashSet<string> steamInstalledUrls, HashSet<string> epicInstalledUrls)
+        {
+            try
+            {
+                var exePath = item.ExePath;
+                if (string.IsNullOrWhiteSpace(exePath)) return false;
+
+                if (item.PlatformName == "Xbox")
+                {
+                    return !StoreHelper.IsAppInstalled(exePath);
+                }
+
+                if (item.PlatformName == "Steam")
+                {
+                    if (!canValidateSteam) return false;
+                    return !steamInstalledUrls.Contains(exePath);
+                }
+
+                if (item.PlatformName == "Epic Games")
+                {
+                    if (!canValidateEpic) return false;
+                    return !epicInstalledUrls.Contains(exePath);
+                }
+
+                return IsUserLaunchTargetInvalid(exePath);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool IsUserLaunchTargetInvalid(string? rawPath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(rawPath)) return false;
+
+                string path = Environment.ExpandEnvironmentVariables(rawPath.Trim());
+
+                if (path.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return !StoreHelper.IsAppInstalled(path);
+                }
+
+                if (path.Contains("://", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                if (File.Exists(path) || Directory.Exists(path))
+                {
+                    return false;
+                }
+
+                var (filePath, _) = SplitPathAndArguments(path);
+                if (!string.IsNullOrWhiteSpace(filePath))
+                {
+                    string resolved = Environment.ExpandEnvironmentVariables(filePath.Trim());
+                    if (File.Exists(resolved) || Directory.Exists(resolved))
+                    {
+                        return false;
+                    }
+                }
+
+                if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) ||
+                    path.EndsWith(".url", StringComparison.OrdinalIgnoreCase) ||
+                    path.EndsWith(".bat", StringComparison.OrdinalIgnoreCase) ||
+                    path.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase) ||
+                    path.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase))
+                {
+                    return !File.Exists(path);
+                }
+
+                if (path.Contains(".exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    int exeIndex = path.IndexOf(".exe", StringComparison.OrdinalIgnoreCase) + 4;
+                    string exeCandidate = path.Substring(0, exeIndex).Trim('\"', ' ', '\'');
+                    return !File.Exists(exeCandidate);
+                }
+
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private void RestoreRecycledItem(AppItem item)
