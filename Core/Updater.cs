@@ -163,8 +163,10 @@ public class UpdateService
 
     public static async Task<ReleaseInfo?> CheckForUpdateAsync(string channel = "stable")
     {
+        var sw = Stopwatch.StartNew();
         try
         {
+            LogService.Write("Update", $"CheckForUpdate Start channel={channel} currentVer={AppVersion.Version}");
             var release = await GetReleaseAsync(channel);
             if (release == null || string.IsNullOrEmpty(release.tag_name)) return null;
 
@@ -174,15 +176,23 @@ public class UpdateService
             Version latestVersion = NormalizeVersion(match.Value);
             Version currentVersion = NormalizeVersion(AppVersion.Version);
 
-            return latestVersion > currentVersion ? release : null;
+            var result = latestVersion > currentVersion ? release : null;
+            LogService.Write("Update", $"CheckForUpdate End hasUpdate={(result != null)} targetVer={release.tag_name} duration={sw.ElapsedMilliseconds}ms");
+            return result;
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            LogService.Write("Update", $"CheckForUpdate Failed: duration={sw.ElapsedMilliseconds}ms error={ex.Message}");
+            return null;
+        }
     }
 
     public static void StartUpdater(string downloadUrl)
     {
+        var sw = Stopwatch.StartNew();
         try
         {
+            LogService.Write("Update", $"StartUpdater Start: downloadUrl={downloadUrl}");
             string tempDir = Path.Combine(ConfigService.SystemCachePath, "updater.main");
             if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
 
@@ -217,7 +227,11 @@ public class UpdateService
             };
 
             Process.Start(psi);
+            LogService.Write("Update", $"StartUpdater Launched: duration={sw.ElapsedMilliseconds}ms args={psi.Arguments}");
         }
-        catch { }
+        catch (Exception ex)
+        {
+            LogService.Write("Update", $"StartUpdater Failed: duration={sw.ElapsedMilliseconds}ms error={ex.Message}");
+        }
     }
 }

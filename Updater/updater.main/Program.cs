@@ -13,9 +13,29 @@ namespace updater.main
 {
     class Program
     {
+        private static readonly object _logLock = new();
+
+        private static void Log(string message)
+        {
+            try
+            {
+                string dir = Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher", "log");
+                Directory.CreateDirectory(dir);
+                string path = Path.Combine(dir, "updater.main.log");
+                string line = $"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}Z UpdaterMain {message}{Environment.NewLine}";
+                lock (_logLock)
+                {
+                    File.AppendAllText(path, line);
+                }
+            }
+            catch { }
+        }
+
         [SupportedOSPlatform("windows")]
         static async Task Main(string[] args)
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            Log($"Start argsCount={args.Length}");
             Console.Title = "Eric Game Launcher - MainUpdater";
             Console.WriteLine("========================================");
             Console.WriteLine("    Eric Game Launcher Update System    ");
@@ -25,12 +45,14 @@ namespace updater.main
             if (args.Length < 2)
             {
                 Console.WriteLine("Usage: updater.main.exe <install_dir> <download_url>");
+                Log("InvalidArgs");
                 await Task.Delay(3000);
                 return;
             }
 
             string installDir = args[0];
             string downloadUrl = args[1];
+            Log($"Args installDir={installDir}");
             string cacheDir = Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher");
             if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
             string tempZip = Path.Combine(cacheDir, $"update_{Guid.NewGuid():N}.zip");
@@ -40,6 +62,7 @@ namespace updater.main
                 if (!IsAdministrator())
                 {
                     Console.WriteLine("      Target directory is protected. Requesting administrator privileges...");
+                    Log("ElevationRequired");
                     try
                     {
                         ProcessStartInfo psi = new ProcessStartInfo
@@ -50,11 +73,13 @@ namespace updater.main
                             Verb = "runas"
                         };
                         Process.Start(psi);
+                        Log("ElevationRelaunch");
                         return;
                     }
                     catch (Exception ex)
                     {
                         Console.WriteLine($"ERROR: Elevation failed: {ex.Message}");
+                        Log($"ElevationFailed {ex.Message}");
                         await Task.Delay(5000);
                         return;
                     }
@@ -62,6 +87,7 @@ namespace updater.main
                 else
                 {
                     Console.WriteLine("ERROR: Target directory is read-only despite administrator privileges.");
+                    Log("ElevationNoWriteAccess");
                     await Task.Delay(5000);
                     return;
                 }
@@ -69,7 +95,9 @@ namespace updater.main
 
             try
             {
+                var downloadTaskSw = System.Diagnostics.Stopwatch.StartNew();
                 Console.WriteLine($"[1/4] Downloading update package...");
+                Log($"Download Start url={downloadUrl}");
                 using (var client = new HttpClient { Timeout = TimeSpan.FromMinutes(30) })
                 {
                     client.DefaultRequestHeaders.Add("User-Agent", "EricGameLauncher-Updater");
@@ -120,16 +148,20 @@ namespace updater.main
                     }
                 }
                 Console.WriteLine("\n      Download completed.");
+                Log($"Download Complete duration={downloadTaskSw.ElapsedMilliseconds}ms size={new FileInfo(tempZip).Length}");
 
                 Console.WriteLine($"[2/4] Closing Eric Game Launcher...");
+                Log("CloseLauncher Start");
                 var processes = Process.GetProcessesByName("EricGameLauncher");
                 foreach (var p in processes)
                 {
                     try { p.Kill(); p.WaitForExit(); } catch { }
                 }
                 await Task.Delay(1000);
+                Log("CloseLauncher End");
 
                 Console.WriteLine($"[3/4] Applying updates...");
+                Log("ApplyUpdates Start");
                 string stagingDir = Path.Combine(installDir, "._update_staging");
                 string backupDir = Path.Combine(installDir, "._update_backup");
 
@@ -212,6 +244,7 @@ namespace updater.main
                 }
 
                 Console.WriteLine($"[4/4] Restarting application...");
+                Log("Restart Start");
                 string exePath = Path.Combine(installDir, "EricGameLauncher.exe");
                 if (File.Exists(exePath))
                 {
@@ -222,9 +255,11 @@ namespace updater.main
                         UseShellExecute = true
                     });
                 }
+                Log("Restart End");
 
                 Console.WriteLine();
                 Console.WriteLine("Update successful! Closing updater...");
+                Log("Success");
                 await Task.Delay(2000);
             }
             catch (Exception ex)
@@ -233,11 +268,13 @@ namespace updater.main
                 Console.WriteLine("ERROR: " + ex.Message);
                 Console.WriteLine("Please try manual update or check network connection.");
                 Console.WriteLine("Press any key to exit...");
+                Log($"Failure {ex.Message}");
                 Console.ReadKey();
             }
             finally
             {
                 if (File.Exists(tempZip)) try { File.Delete(tempZip); } catch { }
+                Log($"End duration={sw.ElapsedMilliseconds}ms");
             }
         }
 

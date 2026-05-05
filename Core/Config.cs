@@ -66,15 +66,19 @@ public static class ServerConfigManager
 
     public static async Task FetchConfigAsync()
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
+            LogService.Write("Network", "ServerConfig Fetch Start");
             client.DefaultRequestHeaders.UserAgent.ParseAdd("EricGameLauncher");
             var json = await client.GetStringAsync("https://raw.githubusercontent.com/EricZhang233/EricGameLauncher/master/ServerCfg.json");
             CurrentConfig = JsonSerializer.Deserialize<ServerConfigInfo>(json);
+            LogService.Write("Network", $"ServerConfig Fetch End Duration={sw.ElapsedMilliseconds}ms Size={json?.Length ?? 0}");
         }
-        catch
+        catch (Exception ex)
         {
             CurrentConfig = null;
+            LogService.Write("Network", $"ServerConfig Fetch Failed Duration={sw.ElapsedMilliseconds}ms Error={ex.Message}");
         }
     }
 }
@@ -95,6 +99,7 @@ public static class ConfigService
 
     public static string SystemCachePath => Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher");
 
+    public static string ConfigFilePath => Path.Combine(CurrentDataPath, DataFileName);
     public static string FixedCachePath => Path.Combine(CurrentDataPath, IconFolderName);
     public static string CurrentDataPath { get; private set; } = "";
     private static ConfigData? _configData;
@@ -110,6 +115,8 @@ public static class ConfigService
 
     public static void Initialize()
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        LogService.Write("Config", "Initialize Start");
         if (!Directory.Exists(SystemBasePath)) Directory.CreateDirectory(SystemBasePath);
 
         string portableConfigPath = Path.Combine(PortableBasePath, DataFileName);
@@ -126,6 +133,7 @@ public static class ConfigService
         if (!Directory.Exists(FixedCachePath)) Directory.CreateDirectory(FixedCachePath);
 
         LoadConfigData();
+        LogService.Write("Config", $"Initialize End path={CurrentDataPath} mode={(CurrentDataPath == SystemBasePath ? "System" : "Portable")} duration={sw.ElapsedMilliseconds}ms");
     }
 
     public static void SwitchStorageMode(bool useSystemPath)
@@ -171,7 +179,9 @@ public static class ConfigService
 
     public static void SaveItems(List<AppItem> items, List<AppItem> recycleItems, bool triggerEvent = true)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         if (_configData == null) return;
+        LogService.Write("Config", $"SaveItems Start items={items.Count} recycle={recycleItems.Count}");
         lock (_configData)
         {
             foreach (var item in items)
@@ -184,17 +194,20 @@ public static class ConfigService
         }
         SaveConfig();
         if (triggerEvent) DataChanged?.Invoke();
+        LogService.Write("Config", $"SaveItems End duration={sw.ElapsedMilliseconds}ms");
     }
 
     public static List<AppItem> LoadItems()
     {
         var dtos = _configData?.Items ?? [];
+        LogService.Write("Config", $"LoadItems count={dtos.Count}");
         return dtos.Select(dto => dto.ToViewModel(FixedCachePath)).ToList();
     }
 
     public static List<AppItem> LoadRecycleBinItems()
     {
         var dtos = _configData?.RecycleBinItems ?? [];
+        LogService.Write("Config", $"LoadRecycleBinItems count={dtos.Count}");
         return dtos.Select(dto => dto.ToViewModel(FixedCachePath)).ToList();
     }
 
@@ -202,6 +215,7 @@ public static class ConfigService
     {
         try
         {
+            LogService.Write("Config", "LoadConfigData Start");
             if (string.IsNullOrEmpty(CurrentDataPath)) { _configData = new ConfigData(); return; }
             string jsonPath = Path.Combine(CurrentDataPath, DataFileName);
             if (!File.Exists(jsonPath)) { _configData = new ConfigData(); return; }
@@ -264,10 +278,11 @@ public static class ConfigService
             {
                 SaveConfigData();
             }
+            LogService.Write("Config", "LoadConfigData End");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[LoadConfigData] Handled exception parsing JSON. Fallback to empty context. {ex.Message}");
+            LogService.Write("Config", $"LoadConfigData failed: {ex.Message}");
             if (_configData == null) _configData = new ConfigData();
         }
     }
@@ -275,6 +290,8 @@ public static class ConfigService
     private static void SaveConfigData()
     {
         if (_blockSaving) return;
+
+        LogService.Write("Config", "SaveConfigData Start");
 
         _ = Task.Run(async () =>
         {
@@ -297,10 +314,11 @@ public static class ConfigService
                 if (!Directory.Exists(CurrentDataPath)) Directory.CreateDirectory(CurrentDataPath);
                 await File.WriteAllTextAsync(jsonPath, jsonString);
             }
-            catch (Exception ex) { Debug.WriteLine($"[SaveConfigData] Async write failed: {ex.Message}"); }
+            catch (Exception ex) { LogService.Write("Config", $"SaveConfigData failed: {ex.Message}"); }
             finally
             {
                 _saveSemaphore.Release();
+                LogService.Write("Config", "SaveConfigData End");
             }
         });
     }
@@ -353,6 +371,7 @@ public static class ConfigService
         if (items.Count == 0 && recycleItems.Count == 0) return false;
 
         bool modified = false;
+        LogService.Write("Config", "Reconstruct Start");
         foreach (var item in items.Concat(recycleItems))
         {
             bool itemChanged = false;
@@ -367,12 +386,12 @@ public static class ConfigService
                     {
                         item.Platform = platform.PlatformName;
                         itemChanged = true;
-                        Debug.WriteLine($"[ConfigReconstruction] Restored platform '{item.Platform}' for {item.Title}");
+                        LogService.Write("Config", $"Reconstruct Set platform: {item.Platform} {item.Title}");
                     }
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"[ConfigReconstruction] Error identifying platform for {item.Title}: {ex.Message}");
+                    LogService.Write("Config", $"Reconstruct Detect platform failed: {item.Title} {ex.Message}");
                 }
             }
 
@@ -383,6 +402,7 @@ public static class ConfigService
         {
             SaveConfigData();
         }
+        LogService.Write("Config", "Reconstruct End");
         return modified;
     }
 
@@ -390,9 +410,12 @@ public static class ConfigService
 
     public static async Task RefreshGlobalAsync()
     {
+        var sw = Stopwatch.StartNew();
+        LogService.Write("Config", "RefreshGlobal Start");
         var items = LoadItems();
         var recycleItems = LoadRecycleBinItems();
         var allItems = items.Concat(recycleItems).ToList();
+        LogService.Write("Config", $"RefreshGlobal AfterLoadItems {sw.ElapsedMilliseconds}ms");
         var rebuildTasks = new List<Task>();
         int successfulRebuilds = 0;
 
@@ -473,16 +496,17 @@ public static class ConfigService
 
         if (rebuildTasks.Any())
         {
+            LogService.Write("Config", $"RefreshGlobal BeforeRebuildAwait {sw.ElapsedMilliseconds}ms");
             await Task.WhenAll(rebuildTasks);
+            LogService.Write("Config", $"RefreshGlobal AfterRebuildAwait {sw.ElapsedMilliseconds}ms");
             if (successfulRebuilds > 0)
             {
                 SaveItems(items, recycleItems, false);
             }
         }
 
-        await ReconstructMissingConfigAsync();
-
         DataChanged?.Invoke();
+        LogService.Write("Config", $"RefreshGlobal AfterDataChanged {sw.ElapsedMilliseconds}ms");
     }
 
     public static (int X, int Y, int Width, int Height) GetWindowBounds()

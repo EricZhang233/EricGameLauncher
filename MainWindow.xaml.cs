@@ -102,6 +102,8 @@ namespace EricGameLauncher
 
         public MainWindow()
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            LogService.Write("Startup", $"Ctor Start [Version: {AppVersion.DisplayVersion}]");
             this.InitializeComponent();
 
             _customSections = new StackPanel[] { PropCustomSection1, PropCustomSection2, PropCustomSection3, PropCustomSection4, PropCustomSection5, PropCustomSection6, PropCustomSection7, PropCustomSection8, PropCustomSection9, PropCustomSection10 };
@@ -191,7 +193,9 @@ namespace EricGameLauncher
                 using var stream = assembly.GetManifestResourceStream("EricGameLauncher.ico.ico");
                 if (stream != null)
                 {
-                    string tempIconPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "EricGameLauncher_TempIcon.ico");
+                    if (!System.IO.Directory.Exists(ConfigService.SystemCachePath))
+                        System.IO.Directory.CreateDirectory(ConfigService.SystemCachePath);
+                    string tempIconPath = System.IO.Path.Combine(ConfigService.SystemCachePath, "EricGameLauncher_TempIcon.ico");
                     using var fileStream = new System.IO.FileStream(tempIconPath, System.IO.FileMode.Create, System.IO.FileAccess.Write);
                     stream.CopyTo(fileStream);
                     fileStream.Close();
@@ -238,24 +242,50 @@ namespace EricGameLauncher
 
             _ = LoadDataAsync();
             _ = InitializeNetworkTasksAsync();
+            LogService.Write("Startup", $"Ctor End duration={sw.ElapsedMilliseconds}ms");
         }
 
         private async Task LoadDataAsync()
         {
-            await LoadData();
-            AutoCleanRecycleBin();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            LogService.StartupEnter();
+            try
+            {
+                LogService.Write("Startup", "LoadDataAsync Start");
+                await LoadData();
+                LogService.Write("Startup", $"LoadDataAsync AfterLoadData duration={sw.ElapsedMilliseconds}ms items={_allItems.Count}");
+                AutoCleanRecycleBin();
+                LogService.Write("Startup", $"LoadDataAsync AfterAutoClean totalDuration={sw.ElapsedMilliseconds}ms recycleItems={_recycleItems.Count}");
+            }
+            finally
+            {
+                LogService.StartupExit();
+            }
         }
 
         private async Task InitializeNetworkTasksAsync()
         {
-            await ServerConfigManager.FetchConfigAsync();
-            _ = CheckForUpdatesQuietlyAsync();
+            var sw = Stopwatch.StartNew();
+            LogService.StartupEnter();
+            try
+            {
+                LogService.Write("Startup", "InitializeNetwork Start");
+                await ServerConfigManager.FetchConfigAsync();
+                LogService.Write("Startup", $"InitializeNetwork AfterFetch {sw.ElapsedMilliseconds}ms");
+                _ = CheckForUpdatesQuietlyAsync();
+                LogService.Write("Startup", $"InitializeNetwork AfterCheckStart {sw.ElapsedMilliseconds}ms");
+            }
+            finally
+            {
+                LogService.StartupExit();
+            }
         }
 
         private async Task CheckForUpdatesQuietlyAsync(bool skipDelay = false)
         {
             try
             {
+                LogService.Write("Update", $"QuietCheck Start skipDelay={skipDelay}");
                 if (!skipDelay)
                 {
                     await Task.Delay(3000);
@@ -292,6 +322,7 @@ namespace EricGameLauncher
                         });
                     }
                 }
+                LogService.Write("Update", "QuietCheck End");
             }
             catch { }
         }
@@ -300,6 +331,7 @@ namespace EricGameLauncher
         {
             _pendingUpdate = null;
             HasUpdate = false;
+            LogService.Write("Update", "ManualCheck Start");
 
             var release = await UpdateService.GetReleaseAsync(ConfigService.UpdateChannel);
             if (release != null)
@@ -343,6 +375,7 @@ namespace EricGameLauncher
                 };
                 await noUpdateDialog.ShowAsync();
             }
+            LogService.Write("Update", "ManualCheck End");
         }
 
         private async void MenuPrivacyItem_Click(object sender, RoutedEventArgs e)
@@ -611,12 +644,15 @@ namespace EricGameLauncher
         {
             try
             {
+                var sw = Stopwatch.StartNew();
+                LogService.Write("Startup", "LoadData Enter");
                 if (ConfigService.RequiresMigration)
                 {
                     MigrationOverlay.Visibility = Visibility.Visible;
                     await Task.Delay(200);
+                    LogService.Write("Startup", $"LoadData AfterMigrationDelay {sw.ElapsedMilliseconds}ms");
 
-                    string configPath = System.IO.Path.Combine(ConfigService.CurrentDataPath, "config.json");
+                    string configPath = ConfigService.ConfigFilePath;
                     try
                     {
                         string tempDir = System.IO.Path.Combine(ConfigService.SystemCachePath, "updater.cfgver");
@@ -674,10 +710,13 @@ namespace EricGameLauncher
                     return;
                 }
 
+                LogService.Write("Startup", $"LoadData BeforeRefreshGlobal {sw.ElapsedMilliseconds}ms");
                 await ConfigService.RefreshGlobalAsync();
+                LogService.Write("Startup", $"LoadData AfterRefreshGlobal {sw.ElapsedMilliseconds}ms");
 
                 _preloadedStartMenuTask = Task.Run(() => ShortcutScanner.GetStartMenuItems());
                 _preloadedDesktopTask = Task.Run(() => ShortcutScanner.GetDesktopItems());
+                LogService.Write("Startup", $"LoadData AfterPreloadTasks {sw.ElapsedMilliseconds}ms");
             }
             catch (Exception) { }
         }
@@ -833,6 +872,7 @@ namespace EricGameLauncher
 
             try
             {
+                LogService.Write("App", $"LaunchItem Start {item.Title}");
                 TriggerItemLoadingAnimation(item);
 
                 if (item.UseAlternativeLaunch && !string.IsNullOrEmpty(item.AlternativeLaunchCommand))
@@ -864,6 +904,7 @@ namespace EricGameLauncher
 
             try
             {
+                LogService.Write("App", $"RunProcess Start admin={admin} path={path}");
 
                 path = Environment.ExpandEnvironmentVariables(path);
 
@@ -1242,6 +1283,9 @@ namespace EricGameLauncher
         {
             try
             {
+                LogService.Write("Scan", "Scan Start");
+                await ConfigService.ReconstructMissingConfigAsync();
+
                 ScannerResultPanel.Visibility = Visibility.Collapsed;
                 ScannerLoadingPanel.Visibility = Visibility.Visible;
                 ScannerNewGamesList.ItemsSource = null;
@@ -1398,6 +1442,7 @@ namespace EricGameLauncher
                 ScannerNewGamesSection.Visibility = newGames.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
                 ScannerExistingGamesSection.Visibility = existingGames.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
                 ScannerInvalidGamesSection.Visibility = invalidGames.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+                LogService.Write("Scan", "Scan Complete");
 
                 ScannerLoadingPanel.Visibility = Visibility.Collapsed;
                 ScannerResultPanel.Visibility = Visibility.Visible;
@@ -2852,6 +2897,7 @@ namespace EricGameLauncher
         {
             try
             {
+                LogService.Write("App", "Install Start");
                 string exePath = Process.GetCurrentProcess().MainModule?.FileName ?? "";
                 if (string.IsNullOrEmpty(exePath)) return;
 
@@ -2872,6 +2918,7 @@ namespace EricGameLauncher
 
                 if (!Directory.Exists(startMenuPath)) Directory.CreateDirectory(startMenuPath);
                 ShortcutResolver.CreateShortcut(exePath, startMenuShortcutPath, description);
+                LogService.Write("App", "Install Complete");
             }
             catch (Exception) { }
         }
@@ -2880,6 +2927,7 @@ namespace EricGameLauncher
         {
             try
             {
+                LogService.Write("App", "Uninstall Start");
                 string appName = "EricGameLauncher";
 
                 string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
@@ -2890,6 +2938,7 @@ namespace EricGameLauncher
 
                 if (File.Exists(desktopShortcutPath)) File.Delete(desktopShortcutPath);
                 if (File.Exists(startMenuShortcutPath)) File.Delete(startMenuShortcutPath);
+                LogService.Write("App", "Uninstall Complete");
             }
             catch (Exception) { }
         }
@@ -3049,6 +3098,22 @@ namespace EricGameLauncher
             });
         }
 
+        private void BtnOpenCacheFolder_Click(object sender, RoutedEventArgs e)
+        {
+            string folder = ConfigService.SystemCachePath;
+            if (!System.IO.Directory.Exists(folder))
+            {
+                System.IO.Directory.CreateDirectory(folder);
+            }
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"\"{folder.Replace("\"", "\\\"")}\"",
+                UseShellExecute = true
+            });
+        }
+
 
 
 
@@ -3168,6 +3233,8 @@ namespace EricGameLauncher
                 {
                     if (BtnOpenConfigFolder != null)
                         ToolTipService.SetToolTip(BtnOpenConfigFolder, I18n.T("Settings_OpenConfigFolder"));
+                    if (BtnOpenCacheFolder != null)
+                        ToolTipService.SetToolTip(BtnOpenCacheFolder, I18n.T("Settings_OpenCacheFolder"));
                 }
                 catch (Exception) { }
 

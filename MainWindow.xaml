@@ -492,7 +492,9 @@
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="8"/>
                                         <ColumnDefinition Width="Auto"/>
-                                                                                    </Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="8"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
                                                 
                                     <TextBlock x:Name="StorageModeText" 
                                                Grid.Column="0"
@@ -510,6 +512,13 @@
                                     <Button x:Name="BtnOpenConfigFolder"
                                             Grid.Column="4"
                                             Click="BtnOpenFolder_Click"
+                                            Padding="8,4"
+                                            ToolTipService.ToolTip="">
+                                        <FontIcon Glyph="&#xE8DA;" FontSize="12"/>
+                                    </Button>
+                                    <Button x:Name="BtnOpenCacheFolder"
+                                            Grid.Column="6"
+                                            Click="BtnOpenCacheFolder_Click"
                                             Padding="8,4"
                                             ToolTipService.ToolTip="">
                                         <FontIcon Glyph="&#xE8DA;" FontSize="12"/>

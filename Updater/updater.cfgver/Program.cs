@@ -9,16 +9,38 @@ namespace updater.cfgver
 {
     class Program
     {
+        private static readonly object _logLock = new();
+
+        private static void Log(string message)
+        {
+            try
+            {
+                string dir = Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher", "log");
+                Directory.CreateDirectory(dir);
+                string path = Path.Combine(dir, "updater.cfgver.log");
+                string line = $"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}Z UpdaterCfg {message}{Environment.NewLine}";
+                lock (_logLock)
+                {
+                    File.AppendAllText(path, line);
+                }
+            }
+            catch { }
+        }
+
         [SupportedOSPlatform("windows")]
         static void Main(string[] args)
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            Log($"Start argsCount={args.Length}");
             if (args.Length == 0)
             {
                 Console.WriteLine("Usage: updater.cfgver.exe <config_path>");
+                Log("InvalidArgs");
                 return;
             }
 
             string inputPath = args[0];
+            Log($"Input {inputPath}");
 
             if (inputPath.StartsWith("\"") && inputPath.EndsWith("\""))
             {
@@ -27,6 +49,7 @@ namespace updater.cfgver
 
             if (!File.Exists(inputPath))
             {
+                Log("InputMissing");
                 return;
             }
 
@@ -42,7 +65,7 @@ namespace updater.cfgver
                     rulesArray = JsonNode.Parse(rulesJson);
                 }
             }
-            catch { return; }
+            catch (Exception ex) { Log($"RulesLoadFailed info={ex.Message}"); return; }
 
             if (rulesArray == null) return;
 
@@ -52,7 +75,7 @@ namespace updater.cfgver
                 string configJson = File.ReadAllText(inputPath);
                 configRoot = JsonNode.Parse(configJson)?.AsObject();
             }
-            catch { return; }
+            catch (Exception ex) { Log($"ConfigReadFailed info={ex.Message}"); return; }
 
             if (configRoot == null) return;
 
@@ -181,7 +204,7 @@ namespace updater.cfgver
             {
                 File.Copy(inputPath, backupPath, true);
             }
-            catch { return; }
+            catch (Exception ex) { Log($"BackupFailed info={ex.Message}"); return; }
 
             try
             {
@@ -189,7 +212,8 @@ namespace updater.cfgver
                 string newJson = configRoot.ToJsonString(options);
                 File.WriteAllText(inputPath, newJson);
             }
-            catch { }
+            catch (Exception ex) { Log($"WriteFailed info={ex.Message}"); }
+            Log($"End duration={sw.ElapsedMilliseconds}ms modified={(migratedAny ? "yes" : "no")}");
         }
     }
 }
