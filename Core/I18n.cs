@@ -17,6 +17,8 @@ public static class I18n
 
     public static void Load(string langCode)
     {
+        var sw = Stopwatch.StartNew();
+        LogService.Write("App", $"I18n Load Start: targetLang={langCode}");
         _currentLanguage = langCode;
 
         if (_allTranslations == null)
@@ -31,7 +33,7 @@ public static class I18n
                 string json = reader.ReadToEnd();
                 _allTranslations = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(json);
             }
-            catch (Exception ex) { Debug.WriteLine($"[I18n] Failed to load translations: {ex.Message}"); }
+            catch (Exception ex) { LogService.Write("App", $"I18n Load failed for lang={langCode}: Exception={ex.Message}"); }
         }
 
         if (_allTranslations != null && _allTranslations.TryGetValue(langCode, out var dict))
@@ -40,6 +42,7 @@ public static class I18n
         }
 
         LanguageChanged?.Invoke();
+        LogService.Write("App", $"I18n Load End: dictSize={_allTranslations?.Count ?? 0}, duration={sw.ElapsedMilliseconds}ms");
     }
 
     public static string T(string key)
