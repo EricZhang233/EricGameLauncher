@@ -22,7 +22,18 @@ jobs:
             
             const { data: releases } = await github.rest.repos.listReleases({ owner, repo, per_page: 20 });
             
-            const latestPre = releases.find(r => r.prerelease);
+            if (!releases.length) {
+              console.log("No releases found.");
+              return;
+            }
+            
+            const latestRelease = releases[0];
+            if (!latestRelease.prerelease) {
+              console.log(`Latest release ${latestRelease.tag_name} is already latest. Skipping.`);
+              return;
+            }
+            
+            const latestPre = latestRelease;
             
             if (latestPre && latestPre.published_at) {
               if (latestPre.body && latestPre.body.toLowerCase().includes('[no-release]')) {
