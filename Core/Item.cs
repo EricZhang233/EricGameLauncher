@@ -741,7 +741,30 @@ public static class IconHelper
             }
             else
             {
-                icon = ExtractLargestIcon(targetPath, iconIndex) ?? Icon.ExtractAssociatedIcon(targetPath);
+                string ext = Path.GetExtension(targetPath)?.ToLowerInvariant() ?? "";
+                var imageExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".webp" };
+
+                if (imageExts.Contains(ext))
+                {
+                    try
+                    {
+                        using (var img = System.Drawing.Image.FromFile(targetPath))
+                        {
+                            img.Save(savePath, ImageFormat.Png);
+                        }
+                        await Task.Delay(50);
+                        if (File.Exists(savePath) && new FileInfo(savePath).Length > 0) return savePath;
+                    }
+                    catch { }
+                }
+                else if (ext == ".ico")
+                {
+                    icon = ExtractLargestIcon(targetPath, iconIndex) ?? Icon.ExtractAssociatedIcon(targetPath);
+                }
+                else
+                {
+                    icon = ExtractLargestIcon(targetPath, iconIndex) ?? Icon.ExtractAssociatedIcon(targetPath);
+                }
             }
 
             if (icon != null)

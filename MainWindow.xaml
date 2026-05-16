@@ -521,7 +521,7 @@
                                             Click="BtnOpenCacheFolder_Click"
                                             Padding="8,4"
                                             ToolTipService.ToolTip="">
-                                        <FontIcon Glyph="&#xE8DA;" FontSize="12"/>
+                                        <FontIcon Glyph="&#xE8B7;" FontSize="12"/>
                                     </Button>
                                 </Grid>
                                 
