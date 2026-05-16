@@ -414,9 +414,13 @@ namespace EricGameLauncher
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
         private const int GWLP_WNDPROC = -4;
         private const uint WM_ENTERSIZEMOVE = 0x0231;
         private const uint WM_EXITSIZEMOVE = 0x0232;
+        
 
         private IntPtr WindowProcess(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
         {
@@ -434,6 +438,7 @@ namespace EricGameLauncher
                     RefreshView();
                 }
             }
+            
             return CallWindowProc(_oldWndProc, hWnd, msg, wParam, lParam);
         }
         #endregion
@@ -734,6 +739,74 @@ namespace EricGameLauncher
         private DispatcherTimer? _tooltipTimer;
         private AppItem? _hoveredItem;
         private FrameworkElement? _hoveredElement;
+        private FrameworkElement? _closeAfterLaunchInputRoot;
+        private DispatcherTimer? _closeAfterLaunchTimer;
+        private bool _closeAfterLaunchPending = false;
+
+        private void StartCloseAfterLaunchTimer()
+        {
+            if (_closeAfterLaunchPending) return;
+            _closeAfterLaunchPending = true;
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                _closeAfterLaunchInputRoot ??= this.Content as FrameworkElement;
+                _closeAfterLaunchTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+                _closeAfterLaunchTimer.Tick += CloseAfterLaunchTimer_Tick;
+                _closeAfterLaunchTimer.Start();
+                if (_closeAfterLaunchInputRoot != null)
+                {
+                    _closeAfterLaunchInputRoot.PointerPressed += OnUserActivity_CloseAfterLaunch;
+                    _closeAfterLaunchInputRoot.KeyDown += OnUserActivity_CloseAfterLaunch;
+                }
+            });
+        }
+
+        private void CloseAfterLaunchTimer_Tick(object? sender, object e)
+        {
+            if (_closeAfterLaunchTimer == null) return;
+            _closeAfterLaunchTimer.Stop();
+            _closeAfterLaunchTimer.Tick -= CloseAfterLaunchTimer_Tick;
+            _closeAfterLaunchTimer = null;
+
+            try
+            {
+                IntPtr fg = GetForegroundWindow();
+                if (fg != _hWnd)
+                {
+                    try { Application.Current.Exit(); } catch { }
+                }
+                else
+                {
+                    // Window still foreground: cancel and do not retry
+                    CancelCloseAfterLaunch();
+                }
+            }
+            catch { }
+        }
+
+        private void OnUserActivity_CloseAfterLaunch(object? sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e) => CancelCloseAfterLaunch();
+        private void OnUserActivity_CloseAfterLaunch(object? sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e) => CancelCloseAfterLaunch();
+
+        private void CancelCloseAfterLaunch()
+        {
+            if (!_closeAfterLaunchPending) return;
+            _closeAfterLaunchPending = false;
+            if (_closeAfterLaunchTimer != null)
+            {
+                _closeAfterLaunchTimer.Stop();
+                _closeAfterLaunchTimer.Tick -= CloseAfterLaunchTimer_Tick;
+                _closeAfterLaunchTimer = null;
+            }
+            try
+            {
+                if (_closeAfterLaunchInputRoot != null)
+                {
+                    _closeAfterLaunchInputRoot.PointerPressed -= OnUserActivity_CloseAfterLaunch;
+                    _closeAfterLaunchInputRoot.KeyDown -= OnUserActivity_CloseAfterLaunch;
+                }
+            }
+            catch { }
+        }
 
         private void ItemPanel_PointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
@@ -968,7 +1041,7 @@ namespace EricGameLauncher
                 Process? process = Process.Start(psi);
 
                 if (ConfigService.CloseAfterLaunch)
-                    Application.Current.Exit();
+                    StartCloseAfterLaunchTimer();
             }
             catch (Exception) { }
         }
