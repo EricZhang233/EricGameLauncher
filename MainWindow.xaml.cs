@@ -2538,7 +2538,7 @@ namespace EricGameLauncher
             {
 
                 IntPtr hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-                string filter = Win32FileDialog.BuildFilter(Win32FileDialog.FilterImages, Win32FileDialog.FilterAll);
+                string filter = Win32FileDialog.BuildFilter(Win32FileDialog.FilterExecutablesAndImages, Win32FileDialog.FilterAll);
                 string? filePath = Win32FileDialog.ShowOpenFileDialog(hwnd, I18n.T("FileDialog_SelectIconFile"), filter);
 
                 if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
@@ -3295,7 +3295,6 @@ namespace EricGameLauncher
                 for (int i = 0; i < languages.Count; i++)
                 {
                     LanguageComboBox.Items.Add(I18n.GetDisplayName(languages[i]));
-                    if (languages[i] == I18n.CurrentLanguage)
                         selectedIndex = i;
                 }
                 LanguageComboBox.Tag = languages;

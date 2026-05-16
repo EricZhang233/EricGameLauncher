@@ -499,6 +499,11 @@ public static class Win32FileDialog
     public static string FilterExecutables => I18n.T("FileDialog_FilterExecutables") + "\0*.exe;*.com;*.bat;*.cmd;*.lnk;*.url\0";
     public static string FilterImages => I18n.T("FileDialog_FilterImages") + "\0*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.ico;*.tif;*.tiff;*.webp;*.svg\0";
     public static string FilterAll => I18n.T("FileDialog_FilterAll") + "\0*.*\0";
+
+    // Combined filter that groups executables and images into a single selectable category
+    public static string FilterExecutablesAndImages => I18n.T("FileDialog_FilterExecutablesAndImages") + "\0*.exe;*.com;*.bat;*.cmd;*.lnk;*.url;*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.ico;*.tif;*.tiff;*.webp;*.svg\0";
+
+    // Keep DefaultFilter unchanged (shows Executables, Images, All) for other callers
     public static string DefaultFilter => BuildFilter(FilterExecutables, FilterImages, FilterAll);
 
     [DllImport("comdlg32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
