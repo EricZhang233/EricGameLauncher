@@ -101,9 +101,46 @@ namespace EricGameLauncher
         private bool _isRefreshPending = false;
         private bool _isRootLoaded = false;
         private bool _pendingInitialRefresh = false;
-        private DispatcherTimer? _startupRevealTimer;
 
         public event PropertyChangedEventHandler? PropertyChanged;
+
+        private async Task RevealUIWhenReadyAsync()
+        {
+            var sw = Stopwatch.StartNew();
+            var maxWaitTime = 1000;
+            
+            while (sw.ElapsedMilliseconds < maxWaitTime)
+            {
+                if (AppGrid != null && AppGrid.ActualWidth > 0)
+                {
+                    AppGrid.Visibility = Visibility.Visible;
+                    _isRootLoaded = true;
+                    LogService.Write("Startup", $"UI revealed early at {sw.ElapsedMilliseconds}ms");
+                    
+                    if (_pendingInitialRefresh)
+                    {
+                        _pendingInitialRefresh = false;
+                        RefreshView();
+                    }
+                    return;
+                }
+                
+                await Task.Delay(16);
+            }
+            
+            if (AppGrid != null)
+            {
+                AppGrid.Visibility = Visibility.Visible;
+                LogService.Write("Startup", $"UI revealed after timeout at {sw.ElapsedMilliseconds}ms");
+            }
+            _isRootLoaded = true;
+            
+            if (_pendingInitialRefresh)
+            {
+                _pendingInitialRefresh = false;
+                RefreshView();
+            }
+        }
 
         public MainWindow()
         {
@@ -163,50 +200,7 @@ namespace EricGameLauncher
                 {
                     try
                     {
-                        if (_startupRevealTimer == null)
-                        {
-                            _startupRevealTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
-                            _startupRevealTimer.Tick += (sender, args) =>
-                            {
-                                if (_startupRevealTimer == null)
-                                {
-                                    return;
-                                }
-
-                                _startupRevealTimer.Stop();
-                                _startupRevealTimer = null;
-                                _isRootLoaded = true;
-
-                                if (AppGrid != null)
-                                {
-                                    AppGrid.Visibility = Visibility.Visible;
-                                }
-
-                                if (_pendingInitialRefresh)
-                                {
-                                    _pendingInitialRefresh = false;
-                                    RefreshView();
-                                }
-                            };
-                            _startupRevealTimer.Start();
-                        }
-
-                        if (MoreMenuFlyout.Items.Count > 0)
-                        {
-                            var aboutItem = MoreMenuFlyout.Items.LastOrDefault() as MenuFlyoutItem;
-                            if (aboutItem != null)
-                            {
-
-                                aboutItem.Loaded += (sender, args) =>
-                                {
-                                    var textBlock = FindChildByName(aboutItem, "MenuVersionText") as TextBlock;
-                                    if (textBlock != null)
-                                    {
-                                        textBlock.Text = AppVersion.DisplayVersion;
-                                    }
-                                };
-                            }
-                        }
+                        _ = RevealUIWhenReadyAsync();
                     }
                     catch (Exception ex) { LogService.Write("UI", "Root element loaded handler failed", ex); }
                 };
@@ -221,24 +215,9 @@ namespace EricGameLauncher
 
             try
             {
-                var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-                using var stream = assembly.GetManifestResourceStream("EricGameLauncher.ico.ico");
-                if (stream != null)
-                {
-                    if (!System.IO.Directory.Exists(ConfigService.SystemCachePath))
-                        System.IO.Directory.CreateDirectory(ConfigService.SystemCachePath);
-                    string tempIconPath = System.IO.Path.Combine(ConfigService.SystemCachePath, "EricGameLauncher_TempIcon.ico");
-                    using var fileStream = new System.IO.FileStream(tempIconPath, System.IO.FileMode.Create, System.IO.FileAccess.Write);
-                    stream.CopyTo(fileStream);
-                    fileStream.Close();
-
-                    this.AppWindow.SetIcon(tempIconPath);
-
-                    var bitmap = new BitmapImage(new Uri(tempIconPath));
-                    TitleBarIcon.Source = bitmap;
-                }
+                _ = LoadIconResourceAsync();
             }
-            catch (Exception ex) { LogService.Write("App", "Set icon resource failed", ex); }
+            catch (Exception ex) { LogService.Write("App", "Load icon resource async failed", ex); }
 
 
             var titleBar = this.AppWindow.TitleBar;
@@ -274,7 +253,66 @@ namespace EricGameLauncher
 
             _ = LoadDataAsync();
             _ = InitializeNetworkTasksAsync();
+            _ = InitializeMenuItemsAsync();
             LogService.Write("Startup", $"Ctor End duration={sw.ElapsedMilliseconds}ms");
+        }
+
+        private async Task InitializeMenuItemsAsync()
+        {
+            await Task.Delay(200);
+            
+            try
+            {
+                if (MoreMenuFlyout.Items.Count > 0)
+                {
+                    var aboutItem = MoreMenuFlyout.Items.LastOrDefault() as MenuFlyoutItem;
+                    if (aboutItem != null)
+                    {
+                        aboutItem.Loaded += (sender, args) =>
+                        {
+                            var textBlock = FindChildByName(aboutItem, "MenuVersionText") as TextBlock;
+                            if (textBlock != null)
+                            {
+                                textBlock.Text = AppVersion.DisplayVersion;
+                            }
+                        };
+                    }
+                }
+            }
+            catch (Exception ex) { LogService.Write("UI", "InitializeMenuItemsAsync failed", ex); }
+        }
+
+        private async Task LoadIconResourceAsync()
+        {
+            await Task.Delay(100);
+            
+            try
+            {
+                var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+                using var stream = assembly.GetManifestResourceStream("EricGameLauncher.ico.ico");
+                if (stream != null)
+                {
+                    if (!System.IO.Directory.Exists(ConfigService.SystemCachePath))
+                        System.IO.Directory.CreateDirectory(ConfigService.SystemCachePath);
+                    string tempIconPath = System.IO.Path.Combine(ConfigService.SystemCachePath, "EricGameLauncher_TempIcon.ico");
+                    using var fileStream = new System.IO.FileStream(tempIconPath, System.IO.FileMode.Create, System.IO.FileAccess.Write);
+                    stream.CopyTo(fileStream);
+                    fileStream.Close();
+
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        try
+                        {
+                            this.AppWindow.SetIcon(tempIconPath);
+                            var bitmap = new BitmapImage(new Uri(tempIconPath));
+                            TitleBarIcon.Source = bitmap;
+                            LogService.Write("App", $"Icon resource loaded successfully");
+                        }
+                        catch (Exception ex) { LogService.Write("App", "Set icon failed", ex); }
+                    });
+                }
+            }
+            catch (Exception ex) { LogService.Write("App", "Load icon resource failed", ex); }
         }
 
         private async Task LoadDataAsync()
@@ -309,13 +347,31 @@ namespace EricGameLauncher
                     LogService.Write("Startup", "InitializeNetwork Start");
                     await ServerConfigManager.FetchConfigAsync();
                     LogService.Write("Startup", $"InitializeNetwork AfterFetch {sw.ElapsedMilliseconds}ms");
-                    _ = CheckForUpdatesQuietlyAsync();
-                    LogService.Write("Startup", $"InitializeNetwork AfterCheckStart {sw.ElapsedMilliseconds}ms");
+                    _ = CheckForUpdatesInBackgroundAsync();
+                    LogService.Write("Startup", $"InitializeNetwork BackgroundCheckScheduled {sw.ElapsedMilliseconds}ms");
                 }
             }
             finally
             {
                 LogService.StartupExit();
+            }
+        }
+
+        private async Task CheckForUpdatesInBackgroundAsync()
+        {
+            try
+            {
+                using (LogService.StartOperation("Update", "BackgroundCheck"))
+                {
+                    LogService.Write("Update", "BackgroundCheck Start - scheduled for later");
+                    await Task.Delay(5000);
+                    LogService.Write("Update", "BackgroundCheck AfterDelay - now checking for updates");
+                    await CheckForUpdatesQuietlyAsync(skipDelay: true);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogService.Write("Update", "BackgroundCheck Failed", ex);
             }
         }
 
@@ -326,10 +382,6 @@ namespace EricGameLauncher
                 using (LogService.StartOperation("Update", "QuietCheck"))
                 {
                     LogService.Write("Update", $"QuietCheck Start skipDelay={skipDelay}");
-                    if (!skipDelay)
-                    {
-                        await Task.Delay(3000);
-                    }
 
                     var release = await UpdateService.CheckForUpdateAsync(ConfigService.UpdateChannel);
 
@@ -352,10 +404,12 @@ namespace EricGameLauncher
                         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
                         {
                             HasUpdate = true;
+                            LogService.Write("Update", "HasUpdate flag set on UI thread");
                         });
 
                         if (isForced)
                         {
+                            LogService.Write("Update", "Forced update detected");
                             DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal, async () =>
                             {
                                 await StartUpdateFlowAsync(release, isForced);
@@ -674,52 +728,96 @@ namespace EricGameLauncher
                     }
                     _isRefreshPending = false;
 
+                    var sw = Stopwatch.StartNew();
                     var items = ConfigService.LoadItems();
                     var recycleItems = ConfigService.LoadRecycleBinItems();
-            var normalItems = items.Where(x => x.Status == (int)AppItemStatus.Normal).ToList();
-            var normalizedRecycle = new List<AppItem>();
-            bool normalized = false;
-            foreach (var item in recycleItems)
-            {
-                if (item.Status == (int)AppItemStatus.Normal)
-                {
-                    item.Status = (int)AppItemStatus.Recycled;
-                    item.DeletedAt = null;
-                    normalized = true;
-                }
-                normalizedRecycle.Add(item);
-            }
-            var misplaced = items.Where(x => x.Status != (int)AppItemStatus.Normal).ToList();
-            if (misplaced.Count > 0)
-            {
-                var recycleIds = new HashSet<string>(normalizedRecycle.Select(x => x.Id));
-                foreach (var item in misplaced)
-                {
-                    if (recycleIds.Add(item.Id))
+                    LogService.Write("App", $"RefreshView LoadData duration={sw.ElapsedMilliseconds}ms");
+                    
+                    var normalItems = items.Where(x => x.Status == (int)AppItemStatus.Normal).ToList();
+                    var normalizedRecycle = new List<AppItem>();
+                    bool normalized = false;
+                    int normalizeCount = 0;
+                    
+                    foreach (var item in recycleItems)
                     {
+                        if (item.Status == (int)AppItemStatus.Normal)
+                        {
+                            item.Status = (int)AppItemStatus.Recycled;
+                            item.DeletedAt = null;
+                            normalized = true;
+                            normalizeCount++;
+                        }
                         normalizedRecycle.Add(item);
                     }
-                }
-                normalized = true;
-            }
-            if (normalized)
-            {
-                ConfigService.SaveItems(normalItems, normalizedRecycle, false);
-            }
-                    _allItems = new ObservableCollection<AppItem>(normalItems);
-                    _recycleItems = new ObservableCollection<AppItem>(normalizedRecycle);
-                    _viewItems = new ObservableCollection<AppItem>(_allItems);
-                    AppGrid.ItemsSource = _viewItems;
-                    LogService.Write("App", $"RefreshView applied counts all={_allItems.Count} recycle={_recycleItems.Count} view={_viewItems.Count}");
+                    
+                    var misplaced = items.Where(x => x.Status != (int)AppItemStatus.Normal).ToList();
+                    if (misplaced.Count > 0)
+                    {
+                        var recycleIds = new HashSet<string>(normalizedRecycle.Select(x => x.Id));
+                        foreach (var item in misplaced)
+                        {
+                            if (recycleIds.Add(item.Id))
+                            {
+                                normalizedRecycle.Add(item);
+                                normalizeCount++;
+                            }
+                        }
+                        normalized = true;
+                    }
+                    
+                    if (normalized)
+                    {
+                        LogService.Write("App", $"RefreshView NormalizedItems count={normalizeCount}");
+                        ConfigService.SaveItems(normalItems, normalizedRecycle, false);
+                    }
+                    
+                    bool hasChanges = CheckForDataChanges(normalItems, normalizedRecycle);
+                    
+                    if (hasChanges)
+                    {
+                        LogService.Write("App", $"RefreshView DataChanged - rebuilding collections");
+                        _allItems = new ObservableCollection<AppItem>(normalItems);
+                        _recycleItems = new ObservableCollection<AppItem>(normalizedRecycle);
+                        _viewItems = new ObservableCollection<AppItem>(_allItems);
+                        AppGrid.ItemsSource = _viewItems;
+                    }
+                    else
+                    {
+                        LogService.Write("App", $"RefreshView NoChanges - skipping rebuild");
+                    }
+                    
+                    LogService.Write("App", $"RefreshView applied counts all={_allItems.Count} recycle={_recycleItems.Count} view={_viewItems.Count} duration={sw.ElapsedMilliseconds}ms");
                     UpdateEmptyState();
 
                     this.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
                     {
+                        LogService.Write("App", "RefreshView UpdateGridItemSizes queued");
                         UpdateGridItemSizes(IconSize);
                     });
                 }
                 catch (Exception ex) { LogService.Write("App", "RefreshView failed", ex); }
             }
+        }
+
+        private bool CheckForDataChanges(List<AppItem> newItems, List<AppItem> newRecycle)
+        {
+            if (_allItems.Count != newItems.Count || _recycleItems.Count != newRecycle.Count)
+            {
+                LogService.Write("App", $"CheckForDataChanges CountChanged allOld={_allItems.Count} allNew={newItems.Count} recycleOld={_recycleItems.Count} recycleNew={newRecycle.Count}");
+                return true;
+            }
+
+            var oldIds = new HashSet<string>(_allItems.Select(x => x.Id));
+            var newIds = new HashSet<string>(newItems.Select(x => x.Id));
+            
+            if (!oldIds.SetEquals(newIds))
+            {
+                LogService.Write("App", $"CheckForDataChanges ItemsChanged");
+                return true;
+            }
+            
+            LogService.Write("App", $"CheckForDataChanges NoChanges");
+            return false;
         }
 
         private void UpdateEmptyState()
