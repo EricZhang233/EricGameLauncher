@@ -555,7 +555,7 @@
             </StackPanel>
         </Grid>
 
-<controls:AdaptiveGridView x:Name="AppGrid" Grid.Row="1"
+<controls:AdaptiveGridView x:Name="AppGrid" Grid.Row="1" Visibility="Collapsed"
                   Padding="4,0,4,0"
                   DesiredWidth="{x:Bind DesiredIconWidth, Mode=OneWay}"
                   StretchContentForSingleRow="False"

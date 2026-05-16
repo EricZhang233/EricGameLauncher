@@ -99,6 +99,9 @@ namespace EricGameLauncher
         private UpdateService.ReleaseInfo? _pendingUpdate;
         private bool _isUserInteracting = false;
         private bool _isRefreshPending = false;
+        private bool _isRootLoaded = false;
+        private bool _pendingInitialRefresh = false;
+        private DispatcherTimer? _startupRevealTimer;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -160,6 +163,33 @@ namespace EricGameLauncher
                 {
                     try
                     {
+                        if (_startupRevealTimer == null)
+                        {
+                            _startupRevealTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+                            _startupRevealTimer.Tick += (sender, args) =>
+                            {
+                                if (_startupRevealTimer == null)
+                                {
+                                    return;
+                                }
+
+                                _startupRevealTimer.Stop();
+                                _startupRevealTimer = null;
+                                _isRootLoaded = true;
+
+                                if (AppGrid != null)
+                                {
+                                    AppGrid.Visibility = Visibility.Visible;
+                                }
+
+                                if (_pendingInitialRefresh)
+                                {
+                                    _pendingInitialRefresh = false;
+                                    RefreshView();
+                                }
+                            };
+                            _startupRevealTimer.Start();
+                        }
 
                         if (MoreMenuFlyout.Items.Count > 0)
                         {
@@ -629,6 +659,13 @@ namespace EricGameLauncher
             {
                 try
                 {
+                    if (!_isRootLoaded)
+                    {
+                        _pendingInitialRefresh = true;
+                        LogService.Write("App", "RefreshView postponed until root loaded");
+                        return;
+                    }
+
                     if (_isUserInteracting)
                     {
                         _isRefreshPending = true;
@@ -3395,9 +3432,9 @@ namespace EricGameLauncher
         private void UpdateGridItemSizes(double size)
         {
 
-            if (AppGrid == null || AppGrid.Items == null)
+            if (!_isRootLoaded || AppGrid == null || AppGrid.Items == null)
             {
-                LogService.Write("UI", "UpdateGridItemSizes aborted: AppGrid or Items null");
+                LogService.Write("UI", "UpdateGridItemSizes aborted: root not ready");
                 return;
             }
             LogService.Write("UI", $"UpdateGridItemSizes start size={size} itemCount={AppGrid.Items.Count}");
