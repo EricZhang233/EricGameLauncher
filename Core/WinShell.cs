@@ -26,174 +26,195 @@ public static class ShortcutResolver
 {
     public static string? GetLnkTarget(string lnkPath)
     {
-        if (string.IsNullOrEmpty(lnkPath) || !File.Exists(lnkPath))
-            return null;
+        using (LogService.StartOperation("Shell", "GetLnkTarget"))
+        {
+            LogService.Write("Shell", $"GetLnkTarget called lnkPath={lnkPath} exists={File.Exists(lnkPath)}");
+            if (string.IsNullOrEmpty(lnkPath) || !File.Exists(lnkPath))
+                return null;
 
-        var info = GetShortcutInfo(lnkPath);
-        if (info != null && !string.IsNullOrEmpty(info.AUMID))
-            return $"{LauncherConstants.UwpAppsFolderPrefix}{info.AUMID}";
+            var info = GetShortcutInfo(lnkPath);
+            if (info != null && !string.IsNullOrEmpty(info.AUMID))
+                return $"{LauncherConstants.UwpAppsFolderPrefix}{info.AUMID}";
 
-        return info?.TargetPath;
+            return info?.TargetPath;
+        }
     }
 
     public static ShortcutInfo? GetShortcutInfo(string lnkPath)
     {
-        if (string.IsNullOrEmpty(lnkPath) || !File.Exists(lnkPath))
-            return null;
-
-        try
+        using (LogService.StartOperation("Shell", "GetShortcutInfo"))
         {
-            Type? wshType = Type.GetTypeFromProgID("WScript.Shell");
-            if (wshType == null) return null;
-
-            dynamic? wsh = Activator.CreateInstance(wshType);
-            if (wsh == null) return null;
+            LogService.Write("Shell", $"GetShortcutInfo called lnkPath={lnkPath} exists={File.Exists(lnkPath)}");
+            if (string.IsNullOrEmpty(lnkPath) || !File.Exists(lnkPath))
+                return null;
 
             try
             {
-                dynamic link = wsh.CreateShortcut(lnkPath);
-                if (link == null) return null;
+                Type? wshType = Type.GetTypeFromProgID("WScript.Shell");
+                if (wshType == null) return null;
 
-                var info = new ShortcutInfo
-                {
-                    TargetPath = link.TargetPath as string,
-                    Arguments = link.Arguments as string,
-                    IconPath = link.IconLocation as string
-                };
+                dynamic? wsh = Activator.CreateInstance(wshType);
+                if (wsh == null) return null;
 
                 try
                 {
-                    Type? shellAppType = Type.GetTypeFromProgID("Shell.Application");
-                    if (shellAppType != null)
+                    dynamic link = wsh.CreateShortcut(lnkPath);
+                    if (link == null) return null;
+
+                    var info = new ShortcutInfo
                     {
-                        dynamic? shellApp = Activator.CreateInstance(shellAppType);
-                        if (shellApp != null)
+                        TargetPath = link.TargetPath as string,
+                        Arguments = link.Arguments as string,
+                        IconPath = link.IconLocation as string
+                    };
+
+                    try
+                    {
+                        Type? shellAppType = Type.GetTypeFromProgID("Shell.Application");
+                        if (shellAppType != null)
                         {
-                            string? dir = Path.GetDirectoryName(lnkPath);
-                            string file = Path.GetFileName(lnkPath);
-                            if (!string.IsNullOrEmpty(dir))
+                            dynamic? shellApp = Activator.CreateInstance(shellAppType);
+                            if (shellApp != null)
                             {
-                                var folder = shellApp.NameSpace(dir);
-                                var folderItem = folder?.ParseName(file);
-                                if (folderItem != null)
+                                string? dir = Path.GetDirectoryName(lnkPath);
+                                string file = Path.GetFileName(lnkPath);
+                                if (!string.IsNullOrEmpty(dir))
                                 {
-                                    var aumidProp = folderItem.ExtendedProperty("System.AppUserModel.ID");
-                                    if (aumidProp != null) info.AUMID = aumidProp.ToString();
-
-                                    if (string.IsNullOrEmpty(info.TargetPath))
+                                    var folder = shellApp.NameSpace(dir);
+                                    var folderItem = folder?.ParseName(file);
+                                    if (folderItem != null)
                                     {
-                                        var parsingPath = folderItem.ExtendedProperty("System.Link.TargetParsingPath");
-                                        if (parsingPath != null) info.TargetPath = parsingPath.ToString();
-                                    }
+                                        var aumidProp = folderItem.ExtendedProperty("System.AppUserModel.ID");
+                                        if (aumidProp != null) info.AUMID = aumidProp.ToString();
 
-                                    if (string.IsNullOrEmpty(info.AUMID) && !string.IsNullOrEmpty(info.TargetPath))
-                                    {
-                                        string tPath = info.TargetPath;
-                                        if (tPath.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase))
-                                            tPath = tPath.Substring(LauncherConstants.UwpAppsFolderPrefix.Length);
-
-                                        if (tPath.Contains("!") || (!tPath.Contains("\\") && !tPath.Contains("/")))
+                                        if (string.IsNullOrEmpty(info.TargetPath))
                                         {
-                                            info.AUMID = tPath;
+                                            var parsingPath = folderItem.ExtendedProperty("System.Link.TargetParsingPath");
+                                            if (parsingPath != null) info.TargetPath = parsingPath.ToString();
+                                        }
+
+                                        if (string.IsNullOrEmpty(info.AUMID) && !string.IsNullOrEmpty(info.TargetPath))
+                                        {
+                                            string tPath = info.TargetPath;
+                                            if (tPath.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase))
+                                                tPath = tPath.Substring(LauncherConstants.UwpAppsFolderPrefix.Length);
+
+                                            if (tPath.Contains("!") || (!tPath.Contains("\\") && !tPath.Contains("/")))
+                                            {
+                                                info.AUMID = tPath;
+                                            }
                                         }
                                     }
                                 }
+                                if (Marshal.IsComObject(shellApp)) Marshal.ReleaseComObject(shellApp);
                             }
-                            if (Marshal.IsComObject(shellApp)) Marshal.ReleaseComObject(shellApp);
                         }
                     }
-                }
-                catch { }
+                    catch (Exception ex) { LogService.Write("App", "Shortcut resolution shellApp failed", ex); }
 
-                if (!string.IsNullOrEmpty(info.IconPath))
-                {
-                    var parts = info.IconPath.Split(',');
-                    if (parts.Length > 1 && int.TryParse(parts[1], out int index))
+                    if (!string.IsNullOrEmpty(info.IconPath))
                     {
-                        info.IconPath = parts[0];
-                        info.IconIndex = index;
+                        var parts = info.IconPath.Split(',');
+                        if (parts.Length > 1 && int.TryParse(parts[1], out int index))
+                        {
+                            info.IconPath = parts[0];
+                            info.IconIndex = index;
+                        }
                     }
-                }
 
-                return info;
+                    LogService.Write("Shell", $"GetShortcutInfo result TargetPath={info.TargetPath} Arguments={info.Arguments} IconPath={info.IconPath} IconIndex={info.IconIndex} AUMID={info.AUMID}");
+                    return info;
+                }
+                finally
+                {
+                    if (Marshal.IsComObject(wsh))
+                        Marshal.ReleaseComObject(wsh);
+                }
             }
-            finally
+            catch (Exception ex)
             {
-                if (Marshal.IsComObject(wsh))
-                    Marshal.ReleaseComObject(wsh);
+                LogService.Write("App", "GetShortcutInfo failed", ex);
+                return null;
             }
-        }
-        catch (Exception)
-        {
-            return null;
         }
     }
 
     public static ShortcutInfo? GetUrlFileInfo(string urlPath)
     {
-        if (string.IsNullOrEmpty(urlPath) || !File.Exists(urlPath))
-            return null;
-
-        try
+        using (LogService.StartOperation("Shell", "GetUrlFileInfo"))
         {
-            string[] lines = File.ReadAllLines(urlPath);
-            string? targetUrl = null;
-            string? iconFile = null;
-            int iconIndex = 0;
+            if (string.IsNullOrEmpty(urlPath) || !File.Exists(urlPath))
+                return null;
 
-            foreach (string line in lines)
+            try
             {
-                if (line.StartsWith("URL=", StringComparison.OrdinalIgnoreCase))
-                    targetUrl = line.Substring(4).Trim();
-                else if (line.StartsWith("IconFile=", StringComparison.OrdinalIgnoreCase))
-                    iconFile = line.Substring(9).Trim();
-                else if (line.StartsWith("IconIndex=", StringComparison.OrdinalIgnoreCase))
-                    int.TryParse(line.Substring(10).Trim(), out iconIndex);
+                string[] lines = File.ReadAllLines(urlPath);
+                string? targetUrl = null;
+                string? iconFile = null;
+                int iconIndex = 0;
+
+                foreach (string line in lines)
+                {
+                    if (line.StartsWith("URL=", StringComparison.OrdinalIgnoreCase))
+                        targetUrl = line.Substring(4).Trim();
+                    else if (line.StartsWith("IconFile=", StringComparison.OrdinalIgnoreCase))
+                        iconFile = line.Substring(9).Trim();
+                    else if (line.StartsWith("IconIndex=", StringComparison.OrdinalIgnoreCase))
+                        int.TryParse(line.Substring(10).Trim(), out iconIndex);
+                }
+
+                if (string.IsNullOrEmpty(targetUrl)) return null;
+
+                LogService.Write("Shell", $"GetUrlFileInfo parsed targetUrl={targetUrl} iconFile={iconFile} iconIndex={iconIndex} lines={lines.Length}");
+
+                return new ShortcutInfo
+                {
+                    TargetPath = targetUrl,
+                    IsUrl = true,
+                    ActualUrl = targetUrl,
+                    IconPath = iconFile,
+                    IconIndex = iconIndex
+                };
             }
-
-            if (string.IsNullOrEmpty(targetUrl)) return null;
-
-            return new ShortcutInfo
+            catch (Exception ex)
             {
-                TargetPath = targetUrl,
-                IsUrl = true,
-                ActualUrl = targetUrl,
-                IconPath = iconFile,
-                IconIndex = iconIndex
-            };
-        }
-        catch (Exception)
-        {
-            return null;
+                LogService.Write("App", "GetUrlFileInfo failed", ex);
+                return null;
+            }
         }
     }
 
     public static void CreateShortcut(string targetPath, string shortcutPath, string description = "")
     {
-        try
+        using (LogService.StartOperation("Shell", "CreateShortcut"))
         {
-            Type? shellType = Type.GetTypeFromProgID("WScript.Shell");
-            if (shellType == null) return;
-
-            dynamic? shell = Activator.CreateInstance(shellType);
-            if (shell == null) return;
-
+            LogService.Write("Shell", $"CreateShortcut targetPath={targetPath} shortcutPath={shortcutPath} descriptionLen={(description?.Length ?? 0)}");
             try
             {
-                dynamic shortcut = shell.CreateShortcut(shortcutPath);
-                shortcut.TargetPath = targetPath;
-                shortcut.WorkingDirectory = Path.GetDirectoryName(targetPath);
-                shortcut.Description = description;
-                shortcut.Save();
+                Type? shellType = Type.GetTypeFromProgID("WScript.Shell");
+                if (shellType == null) return;
+
+                dynamic? shell = Activator.CreateInstance(shellType);
+                if (shell == null) return;
+
+                try
+                {
+                    dynamic shortcut = shell.CreateShortcut(shortcutPath);
+                    shortcut.TargetPath = targetPath;
+                    shortcut.WorkingDirectory = Path.GetDirectoryName(targetPath);
+                    shortcut.Description = description;
+                    shortcut.Save();
+                }
+                finally
+                {
+                    if (Marshal.IsComObject(shell))
+                        Marshal.ReleaseComObject(shell);
+                }
             }
-            finally
+            catch (Exception ex)
             {
-                if (Marshal.IsComObject(shell))
-                    Marshal.ReleaseComObject(shell);
+                LogService.Write("App", "CreateShortcut failed", ex);
             }
-        }
-        catch (Exception)
-        {
         }
     }
 }
@@ -212,96 +233,105 @@ public static class ShortcutScanner
 
     public static List<FileItem> GetStartMenuItems()
     {
-        var items = new List<FileItem>();
-        try
+        using (LogService.StartOperation("Shortcut", "GetStartMenuItems"))
         {
-            Type? shellType = Type.GetTypeFromProgID("Shell.Application");
-            if (shellType == null) return items;
-
-            dynamic? shell = Activator.CreateInstance(shellType);
-            if (shell == null) return items;
-
-            var appsFolder = shell.NameSpace("shell:AppsFolder");
-            if (appsFolder != null)
+            var items = new List<FileItem>();
+            try
             {
-                foreach (var item in appsFolder.Items())
+                Type? shellType = Type.GetTypeFromProgID("Shell.Application");
+                if (shellType == null) return items;
+
+                dynamic? shell = Activator.CreateInstance(shellType);
+                if (shell == null) return items;
+
+                var appsFolder = shell.NameSpace("shell:AppsFolder");
+                if (appsFolder != null)
                 {
-                    try
+                    foreach (var item in appsFolder.Items())
                     {
-                        string name = item.Name;
-                        string path = item.Path;
-
-                        string finalPath = path;
-                        bool isPhysical = File.Exists(path) || Directory.Exists(path);
-
-                        if (!isPhysical)
+                        try
                         {
-                            try
-                            {
-                                var targetProperty = item.ExtendedProperty("System.Link.TargetParsingPath");
-                                if (targetProperty != null)
-                                {
-                                    string tPath = targetProperty.ToString() ?? "";
-                                    if (!string.IsNullOrEmpty(tPath) && (File.Exists(tPath) || Directory.Exists(tPath)))
-                                    {
-                                        finalPath = tPath;
-                                        isPhysical = true;
-                                    }
-                                }
+                            string name = item.Name;
+                            string path = item.Path;
 
-                                if (!isPhysical && item.IsLink)
+                            string finalPath = path;
+                            bool isPhysical = File.Exists(path) || Directory.Exists(path);
+
+                            if (!isPhysical)
+                            {
+                                try
                                 {
-                                    var link = item.GetLink;
-                                    string? lPath = link?.Path;
-                                    if (!string.IsNullOrEmpty(lPath) && (File.Exists(lPath) || Directory.Exists(lPath)))
+                                    var targetProperty = item.ExtendedProperty("System.Link.TargetParsingPath");
+                                    if (targetProperty != null)
                                     {
-                                        finalPath = lPath;
-                                        isPhysical = true;
+                                        string tPath = targetProperty.ToString() ?? "";
+                                        if (!string.IsNullOrEmpty(tPath) && (File.Exists(tPath) || Directory.Exists(tPath)))
+                                        {
+                                            finalPath = tPath;
+                                            isPhysical = true;
+                                        }
+                                    }
+
+                                    if (!isPhysical && item.IsLink)
+                                    {
+                                        var link = item.GetLink;
+                                        string? lPath = link?.Path;
+                                        if (!string.IsNullOrEmpty(lPath) && (File.Exists(lPath) || Directory.Exists(lPath)))
+                                        {
+                                            finalPath = lPath;
+                                            isPhysical = true;
+                                        }
                                     }
                                 }
+                                catch (Exception ex) { LogService.Write("App", "StartMenu apps folder item parse failed", ex); }
                             }
-                            catch { }
-                        }
 
-                        if (!string.IsNullOrEmpty(name))
-                        {
-                            items.Add(new FileItem
+                            if (!string.IsNullOrEmpty(name))
                             {
-                                Name = name,
-                                FullPath = (!isPhysical && (path.Contains("!") || !path.Contains("\\"))) ? $"shell:AppsFolder\\{path}" : finalPath,
-                                IsFolder = false
-                            });
+                                items.Add(new FileItem
+                                {
+                                    Name = name,
+                                    FullPath = (!isPhysical && (path.Contains("!") || !path.Contains("\\"))) ? $"shell:AppsFolder\\{path}" : finalPath,
+                                    IsFolder = false
+                                });
+                            }
                         }
+                        catch (Exception ex) { LogService.Write("App", "StartMenu apps folder item parse inner failed", ex); }
                     }
-                    catch (Exception) { }
                 }
+
+                if (Marshal.IsComObject(shell))
+                    Marshal.ReleaseComObject(shell);
             }
+            catch (Exception ex) { LogService.Write("App", "GetStartMenuItems failed", ex); }
 
-            if (Marshal.IsComObject(shell))
-                Marshal.ReleaseComObject(shell);
+            LogService.Write("Shortcut", $"GetStartMenuItems foundItems={items.Count}");
+            return items.OrderBy(x => x.Name).ToList();
         }
-        catch (Exception) { }
-
-        return items.OrderBy(x => x.Name).ToList();
     }
 
     public static List<FileItem> GetDesktopItems()
     {
-        var items = new List<FileItem>();
-        string userDesktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-        string publicDesktop = Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory);
+        using (LogService.StartOperation("Shortcut", "GetDesktopItems"))
+        {
+            var items = new List<FileItem>();
+            string userDesktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            string publicDesktop = Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory);
 
-        if (Directory.Exists(userDesktop))
-            items.AddRange(ScanDirectory(userDesktop, recursive: true, maxDepth: 3));
-        if (Directory.Exists(publicDesktop))
-            items.AddRange(ScanDirectory(publicDesktop, recursive: true, maxDepth: 3));
+            if (Directory.Exists(userDesktop))
+                items.AddRange(ScanDirectory(userDesktop, recursive: true, maxDepth: 3));
+            if (Directory.Exists(publicDesktop))
+                items.AddRange(ScanDirectory(publicDesktop, recursive: true, maxDepth: 3));
 
-        return MergeItems(items);
+            return MergeItems(items);
+        }
     }
 
     private static List<FileItem> MergeItems(List<FileItem> items)
     {
-        var merged = new List<FileItem>();
+        using (LogService.StartOperation("Shortcut", "MergeItems"))
+        {
+            var merged = new List<FileItem>();
         var folderMap = new Dictionary<string, FileItem>(StringComparer.OrdinalIgnoreCase);
         var fileSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -328,46 +358,54 @@ public static class ShortcutScanner
             }
         }
 
-        return merged.OrderByDescending(x => x.IsFolder).ThenBy(x => x.Name).ToList();
+            LogService.Write("Shortcut", $"MergeItems resultCount={merged.Count}");
+            return merged.OrderByDescending(x => x.IsFolder).ThenBy(x => x.Name).ToList();
+        }
     }
 
     private static List<FileItem> ScanDirectory(string path, bool recursive = true, int maxDepth = 99)
     {
-        var items = new List<FileItem>();
-        if (maxDepth <= 0) return items;
-
-        try
+        using (LogService.StartOperation("Shortcut", "ScanDirectory"))
         {
-            foreach (var file in Directory.GetFiles(path))
-            {
-                string ext = Path.GetExtension(file).ToLowerInvariant();
-                if (SupportedExtensions.Contains(ext))
-                {
-                    items.Add(new FileItem { Name = Path.GetFileNameWithoutExtension(file), FullPath = file, IsFolder = false });
-                }
-            }
+            var items = new List<FileItem>();
+            if (maxDepth <= 0) return items;
 
-            if (recursive && maxDepth > 1)
+            LogService.Write("Shortcut", $"ScanDirectory start path={path} recursive={recursive} maxDepth={maxDepth}");
+
+            try
             {
-                foreach (var dir in Directory.GetDirectories(path))
+                foreach (var file in Directory.GetFiles(path))
                 {
-                    string dirName = Path.GetFileName(dir);
-                    var children = ScanDirectory(dir, recursive: true, maxDepth: maxDepth - 1);
-                    if (children.Count > 0)
+                    string ext = Path.GetExtension(file).ToLowerInvariant();
+                    if (SupportedExtensions.Contains(ext))
                     {
-                        items.Add(new FileItem
+                        items.Add(new FileItem { Name = Path.GetFileNameWithoutExtension(file), FullPath = file, IsFolder = false });
+                    }
+                }
+
+                if (recursive && maxDepth > 1)
+                {
+                    foreach (var dir in Directory.GetDirectories(path))
+                    {
+                        string dirName = Path.GetFileName(dir);
+                        var children = ScanDirectory(dir, recursive: true, maxDepth: maxDepth - 1);
+                        if (children.Count > 0)
                         {
-                            Name = dirName,
-                            FullPath = dir,
-                            IsFolder = true,
-                            Children = children.OrderByDescending(x => x.IsFolder).ThenBy(x => x.Name).ToList()
-                        });
+                            items.Add(new FileItem
+                            {
+                                Name = dirName,
+                                FullPath = dir,
+                                IsFolder = true,
+                                Children = children.OrderByDescending(x => x.IsFolder).ThenBy(x => x.Name).ToList()
+                            });
+                        }
                     }
                 }
             }
+            catch (Exception ex) { LogService.Write("App", "ScanDirectory failed", ex); }
+            LogService.Write("Shortcut", $"ScanDirectory foundItems={items.Count}");
+            return items;
         }
-        catch (Exception) { }
-        return items;
     }
 }
 
@@ -377,6 +415,7 @@ public sealed class ImagePathConverter : IValueConverter
 
     public object? Convert(object value, Type targetType, object parameter, string language)
     {
+        try { LogService.Write("Shortcut", $"ImagePathConverter.Convert called valueType={(value==null?"null":value.GetType().Name)} parameter={parameter}"); } catch { }
         if (value is not string path || string.IsNullOrEmpty(path))
             return null;
 
@@ -415,43 +454,70 @@ public sealed class ImagePathConverter : IValueConverter
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
-        => throw new NotImplementedException();
+    {
+        try { LogService.Write("Shortcut", "ImagePathConverter.ConvertBack called"); } catch { }
+        throw new NotImplementedException();
+    }
 }
 
 public sealed class NullToVisibilityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language)
-        => value == null ? Visibility.Visible : Visibility.Collapsed;
+    {
+        try { LogService.Write("Shortcut", $"NullToVisibilityConverter.Convert called value={(value==null?"null":value.ToString())}"); } catch { }
+        return value == null ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
-        => throw new NotImplementedException();
+    {
+        try { LogService.Write("Shortcut", "NullToVisibilityConverter.ConvertBack called"); } catch { }
+        throw new NotImplementedException();
+    }
 }
 
 public sealed class StringNotEmptyToVisibilityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language)
-        => !string.IsNullOrWhiteSpace(value as string) ? Visibility.Visible : Visibility.Collapsed;
+    {
+        try { LogService.Write("Shortcut", $"StringNotEmptyToVisibilityConverter.Convert called value={(value==null?"null":value.ToString())}"); } catch { }
+        return !string.IsNullOrWhiteSpace(value as string) ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
-        => throw new NotImplementedException();
+    {
+        try { LogService.Write("Shortcut", "StringNotEmptyToVisibilityConverter.ConvertBack called"); } catch { }
+        throw new NotImplementedException();
+    }
 }
 
 public sealed class BoolToVisibilityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language)
-        => value is bool boolValue && boolValue ? Visibility.Visible : Visibility.Collapsed;
+    {
+        try { LogService.Write("Shortcut", $"BoolToVisibilityConverter.Convert called value={(value==null?"null":value.ToString())}"); } catch { }
+        return value is bool boolValue && boolValue ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
-        => value is Visibility visibility && visibility == Visibility.Visible;
+    {
+        try { LogService.Write("Shortcut", $"BoolToVisibilityConverter.ConvertBack called value={(value==null?"null":value.ToString())}"); } catch { }
+        return value is Visibility visibility && visibility == Visibility.Visible;
+    }
 }
 
 public sealed class BoolToOpacityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language)
-        => value is bool boolValue && boolValue ? 1.0 : 0.0;
+    {
+        try { LogService.Write("Shortcut", $"BoolToOpacityConverter.Convert called value={(value==null?"null":value.ToString())}"); } catch { }
+        return value is bool boolValue && boolValue ? 1.0 : 0.0;
+    }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
-        => value is double opacity && opacity > 0;
+    {
+        try { LogService.Write("Shortcut", $"BoolToOpacityConverter.ConvertBack called value={(value==null?"null":value.ToString())}"); } catch { }
+        return value is double opacity && opacity > 0;
+    }
 }
 
 public sealed class SizeToCornerRadiusConverter : IValueConverter
@@ -469,9 +535,11 @@ public sealed class SizeToCornerRadiusConverter : IValueConverter
         }
         return new CornerRadius(0);
     }
-
     public object ConvertBack(object value, Type targetType, object parameter, string language)
-        => throw new NotImplementedException();
+    {
+        try { LogService.Write("Shortcut", "SizeToCornerRadiusConverter.ConvertBack called"); } catch { }
+        throw new NotImplementedException();
+    }
 }
 
 public class IntArrayJsonConverter : JsonConverter<int[]>
@@ -567,7 +635,7 @@ public static class Win32FileDialog
             if (GetOpenFileNameW(ref ofn))
                 return ofn.lpstrFile.TrimEnd('\0');
         }
-        catch (Exception) { }
+        catch (Exception ex) { LogService.Write("App", "ShowOpenFileDialog failed", ex); }
         return null;
     }
 

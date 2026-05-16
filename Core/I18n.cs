@@ -17,9 +17,11 @@ public static class I18n
 
     public static void Load(string langCode)
     {
-        var sw = Stopwatch.StartNew();
-        LogService.Write("App", $"I18n Load Start: targetLang={langCode}");
-        _currentLanguage = langCode;
+        using (LogService.StartOperation("App", "I18n_Load"))
+        {
+            var sw = Stopwatch.StartNew();
+            LogService.Write("App", $"I18n Load Start: targetLang={langCode}");
+            _currentLanguage = langCode;
 
         if (_allTranslations == null)
         {
@@ -33,7 +35,7 @@ public static class I18n
                 string json = reader.ReadToEnd();
                 _allTranslations = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(json);
             }
-            catch (Exception ex) { LogService.Write("App", $"I18n Load failed for lang={langCode}: Exception={ex.Message}"); }
+            catch (Exception ex) { LogService.Write("App", $"I18n Load failed for lang={langCode}", ex); }
         }
 
         if (_allTranslations != null && _allTranslations.TryGetValue(langCode, out var dict))
@@ -41,17 +43,20 @@ public static class I18n
             _strings = dict;
         }
 
-        LanguageChanged?.Invoke();
-        LogService.Write("App", $"I18n Load End: dictSize={_allTranslations?.Count ?? 0}, duration={sw.ElapsedMilliseconds}ms");
+            LanguageChanged?.Invoke();
+            LogService.Write("App", $"I18n Load End: dictSize={_allTranslations?.Count ?? 0}, duration={sw.ElapsedMilliseconds}ms");
+        }
     }
 
     public static string T(string key)
     {
+        try { LogService.Write("App", $"I18n.T lookup key={key}"); } catch { }
         return _strings.TryGetValue(key, out var value) ? value : key;
     }
 
     public static List<string> GetAvailableLanguages()
     {
+        try { LogService.Write("App", "GetAvailableLanguages called"); } catch { }
         if (_allTranslations == null)
         {
             Load(_currentLanguage);
@@ -69,6 +74,7 @@ public static class I18n
     {
         try
         {
+            LogService.Write("App", "DetectSystemLanguage called");
             var culture = System.Globalization.CultureInfo.CurrentUICulture;
             string name = culture.Name.ToLowerInvariant();
             string lang = culture.TwoLetterISOLanguageName.ToLowerInvariant();
@@ -77,10 +83,12 @@ public static class I18n
             {
                 bool isTraditional = name.Contains("tw") || name.Contains("hk") ||
                                         name.Contains("mo") || name.Contains("hant");
-                return isTraditional ? "Zh-TW" : "Zh-CN";
+                var res = isTraditional ? "Zh-TW" : "Zh-CN";
+                LogService.Write("App", $"DetectSystemLanguage result={res}");
+                return res;
             }
 
-            return lang switch
+            var map = lang switch
             {
                 "ja" => "JA",
                 "ko" => "KO",
@@ -89,12 +97,15 @@ public static class I18n
                 "es" => "ES",
                 _ => "EN",
             };
+            LogService.Write("App", $"DetectSystemLanguage result={map}");
+            return map;
         }
         catch { return "EN"; }
     }
 
     public static string GetDisplayName(string langCode)
     {
+        try { LogService.Write("App", $"GetDisplayName called langCode={langCode}"); } catch { }
         string nativeName = langCode;
         if (_allTranslations != null &&
             _allTranslations.TryGetValue(langCode, out var dict) &&

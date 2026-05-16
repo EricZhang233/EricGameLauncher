@@ -22,13 +22,26 @@ namespace updater.main
                 string dir = Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher", "log");
                 Directory.CreateDirectory(dir);
                 string path = Path.Combine(dir, "updater.main.log");
-                string line = $"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}Z UpdaterMain {message}{Environment.NewLine}";
+                string tag = "Update";
+                string callerFileName = "Program.cs";
+                string meta = $"{callerFileName}:0.Main";
+                string line = $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}Z {tag}] {meta} | {message}{Environment.NewLine}";
                 lock (_logLock)
                 {
                     File.AppendAllText(path, line);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                try
+                {
+                    string fbdir = Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher", "log");
+                    Directory.CreateDirectory(fbdir);
+                    string fb = Path.Combine(fbdir, "updater.main.fallback.log");
+                    File.AppendAllText(fb, ex.ToString() + Environment.NewLine);
+                }
+                catch { }
+            }
         }
 
         [SupportedOSPlatform("windows")]
@@ -53,6 +66,7 @@ namespace updater.main
             string installDir = args[0];
             string downloadUrl = args[1];
             Log($"Args installDir={installDir}");
+            Log($"InstallDir exists={Directory.Exists(installDir)}");
             string cacheDir = Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher");
             if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
             string tempZip = Path.Combine(cacheDir, $"update_{Guid.NewGuid():N}.zip");
@@ -78,8 +92,8 @@ namespace updater.main
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"ERROR: Elevation failed: {ex.Message}");
-                        Log($"ElevationFailed {ex.Message}");
+                        Console.WriteLine($"ERROR: Elevation failed: {ex}");
+                        Log($"ElevationFailed {ex}");
                         await Task.Delay(5000);
                         return;
                     }
@@ -153,9 +167,10 @@ namespace updater.main
                 Console.WriteLine($"[2/4] Closing Eric Game Launcher...");
                 Log("CloseLauncher Start");
                 var processes = Process.GetProcessesByName("EricGameLauncher");
+                Log($"CloseLauncher foundProcesses={processes.Length}");
                 foreach (var p in processes)
                 {
-                    try { p.Kill(); p.WaitForExit(); } catch { }
+                    try { p.Kill(); p.WaitForExit(); Log($"Killed process Id={p.Id} Name={p.ProcessName}"); } catch (Exception ex) { Log($"KillProcessFailed {ex}"); }
                 }
                 await Task.Delay(1000);
                 Log("CloseLauncher End");
@@ -191,7 +206,9 @@ namespace updater.main
 
                     Directory.CreateDirectory(backupDir);
                     var currentFiles = Directory.GetFiles(installDir, "*", SearchOption.AllDirectories)
-                        .Where(f => !f.StartsWith(stagingDir) && !f.StartsWith(backupDir) && !f.ToLower().Contains("\\data\\") && !f.ToLower().EndsWith(".update_staging") && !f.ToLower().EndsWith(".update_backup"));
+                        .Where(f => !f.StartsWith(stagingDir) && !f.StartsWith(backupDir) && !f.ToLower().Contains("\\data\\") && !f.ToLower().EndsWith(".update_staging") && !f.ToLower().EndsWith(".update_backup"))
+                        .ToList();
+                    Log($"Applying updates: currentFilesToBackup={currentFiles.Count}");
 
                     foreach (var file in currentFiles)
                     {
@@ -201,8 +218,10 @@ namespace updater.main
                         if (!Directory.Exists(bDir)) Directory.CreateDirectory(bDir);
                         File.Move(file, backupPath, true);
                     }
+                    Log($"Applying updates: backup moved, backupDir={backupDir}");
 
-                    var stagedFiles = Directory.GetFiles(stagingDir, "*", SearchOption.AllDirectories);
+                    var stagedFiles = Directory.GetFiles(stagingDir, "*", SearchOption.AllDirectories).ToList();
+                    Log($"Applying updates: stagedFilesCount={stagedFiles.Count}");
                     foreach (var file in stagedFiles)
                     {
                         string relative = Path.GetRelativePath(stagingDir, file);
@@ -211,16 +230,18 @@ namespace updater.main
                         if (!Directory.Exists(fDir)) Directory.CreateDirectory(fDir);
                         File.Move(file, finalPath, true);
                     }
+                    Log("Applying updates: staged files moved into install directory");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine("Error during update application: " + ex.Message);
+                    Console.WriteLine("Error during update application: " + ex);
                     Console.WriteLine("Attempting rollback...");
                     try
                     {
                         if (Directory.Exists(backupDir))
                         {
-                            var backupFiles = Directory.GetFiles(backupDir, "*", SearchOption.AllDirectories);
+                            var backupFiles = Directory.GetFiles(backupDir, "*", SearchOption.AllDirectories).ToList();
+                            Log($"Rollback: backupFilesCount={backupFiles.Count}");
                             foreach (var file in backupFiles)
                             {
                                 string relative = Path.GetRelativePath(backupDir, file);
@@ -228,19 +249,21 @@ namespace updater.main
                                 if (File.Exists(finalPath)) File.Delete(finalPath);
                                 File.Move(file, finalPath, true);
                             }
+                            Log("Rollback: restored backup files");
                         }
                         Console.WriteLine("Rollback successful. The launcher was not corrupted.");
                     }
                     catch (Exception rbEx)
                     {
-                        Console.WriteLine("FATAL: Rollback failed! " + rbEx.Message);
+                        Console.WriteLine("FATAL: Rollback failed! " + rbEx);
+                        Log($"Rollback failed: {rbEx}");
                     }
                     throw;
                 }
                 finally
                 {
-                    try { if (Directory.Exists(stagingDir)) Directory.Delete(stagingDir, true); } catch { }
-                    try { if (Directory.Exists(backupDir)) Directory.Delete(backupDir, true); } catch { }
+                    try { if (Directory.Exists(stagingDir)) { Directory.Delete(stagingDir, true); Log("Cleanup: stagingDir deleted"); } } catch (Exception ex) { Log($"Cleanup staging delete failed: {ex}"); }
+                    try { if (Directory.Exists(backupDir)) { Directory.Delete(backupDir, true); Log("Cleanup: backupDir deleted"); } } catch (Exception ex) { Log($"Cleanup backup delete failed: {ex}"); }
                 }
 
                 Console.WriteLine($"[4/4] Restarting application...");
@@ -265,15 +288,15 @@ namespace updater.main
             catch (Exception ex)
             {
                 Console.WriteLine();
-                Console.WriteLine("ERROR: " + ex.Message);
+                Console.WriteLine("ERROR: " + ex);
                 Console.WriteLine("Please try manual update or check network connection.");
                 Console.WriteLine("Press any key to exit...");
-                Log($"Failure {ex.Message}");
+                Log($"Failure {ex}");
                 Console.ReadKey();
             }
             finally
             {
-                if (File.Exists(tempZip)) try { File.Delete(tempZip); } catch { }
+                if (File.Exists(tempZip)) try { File.Delete(tempZip); } catch (Exception ex) { Log($"DeleteTempZipFailed {ex}"); }
                 Log($"End duration={sw.ElapsedMilliseconds}ms");
             }
         }
