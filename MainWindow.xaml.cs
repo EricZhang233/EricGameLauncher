@@ -49,6 +49,7 @@ namespace EricGameLauncher
             {
                 if (_iconSize != value)
                 {
+                    LogService.Write("UI", $"IconSize changed from={_iconSize} to={value}");
                     _iconSize = value;
                     OnPropertyChanged(nameof(IconSize));
                     OnPropertyChanged(nameof(DesiredIconWidth));
@@ -66,6 +67,7 @@ namespace EricGameLauncher
             {
                 if (_isFiltered != value)
                 {
+                    LogService.Write("UI", $"IsFiltered changed from={_isFiltered} to={value}");
                     _isFiltered = value;
                     OnPropertyChanged(nameof(IsFiltered));
 
@@ -91,7 +93,7 @@ namespace EricGameLauncher
         public bool HasUpdate
         {
             get => _hasUpdate;
-            set { if (_hasUpdate != value) { _hasUpdate = value; OnPropertyChanged(nameof(HasUpdate)); } }
+            set { if (_hasUpdate != value) { LogService.Write("Update", $"HasUpdate changed from={_hasUpdate} to={value}"); _hasUpdate = value; OnPropertyChanged(nameof(HasUpdate)); } }
         }
 
         private UpdateService.ReleaseInfo? _pendingUpdate;
@@ -144,7 +146,7 @@ namespace EricGameLauncher
                         PropPlatformBadgeContainer.Visibility = Visibility.Collapsed;
                     }
                 }
-                catch { }
+                catch (Exception ex) { LogService.Write("UI", "PropExePath handler failed", ex); }
             };
 
 
@@ -176,7 +178,7 @@ namespace EricGameLauncher
                             }
                         }
                     }
-                    catch (Exception) { }
+                    catch (Exception ex) { LogService.Write("UI", "Root element loaded handler failed", ex); }
                 };
             }
 
@@ -206,7 +208,7 @@ namespace EricGameLauncher
                     TitleBarIcon.Source = bitmap;
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "Set icon resource failed", ex); }
 
 
             var titleBar = this.AppWindow.TitleBar;
@@ -251,11 +253,14 @@ namespace EricGameLauncher
             LogService.StartupEnter();
             try
             {
-                LogService.Write("Startup", "LoadDataAsync Start");
-                await LoadData();
-                LogService.Write("Startup", $"LoadDataAsync AfterLoadData duration={sw.ElapsedMilliseconds}ms items={_allItems.Count}");
-                AutoCleanRecycleBin();
-                LogService.Write("Startup", $"LoadDataAsync AfterAutoClean totalDuration={sw.ElapsedMilliseconds}ms recycleItems={_recycleItems.Count}");
+                using (LogService.StartOperation("Startup", "LoadDataAsync"))
+                {
+                    LogService.Write("Startup", "LoadDataAsync Start");
+                    await LoadData();
+                    LogService.Write("Startup", $"LoadDataAsync AfterLoadData duration={sw.ElapsedMilliseconds}ms items={_allItems.Count}");
+                    AutoCleanRecycleBin();
+                    LogService.Write("Startup", $"LoadDataAsync AfterAutoClean totalDuration={sw.ElapsedMilliseconds}ms recycleItems={_recycleItems.Count}");
+                }
             }
             finally
             {
@@ -269,11 +274,14 @@ namespace EricGameLauncher
             LogService.StartupEnter();
             try
             {
-                LogService.Write("Startup", "InitializeNetwork Start");
-                await ServerConfigManager.FetchConfigAsync();
-                LogService.Write("Startup", $"InitializeNetwork AfterFetch {sw.ElapsedMilliseconds}ms");
-                _ = CheckForUpdatesQuietlyAsync();
-                LogService.Write("Startup", $"InitializeNetwork AfterCheckStart {sw.ElapsedMilliseconds}ms");
+                using (LogService.StartOperation("Startup", "InitializeNetworkTasksAsync"))
+                {
+                    LogService.Write("Startup", "InitializeNetwork Start");
+                    await ServerConfigManager.FetchConfigAsync();
+                    LogService.Write("Startup", $"InitializeNetwork AfterFetch {sw.ElapsedMilliseconds}ms");
+                    _ = CheckForUpdatesQuietlyAsync();
+                    LogService.Write("Startup", $"InitializeNetwork AfterCheckStart {sw.ElapsedMilliseconds}ms");
+                }
             }
             finally
             {
@@ -285,53 +293,61 @@ namespace EricGameLauncher
         {
             try
             {
-                LogService.Write("Update", $"QuietCheck Start skipDelay={skipDelay}");
-                if (!skipDelay)
+                using (LogService.StartOperation("Update", "QuietCheck"))
                 {
-                    await Task.Delay(3000);
-                }
-
-                var release = await UpdateService.CheckForUpdateAsync(ConfigService.UpdateChannel);
-
-                bool isForced = false;
-                if (release != null)
-                {
-                    var match = System.Text.RegularExpressions.Regex.Match(release.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
-                    if (match.Success)
+                    LogService.Write("Update", $"QuietCheck Start skipDelay={skipDelay}");
+                    if (!skipDelay)
                     {
-                        Version latestVersion = UpdateService.NormalizeVersion(match.Value);
-                        isForced = UpdateService.CheckForceUpdateAsync(latestVersion);
-                    }
-                    else
-                    {
-                        isForced = UpdateService.CheckForceUpdateAsync();
+                        await Task.Delay(3000);
                     }
 
-                    _pendingUpdate = release;
+                    var release = await UpdateService.CheckForUpdateAsync(ConfigService.UpdateChannel);
 
-                    DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+                    bool isForced = false;
+                    if (release != null)
                     {
-                        HasUpdate = true;
-                    });
-
-                    if (isForced)
-                    {
-                        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal, async () =>
+                        var match = System.Text.RegularExpressions.Regex.Match(release.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
+                        if (match.Success)
                         {
-                            await StartUpdateFlowAsync(release, isForced);
+                            Version latestVersion = UpdateService.NormalizeVersion(match.Value);
+                            isForced = UpdateService.CheckForceUpdateAsync(latestVersion);
+                        }
+                        else
+                        {
+                            isForced = UpdateService.CheckForceUpdateAsync();
+                        }
+
+                        _pendingUpdate = release;
+
+                        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+                        {
+                            HasUpdate = true;
                         });
+
+                        if (isForced)
+                        {
+                            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal, async () =>
+                            {
+                                await StartUpdateFlowAsync(release, isForced);
+                            });
+                        }
                     }
+                    LogService.Write("Update", "QuietCheck End");
                 }
-                LogService.Write("Update", "QuietCheck End");
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LogService.Write("Update", "QuietCheck Failed", ex);
+            }
         }
 
         private async void MenuCheckUpdate_Click(object sender, RoutedEventArgs e)
         {
             _pendingUpdate = null;
             HasUpdate = false;
-            LogService.Write("Update", "ManualCheck Start");
+            using (LogService.StartOperation("Update", "ManualCheck"))
+            {
+                LogService.Write("Update", "ManualCheck Start");
 
             var release = await UpdateService.GetReleaseAsync(ConfigService.UpdateChannel);
             if (release != null)
@@ -375,11 +391,13 @@ namespace EricGameLauncher
                 };
                 await noUpdateDialog.ShowAsync();
             }
-            LogService.Write("Update", "ManualCheck End");
+                LogService.Write("Update", "ManualCheck End");
+            }
         }
 
         private async void MenuPrivacyItem_Click(object sender, RoutedEventArgs e)
         {
+            LogService.Write("UI", "MenuPrivacyItem_Click Start");
             ContentDialog privacyDialog = new ContentDialog
             {
                 Title = I18n.T("Privacy_DialogTitle"),
@@ -398,6 +416,7 @@ namespace EricGameLauncher
                 XamlRoot = this.Content.XamlRoot
             };
             await privacyDialog.ShowAsync();
+            LogService.Write("UI", "MenuPrivacyItem_Click End");
         }
 
         #region Win32 Message Interception
@@ -427,10 +446,12 @@ namespace EricGameLauncher
             if (msg == WM_ENTERSIZEMOVE)
             {
                 _isUserInteracting = true;
+                LogService.Write("App", "WindowProcess WM_ENTERSIZEMOVE");
             }
             else if (msg == WM_EXITSIZEMOVE)
             {
                 _isUserInteracting = false;
+                LogService.Write("App", "WindowProcess WM_EXITSIZEMOVE");
                 SaveWindowState(null);
 
                 if (_isRefreshPending)
@@ -475,42 +496,60 @@ namespace EricGameLauncher
                     this.AppWindow.Move(new Windows.Graphics.PointInt32(targetX, targetY));
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                LogService.Write("App", "MainWindow Move/Resize failed", ex);
                 this.AppWindow.Resize(new Windows.Graphics.SizeInt32(950, 650));
             }
         }
 
         private void MainWindow_Closed(object sender, WindowEventArgs args)
         {
-            if (_oldWndProc != IntPtr.Zero)
+            using (LogService.StartOperation("App", "Shutdown"))
             {
-                SetWindowLongPtr(_hWnd, GWLP_WNDPROC, _oldWndProc);
-                _oldWndProc = IntPtr.Zero;
+                LogService.Write("App", "MainWindow_Closed Start");
+                if (_oldWndProc != IntPtr.Zero)
+                {
+                    SetWindowLongPtr(_hWnd, GWLP_WNDPROC, _oldWndProc);
+                    _oldWndProc = IntPtr.Zero;
+                }
+                _wndProcDelegate = null;
+                LogService.Write("App", "MainWindow_Closed End");
             }
-            _wndProcDelegate = null;
         }
 
         private void MenuAuthorIconInternal_Loaded(object sender, RoutedEventArgs e)
         {
+            using (LogService.StartOperation("App", "MenuAuthorIconInternal_Loaded"))
+            {
             try
             {
+                LogService.Write("App", "MenuAuthorIconInternal_Loaded Start");
                 if (sender is Image img)
                 {
-                    string tempIconPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "EricGameLauncher_TempIcon.ico");
+                    string tempIconPath = System.IO.Path.Combine(ConfigService.SystemCachePath, "EricGameLauncher_TempIcon.ico");
                     if (System.IO.File.Exists(tempIconPath))
                     {
                         img.Source = new BitmapImage(new Uri(tempIconPath));
+                        LogService.Write("App", $"MenuAuthorIconInternal loaded icon from {tempIconPath}");
+                    }
+                    else
+                    {
+                        LogService.Write("App", $"MenuAuthorIconInternal no icon found at {tempIconPath}");
                     }
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "MenuAuthorIconInternal_Loaded failed", ex); }
+            }
         }
 
         private void SaveWindowState(Microsoft.UI.Windowing.AppWindowChangedEventArgs? args)
         {
+            using (LogService.StartOperation("App", "SaveWindowState"))
+            {
             try
             {
+                LogService.Write("App", $"SaveWindowState Start args={{didSize={args?.DidSizeChange}, didPos={args?.DidPositionChange}}}");
                 var presenter = this.AppWindow.Presenter as Microsoft.UI.Windowing.OverlappedPresenter;
                 if (presenter != null && (presenter.State == Microsoft.UI.Windowing.OverlappedPresenterState.Minimized ||
                                          presenter.State == Microsoft.UI.Windowing.OverlappedPresenterState.Maximized))
@@ -549,15 +588,20 @@ namespace EricGameLauncher
                 {
                     ConfigService.SetWindowBounds(x, y, width, height);
                     _ = Task.Run(() => ConfigService.SaveConfig());
+                    LogService.Write("App", $"SaveWindowState persisted newBounds x={x} y={y} w={width} h={height}");
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "SaveWindowState failed", ex); }
+            }
         }
 
         private void LoadSettings()
         {
+            using (LogService.StartOperation("App", "LoadSettings"))
+            {
             try
             {
+                LogService.Write("App", $"LoadSettings Start CloseAfterLaunch={ConfigService.CloseAfterLaunch} LaunchMode={ConfigService.LaunchMode} IconSize={ConfigService.IconSize}");
 
                 if (ToggleCloseAfterLaunch != null)
                 {
@@ -573,21 +617,28 @@ namespace EricGameLauncher
                 {
                     _sizeSlider.Value = ConfigService.IconSize;
                 }
+                LogService.Write("App", "LoadSettings applied UI values");
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "LoadSettings failed", ex); }
+            }
         }
 
         private void RefreshView()
         {
-            if (_isUserInteracting)
+            using (LogService.StartOperation("App", "RefreshView"))
             {
-                _isRefreshPending = true;
-                return;
-            }
-            _isRefreshPending = false;
+                try
+                {
+                    if (_isUserInteracting)
+                    {
+                        _isRefreshPending = true;
+                        LogService.Write("App", "RefreshView postponed due to user interaction");
+                        return;
+                    }
+                    _isRefreshPending = false;
 
-            var items = ConfigService.LoadItems();
-            var recycleItems = ConfigService.LoadRecycleBinItems();
+                    var items = ConfigService.LoadItems();
+                    var recycleItems = ConfigService.LoadRecycleBinItems();
             var normalItems = items.Where(x => x.Status == (int)AppItemStatus.Normal).ToList();
             var normalizedRecycle = new List<AppItem>();
             bool normalized = false;
@@ -618,30 +669,38 @@ namespace EricGameLauncher
             {
                 ConfigService.SaveItems(normalItems, normalizedRecycle, false);
             }
-            _allItems = new ObservableCollection<AppItem>(normalItems);
-            _recycleItems = new ObservableCollection<AppItem>(normalizedRecycle);
-            _viewItems = new ObservableCollection<AppItem>(_allItems);
-            AppGrid.ItemsSource = _viewItems;
-            UpdateEmptyState();
+                    _allItems = new ObservableCollection<AppItem>(normalItems);
+                    _recycleItems = new ObservableCollection<AppItem>(normalizedRecycle);
+                    _viewItems = new ObservableCollection<AppItem>(_allItems);
+                    AppGrid.ItemsSource = _viewItems;
+                    LogService.Write("App", $"RefreshView applied counts all={_allItems.Count} recycle={_recycleItems.Count} view={_viewItems.Count}");
+                    UpdateEmptyState();
 
-            this.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-            {
-                UpdateGridItemSizes(IconSize);
-            });
+                    this.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+                    {
+                        UpdateGridItemSizes(IconSize);
+                    });
+                }
+                catch (Exception ex) { LogService.Write("App", "RefreshView failed", ex); }
+            }
         }
 
         private void UpdateEmptyState()
         {
+            using (LogService.StartOperation("App", "UpdateEmptyState"))
+            {
             try
             {
-
                 EmptyStatePanel.Visibility = Visibility.Collapsed;
+                LogService.Write("App", "UpdateEmptyState applied: hidden");
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "UpdateEmptyState failed", ex); }
+            }
         }
 
         private void OnPropertyChanged(string propertyName)
         {
+            try { LogService.Write("App", $"OnPropertyChanged {propertyName}"); } catch { }
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
@@ -649,8 +708,10 @@ namespace EricGameLauncher
         {
             try
             {
-                var sw = Stopwatch.StartNew();
-                LogService.Write("Startup", "LoadData Enter");
+                using (LogService.StartOperation("Startup", "LoadData"))
+                {
+                    var sw = Stopwatch.StartNew();
+                    LogService.Write("Startup", "LoadData Enter");
                 if (ConfigService.RequiresMigration)
                 {
                     MigrationOverlay.Visibility = Visibility.Visible;
@@ -694,7 +755,7 @@ namespace EricGameLauncher
                             await process.WaitForExitAsync();
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { LogService.Write("App", "Swallowed exception", ex); }
 
                     try
                     {
@@ -709,9 +770,14 @@ namespace EricGameLauncher
                             });
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { LogService.Write("App", "Swallowed exception", ex); }
 
-                    Microsoft.UI.Xaml.Application.Current.Exit();
+                    try
+                    {
+                        LogService.Write("App", "Exit requested (restart flow)");
+                        Microsoft.UI.Xaml.Application.Current.Exit();
+                    }
+                    catch (Exception ex) { LogService.Write("App", "Exit failed (restart flow)", ex); }
                     return;
                 }
 
@@ -721,18 +787,24 @@ namespace EricGameLauncher
 
                 _preloadedStartMenuTask = Task.Run(() => ShortcutScanner.GetStartMenuItems());
                 _preloadedDesktopTask = Task.Run(() => ShortcutScanner.GetDesktopItems());
-                LogService.Write("Startup", $"LoadData AfterPreloadTasks {sw.ElapsedMilliseconds}ms");
+                    LogService.Write("Startup", $"LoadData AfterPreloadTasks {sw.ElapsedMilliseconds}ms");
+                }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "LoadData failed", ex); }
         }
 
         private void SaveData()
         {
+            using (LogService.StartOperation("App", "SaveData"))
+            {
             try
             {
+                LogService.Write("App", $"SaveData Start items={_allItems.Count} recycle={_recycleItems.Count}");
                 ConfigService.SaveItems(_allItems.ToList(), _recycleItems.ToList());
+                LogService.Write("App", "SaveData completed");
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "SaveData failed", ex); }
+            }
         }
 
 
@@ -763,25 +835,31 @@ namespace EricGameLauncher
 
         private void CloseAfterLaunchTimer_Tick(object? sender, object e)
         {
-            if (_closeAfterLaunchTimer == null) return;
-            _closeAfterLaunchTimer.Stop();
-            _closeAfterLaunchTimer.Tick -= CloseAfterLaunchTimer_Tick;
-            _closeAfterLaunchTimer = null;
-
+            using (LogService.StartOperation("App", "CloseAfterLaunchTimer_Tick"))
+            {
             try
             {
+                if (_closeAfterLaunchTimer == null) return;
+                _closeAfterLaunchTimer.Stop();
+                _closeAfterLaunchTimer.Tick -= CloseAfterLaunchTimer_Tick;
+                _closeAfterLaunchTimer = null;
+
                 IntPtr fg = GetForegroundWindow();
+                LogService.Write("App", $"CloseAfterLaunchTimer_Tick foreground={fg} hWnd={_hWnd}");
                 if (fg != _hWnd)
                 {
-                    try { Application.Current.Exit(); } catch { }
+                    LogService.Write("App", "Exit requested (CloseAfterLaunch)");
+                    try { Application.Current.Exit(); } catch (Exception ex) { LogService.Write("App", "Exit failed (CloseAfterLaunch)", ex); }
                 }
                 else
                 {
                     // Window still foreground: cancel and do not retry
+                    LogService.Write("App", "CloseAfterLaunchTimer_Tick cancelling because window is foreground");
                     CancelCloseAfterLaunch();
                 }
             }
-            catch { }
+            catch (Exception ex) { LogService.Write("App", "CloseAfterLaunchTimer_Tick failed", ex); }
+            }
         }
 
         private void OnUserActivity_CloseAfterLaunch(object? sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e) => CancelCloseAfterLaunch();
@@ -805,7 +883,7 @@ namespace EricGameLauncher
                     _closeAfterLaunchInputRoot.KeyDown -= OnUserActivity_CloseAfterLaunch;
                 }
             }
-            catch { }
+            catch (Exception ex) { LogService.Write("App", "Swallowed exception", ex); }
         }
 
         private void ItemPanel_PointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
@@ -827,56 +905,65 @@ namespace EricGameLauncher
 
         private void TooltipTimer_Tick(object? sender, object e)
         {
-            _tooltipTimer?.Stop();
-            if (_hoveredItem != null && _hoveredElement != null && CustomIconToolTip != null && CustomIconToolTipText != null)
+            using (LogService.StartOperation("App", "TooltipTimer_Tick"))
             {
-                CustomIconToolTipText.Text = _hoveredItem.Title;
-
-                if (this.Content != null)
+            try
+            {
+                _tooltipTimer?.Stop();
+                if (_hoveredItem != null && _hoveredElement != null && CustomIconToolTip != null && CustomIconToolTipText != null)
                 {
-                    try
+                    LogService.Write("App", $"TooltipTimer_Tick showing tooltip for itemId={_hoveredItem.Id} title={_hoveredItem.Title}");
+                    CustomIconToolTipText.Text = _hoveredItem.Title;
+
+                    if (this.Content != null)
                     {
-                        var border = CustomIconToolTip.Child as FrameworkElement;
-                        var titleText = (_hoveredElement as StackPanel)?.Children.OfType<TextBlock>().FirstOrDefault();
-                        
-                        if (border != null && titleText != null)
+                        try
                         {
-                            border.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
-                            double popupWidth = border.DesiredSize.Width;
-                            double popupHeight = border.DesiredSize.Height;
-
-                            var transform = _hoveredElement.TransformToVisual(this.Content);
+                            var border = CustomIconToolTip.Child as FrameworkElement;
+                            var titleText = (_hoveredElement as StackPanel)?.Children.OfType<TextBlock>().FirstOrDefault();
                             
-                            var targetCenter = transform.TransformPoint(new Windows.Foundation.Point(
-                                _hoveredElement.ActualWidth / 2,
-                                _hoveredElement.ActualHeight - (titleText.ActualHeight / 2)
-                            ));
-
-                            double targetX = targetCenter.X - (popupWidth / 2);
-                            double targetY = targetCenter.Y - (popupHeight / 2);
-
-                            if (this.Content is FrameworkElement contentFE)
+                            if (border != null && titleText != null)
                             {
-                                double maxWidth = contentFE.ActualWidth;
-                                double padding = 8.0;
+                                border.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+                                double popupWidth = border.DesiredSize.Width;
+                                double popupHeight = border.DesiredSize.Height;
 
-                                if (targetX < padding)
+                                var transform = _hoveredElement.TransformToVisual(this.Content);
+                                
+                                var targetCenter = transform.TransformPoint(new Windows.Foundation.Point(
+                                    _hoveredElement.ActualWidth / 2,
+                                    _hoveredElement.ActualHeight - (titleText.ActualHeight / 2)
+                                ));
+
+                                double targetX = targetCenter.X - (popupWidth / 2);
+                                double targetY = targetCenter.Y - (popupHeight / 2);
+
+                                if (this.Content is FrameworkElement contentFE)
                                 {
-                                    targetX = padding;
+                                    double maxWidth = contentFE.ActualWidth;
+                                    double padding = 8.0;
+
+                                    if (targetX < padding)
+                                    {
+                                        targetX = padding;
+                                    }
+                                    else if (targetX + popupWidth > maxWidth - padding)
+                                    {
+                                        targetX = maxWidth - popupWidth - padding;
+                                    }
                                 }
-                                else if (targetX + popupWidth > maxWidth - padding)
-                                {
-                                    targetX = maxWidth - popupWidth - padding;
-                                }
+
+                                CustomIconToolTip.HorizontalOffset = targetX;
+                                CustomIconToolTip.VerticalOffset = targetY;
+                                CustomIconToolTip.IsOpen = true;
+                                LogService.Write("App", $"TooltipTimer_Tick opened tooltip at x={targetX} y={targetY} w={popupWidth} h={popupHeight}");
                             }
-
-                            CustomIconToolTip.HorizontalOffset = targetX;
-                            CustomIconToolTip.VerticalOffset = targetY;
-                            CustomIconToolTip.IsOpen = true;
                         }
+                        catch (Exception ex) { LogService.Write("App", "TooltipTimer_Tick inner failed", ex); }
                     }
-                    catch { }
                 }
+            }
+            catch (Exception ex) { LogService.Write("App", "TooltipTimer_Tick failed", ex); }
             }
         }
 
@@ -893,46 +980,66 @@ namespace EricGameLauncher
 
         private void AppGrid_ItemClick(object sender, ItemClickEventArgs e)
         {
-            if (ConfigService.LaunchMode == "double") return;
+            using (LogService.StartOperation("App", "AppGrid_ItemClick"))
+            {
             try
             {
+                if (ConfigService.LaunchMode == "double")
+                {
+                    LogService.Write("App", "AppGrid_ItemClick ignored due to double launch mode");
+                    return;
+                }
                 var item = e.ClickedItem as AppItem;
+                LogService.Write("App", $"AppGrid_ItemClick clicked itemId={item?.Id} title={item?.Title}");
                 if (item != null)
                 {
                     LaunchItem(item);
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "AppGrid_ItemClick failed", ex); }
+            }
         }
 
         private void HideCustomToolTip()
         {
+            try { LogService.Write("App", "HideCustomToolTip called"); } catch { }
             _hoveredItem = null;
             _hoveredElement = null;
             _tooltipTimer?.Stop();
             if (CustomIconToolTip != null) CustomIconToolTip.IsOpen = false;
+            try { LogService.Write("App", "HideCustomToolTip completed"); } catch { }
         }
 
         private void AppGrid_PointerWheelChanged(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
+            try { LogService.Write("App", "AppGrid_PointerWheelChanged called"); } catch { }
             HideCustomToolTip();
         }
 
         private void AppGrid_DoubleTapped(object sender, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs e)
         {
-            if (ConfigService.LaunchMode != "double") return;
+            using (LogService.StartOperation("App", "AppGrid_DoubleTapped"))
+            {
             try
             {
+                if (ConfigService.LaunchMode != "double")
+                {
+                    LogService.Write("App", "AppGrid_DoubleTapped ignored because launch mode != double");
+                    return;
+                }
                 if (AppGrid.SelectedItem is AppItem item)
                 {
+                    LogService.Write("App", $"AppGrid_DoubleTapped launching selected itemId={item.Id} title={item.Title}");
                     LaunchItem(item);
                 }
                 else if (e.OriginalSource is FrameworkElement fe && fe.DataContext is AppItem ctxItem)
                 {
+                    LogService.Write("App", $"AppGrid_DoubleTapped launching context itemId={ctxItem.Id} title={ctxItem.Title}");
                     LaunchItem(ctxItem);
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "AppGrid_DoubleTapped failed", ex); }
+            }
         }
 
 
@@ -945,27 +1052,35 @@ namespace EricGameLauncher
 
             try
             {
-                LogService.Write("App", $"LaunchItem Start {item.Title}");
-                TriggerItemLoadingAnimation(item);
+                using (LogService.StartOperation("App", $"LaunchItem {item.Title}"))
+                {
+                        LogService.Write("App", $"LaunchItem Start id={item.Id} title={item.Title}");
+                    TriggerItemLoadingAnimation(item);
 
                 if (item.UseAlternativeLaunch && !string.IsNullOrEmpty(item.AlternativeLaunchCommand))
                 {
+                    LogService.Write("App", $"LaunchItem alternative command exec command={item.AlternativeLaunchCommand} isAdmin={item.IsAltAdmin}");
 
                     RunProcess(item.AlternativeLaunchCommand, item.IsAltAdmin);
+                    LogService.Write("App", "LaunchItem alternative command invoked");
                 }
                 else if (!string.IsNullOrEmpty(item.ExePath))
                 {
+                    LogService.Write("App", $"LaunchItem exe exec path={item.ExePath} isAdmin={item.IsAdmin}");
 
                     RunProcess(item.ExePath, item.IsAdmin);
 
 
                     if (item.RunAlongside && !string.IsNullOrEmpty(item.AlongsideCommand))
                     {
+                        LogService.Write("App", $"LaunchItem alongside exec command={item.AlongsideCommand} isAdmin={item.IsAlongsideAdmin}");
                         RunProcess(item.AlongsideCommand, item.IsAlongsideAdmin);
+                        LogService.Write("App", "LaunchItem alongside command invoked");
                     }
                 }
+                }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "LaunchItem failed", ex); }
         }
 
         private void RunProcess(string path, bool admin)
@@ -977,15 +1092,17 @@ namespace EricGameLauncher
 
             try
             {
-                LogService.Write("App", $"RunProcess Start admin={admin} path={path}");
-
-                path = Environment.ExpandEnvironmentVariables(path);
-
-                var psi = new ProcessStartInfo
+                using (LogService.StartOperation("App", $"RunProcess {path}"))
                 {
-                    UseShellExecute = true,
-                    CreateNoWindow = false
-                };
+                    LogService.Write("App", $"RunProcess Start admin={admin} path={path}");
+
+                    path = Environment.ExpandEnvironmentVariables(path);
+
+                    var psi = new ProcessStartInfo
+                    {
+                        UseShellExecute = true,
+                        CreateNoWindow = false
+                    };
 
 
                 if (path.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase))
@@ -1026,7 +1143,7 @@ namespace EricGameLauncher
                             psi.WorkingDirectory = dir;
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { LogService.Write("App", "Swallowed exception", ex); }
 
                     if (!string.IsNullOrEmpty(arguments))
                     {
@@ -1038,12 +1155,33 @@ namespace EricGameLauncher
                         psi.Verb = "runas";
                 }
 
-                Process? process = Process.Start(psi);
+                Process? process = null;
+                try
+                {
+                    process = Process.Start(psi);
+                    if (process != null)
+                    {
+                        LogService.Write("App", $"RunProcess started pid={process.Id} file={psi.FileName} args={psi.Arguments}");
+                    }
+                    else
+                    {
+                        LogService.Write("App", $"RunProcess start returned null for file={psi.FileName} args={psi.Arguments}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogService.Write("App", $"RunProcess start exception file={psi.FileName} args={psi.Arguments}", ex);
+                    throw;
+                }
 
                 if (ConfigService.CloseAfterLaunch)
+                {
                     StartCloseAfterLaunchTimer();
+                    LogService.Write("App", "RunProcess triggered CloseAfterLaunch timer");
+                }
+                }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "RunProcess failed", ex); }
         }
 
 
@@ -1056,6 +1194,7 @@ namespace EricGameLauncher
 
         private (string filePath, string arguments) SplitPathAndArguments(string input)
         {
+            try { LogService.Write("App", $"SplitPathAndArguments called inputLen={(input==null?0:input.Length)}"); } catch { }
             if (string.IsNullOrWhiteSpace(input))
                 return (string.Empty, string.Empty);
 
@@ -1103,10 +1242,12 @@ namespace EricGameLauncher
         }
 
 
+
         private AppItem? GetTag(object sender)
         {
             try
             {
+                try { LogService.Write("App", $"GetTag called senderType={(sender==null?"null":sender.GetType().Name)}"); } catch { }
                 if (sender is MenuFlyout menu && menu.Target is FrameworkElement target)
                 {
                     return (target.Tag as AppItem) ?? (target.DataContext as AppItem);
@@ -1117,8 +1258,9 @@ namespace EricGameLauncher
                 }
                 return null;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                LogService.Write("App", "GetTag failed", ex);
                 return null;
             }
         }
@@ -1128,12 +1270,14 @@ namespace EricGameLauncher
             try
             {
                 var item = GetTag(sender);
+                LogService.Write("App", $"MenuRun_Click invoked itemId={(item?.Id ?? "null")} title={(item?.Title ?? "")}");
                 if (item != null)
                 {
                     LaunchItem(item);
+                    LogService.Write("App", $"MenuRun_Click launched itemId={item.Id}");
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "MenuRun_Click failed", ex); }
         }
 
         private void ContextMenu_Opening(object sender, object e)
@@ -1142,6 +1286,8 @@ namespace EricGameLauncher
 
             if (sender is MenuFlyout menu)
             {
+                var ctxItem = GetTag(menu);
+                LogService.Write("App", $"ContextMenu_Opening invoked for itemId={(ctxItem?.Id ?? "null")} title={(ctxItem?.Title ?? "")}");
                 var item = GetTag(menu);
                 if (item == null) return;
 
@@ -1152,7 +1298,7 @@ namespace EricGameLauncher
                     if (path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) isPeFile = true;
                     else if (item.ExePath?.Contains(" ") == true && !item.ExePath.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)) isPeFile = true;
                 }
-                catch { }
+                catch (Exception ex) { LogService.Write("App", "Swallowed exception", ex); }
 
                 foreach (var flyoutItem in menu.Items)
                 {
@@ -1252,14 +1398,16 @@ namespace EricGameLauncher
                 {
                     if (!string.IsNullOrEmpty(ci.Command))
                     {
+                        LogService.Write("App", $"MenuCustom_Click command={ci.Command} isAdmin={ci.IsAdmin} title={ci.Title}");
                         if ((DateTime.Now - _lastLaunchTime).TotalMilliseconds < 500) return;
                         _lastLaunchTime = DateTime.Now;
 
                         RunProcess(ci.Command, ci.IsAdmin);
+                        LogService.Write("App", "MenuCustom_Click invoked RunProcess");
                     }
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "MenuCustom_Click failed", ex); }
         }
 
         private void MenuRunMgr_Click(object sender, RoutedEventArgs e)
@@ -1278,15 +1426,17 @@ namespace EricGameLauncher
 
                 if (!string.IsNullOrEmpty(managerPath))
                 {
+                    LogService.Write("App", $"MenuRunMgr_Click managerPath={managerPath} itemId={item.Id} platform={item.PlatformName} isMgrAdmin={item.IsMgrAdmin}");
                     if ((DateTime.Now - _lastLaunchTime).TotalMilliseconds < 500) return;
                     _lastLaunchTime = DateTime.Now;
 
                     TriggerItemLoadingAnimation(item);
 
                     RunProcess(managerPath, item.IsMgrAdmin);
+                    LogService.Write("App", "MenuRunMgr_Click invoked RunProcess for manager");
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "MenuRunMgr_Click failed", ex); }
         }
 
         private void TriggerItemLoadingAnimation(AppItem item)
@@ -1308,17 +1458,20 @@ namespace EricGameLauncher
         {
             try
             {
+                LogService.Write("App", "MenuLoc_Click invoked");
                 var item = GetTag(sender);
                 if (item != null && !string.IsNullOrEmpty(item.ExePath))
                 {
+                    LogService.Write("App", $"MenuLoc_Click itemId={item.Id} exePath={item.ExePath}");
                     string? dir = Path.GetDirectoryName(item.ExePath);
                     if (!string.IsNullOrEmpty(dir))
                     {
                         Process.Start("explorer.exe", $"/select,\"{item.ExePath}\"");
+                        LogService.Write("App", $"MenuLoc_Click launched explorer for itemId={item.Id}");
                     }
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "MenuLoc_Click failed", ex); }
         }
 
         private void MenuDel_Click(object sender, RoutedEventArgs e)
@@ -1328,15 +1481,17 @@ namespace EricGameLauncher
                 var item = GetTag(sender);
                 if (item != null)
                 {
+                    LogService.Write("App", $"MenuDel_Click removing itemId={item.Id} title={item.Title}");
                     _allItems.Remove(item);
                     item.Status = (int)AppItemStatus.Recycled;
                     item.DeletedAt = null;
                     _recycleItems.Add(item);
                     SaveData();
                     RefreshView();
+                    LogService.Write("App", $"MenuDel_Click completed for itemId={item.Id}");
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "MenuDel_Click failed", ex); }
         }
 
         private void MenuProp_Click(object sender, RoutedEventArgs e)
@@ -1346,17 +1501,21 @@ namespace EricGameLauncher
                 var item = GetTag(sender);
                 if (item != null)
                 {
+                    LogService.Write("App", $"MenuProp_Click opening props for itemId={item.Id} title={item.Title}");
                     OpenPropertyWindow(item);
+                    LogService.Write("App", $"MenuProp_Click opened props for itemId={item.Id}");
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "MenuProp_Click failed", ex); }
         }
 
         private async void MenuScan_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                LogService.Write("Scan", "Scan Start");
+                using (LogService.StartOperation("Scan", "Scan"))
+                {
+                    LogService.Write("Scan", "Scan Start");
                 await ConfigService.ReconstructMissingConfigAsync();
 
                 ScannerResultPanel.Visibility = Visibility.Collapsed;
@@ -1376,12 +1535,20 @@ namespace EricGameLauncher
                     return games;
                 });
 
+                LogService.Write("Scan", $"MenuScan_Click scannedGamesCount={scannedGames?.Count ?? 0}");
+
                 bool canValidateSteam = !string.IsNullOrEmpty(SteamHelper.DetectSteamPath());
                 bool canValidateEpic = !string.IsNullOrEmpty(EpicGamesHelper.DetectEpicManifestDir());
 
                 var existingGames = new List<ScannedGame>();
                 var newGames = new List<ScannedGame>();
                 var allItems = _allItems.Concat(_recycleItems).ToList();
+
+                if (scannedGames == null)
+                {
+                    LogService.Write("Scan", "MenuScan_Click aborted: no scanned games");
+                    return;
+                }
 
                 foreach (var game in scannedGames)
                 {
@@ -1396,6 +1563,7 @@ namespace EricGameLauncher
                     {
                         static string NormalizePath(string? p)
                         {
+                            try { LogService.Write("UI", $"NormalizePath called p={(p ?? "")}"); } catch { }
                             if (string.IsNullOrEmpty(p)) return string.Empty;
                             try { return Path.GetFullPath(p).ToUpperInvariant(); }
                             catch { return p.ToUpperInvariant(); }
@@ -1411,6 +1579,8 @@ namespace EricGameLauncher
                     if (exists) existingGames.Add(game);
                     else newGames.Add(game);
                 }
+
+                LogService.Write("Scan", $"MenuScan_Click classification existing={existingGames.Count} new={newGames.Count}");
 
                 var invalidGames = new List<ScannedGame>();
                 void TrackInvalidGame(AppItem i, string? badge)
@@ -1441,7 +1611,7 @@ namespace EricGameLauncher
                                 isFileOrDirExists = true;
                             }
                         }
-                        catch { }
+                        catch (Exception ex) { LogService.Write("App", "Swallowed exception", ex); }
                     }
 
                     if (isFileOrDirExists) continue;
@@ -1515,12 +1685,13 @@ namespace EricGameLauncher
                 ScannerNewGamesSection.Visibility = newGames.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
                 ScannerExistingGamesSection.Visibility = existingGames.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
                 ScannerInvalidGamesSection.Visibility = invalidGames.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-                LogService.Write("Scan", "Scan Complete");
+                    LogService.Write("Scan", "Scan Complete");
+                }
 
                 ScannerLoadingPanel.Visibility = Visibility.Collapsed;
                 ScannerResultPanel.Visibility = Visibility.Visible;
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("Scan", "Scan failed", ex); }
         }
 
         private void ScannerDialogCloseBtn_Click(object sender, RoutedEventArgs e)
@@ -1551,7 +1722,7 @@ namespace EricGameLauncher
                     }
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("Scan", "ScannerImportSelectedBtn_Click failed", ex); }
         }
 
         private void ScannerNewGamesList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1567,7 +1738,7 @@ namespace EricGameLauncher
                     ScannerNewSelectAllBtn.Content = I18n.T("Scanner_SelectAll") ?? "Select All";
                 }
             }
-            catch { }
+            catch (Exception ex) { LogService.Write("App", "Swallowed exception", ex); }
         }
 
         private void ScannerNewSelectAllBtn_Click(object sender, RoutedEventArgs e)
@@ -1583,7 +1754,7 @@ namespace EricGameLauncher
                     ScannerNewGamesList.SelectAll();
                 }
             }
-            catch { }
+            catch (Exception ex) { LogService.Write("App", "ScannerNewSelectAllBtn_Click failed", ex); }
         }
 
         private void ScannerInvalidGamesList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1599,7 +1770,7 @@ namespace EricGameLauncher
                     ScannerInvalidSelectAllBtn.Content = I18n.T("Scanner_SelectAll") ?? "Select All";
                 }
             }
-            catch { }
+            catch (Exception ex) { LogService.Write("App", "ScannerInvalidSelectAllBtn_Click failed", ex); }
         }
 
         private void ScannerInvalidSelectAllBtn_Click(object sender, RoutedEventArgs e)
@@ -1615,7 +1786,7 @@ namespace EricGameLauncher
                     ScannerInvalidGamesList.SelectAll();
                 }
             }
-            catch { }
+            catch (Exception ex) { LogService.Write("App", "ScannerInvalidSelectAllBtn_Click failed", ex); }
         }
 
         private void ScannerDeleteInvalidBtn_Click(object sender, RoutedEventArgs e)
@@ -1641,7 +1812,7 @@ namespace EricGameLauncher
                     }
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "DeleteInvalidGames failed", ex); }
         }
 
         private void DeleteInvalidGames(List<ScannedGame> games)
@@ -1660,6 +1831,7 @@ namespace EricGameLauncher
                     ? new HashSet<string>(EpicGamesHelper.GetAllInstalledGames().Select(x => x.ExePath), StringComparer.OrdinalIgnoreCase)
                     : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+                #pragma warning disable CS8602
                 foreach (var game in games)
                 {
                     if (string.IsNullOrEmpty(game.ItemId) || !processedIds.Add(game.ItemId)) continue;
@@ -1678,13 +1850,14 @@ namespace EricGameLauncher
                         deleted = true;
                     }
                 }
+                #pragma warning restore CS8602
 
                 if (deleted)
                 {
                     SaveData();
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "DeleteInvalidGames failed", ex); }
         }
 
         private bool IsItemStillInvalid(AppItem item, bool canValidateSteam, bool canValidateEpic, HashSet<string> steamInstalledUrls, HashSet<string> epicInstalledUrls)
@@ -1713,8 +1886,9 @@ namespace EricGameLauncher
 
                 return IsUserLaunchTargetInvalid(exePath);
             }
-            catch
+            catch (Exception ex)
             {
+                LogService.Write("App", "IsItemStillInvalid failed", ex);
                 return false;
             }
         }
@@ -1796,7 +1970,7 @@ namespace EricGameLauncher
                 SaveData();
                 RefreshView();
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "RestoreRecycledItem failed", ex); }
         }
 
         private void MarkItemForDeletion(AppItem item)
@@ -1807,7 +1981,7 @@ namespace EricGameLauncher
                 item.DeletedAt = DateTimeOffset.UtcNow;
                 SaveData();
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "MarkItemForDeletion failed", ex); }
         }
 
         private void EmptyRecycleBin()
@@ -1827,7 +2001,7 @@ namespace EricGameLauncher
                     SaveData();
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "EmptyRecycleBin failed", ex); }
         }
 
         private void RecycleBinFlyout_Opening(object sender, object e)
@@ -1844,7 +2018,7 @@ namespace EricGameLauncher
                     item.OnPropertyChanged("TitleTextDecorations");
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "RecycleBinFlyout_Opening failed", ex); }
         }
 
         private void RecycleBinFlyout_Closed(object sender, object e)
@@ -1877,12 +2051,14 @@ namespace EricGameLauncher
                     ConfigService.SaveItems(items, newRecycleItems);
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "AutoCleanRecycleBin failed", ex); }
         }
 
         private void BtnEmptyRecycleBin_Click(object sender, RoutedEventArgs e)
         {
+            LogService.Write("App", "BtnEmptyRecycleBin_Click invoked");
             EmptyRecycleBin();
+            LogService.Write("App", "BtnEmptyRecycleBin_Click completed EmptyRecycleBin");
             RecycleBinFlyout_Opening(RecycleBinFlyout, new object());
         }
 
@@ -1890,6 +2066,7 @@ namespace EricGameLauncher
         {
             if (sender is MenuFlyout flyout && RecycleItemsControl.SelectedItem is AppItem selectedItem)
             {
+                LogService.Write("App", $"RecycleMenuFlyout_Opening selectedItemId={selectedItem.Id} status={selectedItem.Status}");
                 if (flyout.Items.Count >= 2)
                 {
                     if (flyout.Items[0] is MenuFlyoutItem restoreItem)
@@ -1907,7 +2084,9 @@ namespace EricGameLauncher
         {
             if (sender is MenuFlyoutItem menuItem && menuItem.Tag is AppItem item)
             {
+                LogService.Write("App", $"MenuRestore_Click restoring itemId={item.Id} title={item.Title}");
                 RestoreRecycledItem(item);
+                LogService.Write("App", $"MenuRestore_Click restored itemId={item.Id}");
                 RecycleBinFlyout_Opening(RecycleBinFlyout, new object());
             }
         }
@@ -1916,7 +2095,9 @@ namespace EricGameLauncher
         {
             if (sender is MenuFlyoutItem menuItem && menuItem.Tag is AppItem item)
             {
+                LogService.Write("App", $"MenuDeletePerm_Click marking for deletion itemId={item.Id} title={item.Title}");
                 MarkItemForDeletion(item);
+                LogService.Write("App", $"MenuDeletePerm_Click marked itemId={item.Id}");
                 RecycleBinFlyout_Opening(RecycleBinFlyout, new object());
             }
         }
@@ -1931,24 +2112,42 @@ namespace EricGameLauncher
 
         private void ImportScannedGames(List<ScannedGame> games)
         {
+            #pragma warning disable CS8602, CS8604
             try
             {
-                int sortOrder = _allItems.Count > 0 ? _allItems.Max(x => x.SortOrder) + 1 : 0;
+                using (LogService.StartOperation("Scan", "ImportScannedGames"))
+                {
+                        if (games == null || games.Count == 0)
+                        {
+                            LogService.Write("Scan", "ImportScannedGames aborted: no input");
+                            return;
+                        }
+
+                        LogService.Write("Scan", $"ImportScannedGames Start inputCount={games?.Count ?? 0}");
+                    var localGames = games!;
+                    int sortOrder = 0;
+                    if (_allItems != null && _allItems.Count > 0)
+                    {
+                        sortOrder = _allItems.Max(x => x.SortOrder) + 1;
+                    }
 
                 var newAppItems = new List<AppItem>();
                 foreach (var game in games)
                 {
+                    var gTitle = game?.Title;
+                    var gExe = game?.ExePath;
+                    var gPlatform = game?.PlatformBadge;
                     var newItem = new AppItem
                     {
                         Id = Guid.NewGuid().ToString(),
-                        Title = game.Title,
-                        ExePath = game.ExePath,
-                        Platform = game.PlatformBadge,
+                        Title = gTitle,
+                        ExePath = gExe,
+                        Platform = gPlatform,
                         SortOrder = sortOrder++
                     };
 
                     newAppItems.Add(newItem);
-                    _allItems.Add(newItem);
+                    _allItems!.Add(newItem);
 
                     if (!string.IsNullOrEmpty(newItem.ExePath) &&
                         newItem.ExePath.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase))
@@ -1967,16 +2166,19 @@ namespace EricGameLauncher
                                     });
                                 }
                             }
-                            catch { }
+                            catch (Exception ex) { LogService.Write("App", "ImportScannedGames icon task failed", ex); }
                         });
                     }
                 }
 
-                ConfigService.SaveItems(_allItems.ToList(), _recycleItems.ToList());
+                    ConfigService.SaveItems(_allItems!.ToList(), _recycleItems!.ToList());
+                    LogService.Write("Scan", $"ImportScannedGames completed newAdded={newAppItems.Count} totalItems={_allItems!.Count}");
 
-                _ = ConfigService.RefreshGlobalAsync();
+                    _ = ConfigService.RefreshGlobalAsync();
+                }
             }
-            catch (Exception) { }
+            #pragma warning restore CS8602, CS8604
+            catch (Exception ex) { LogService.Write("App", "ImportScannedGames failed", ex); }
         }
 
 
@@ -2041,7 +2243,7 @@ namespace EricGameLauncher
 
                 UpdatePropIconView(_currentEditingItem.IconPath);
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "ImportScannedGames failed", ex); }
         }
 
         private void SaveToItem()
@@ -2097,7 +2299,7 @@ namespace EricGameLauncher
                 {
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "LoadUI failed", ex); }
         }
 
 
@@ -2156,7 +2358,7 @@ namespace EricGameLauncher
 
                 ShowPropertyPanel();
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "LoadUI failed", ex); }
         }
 
         private void ShowPropertyPanel()
@@ -2196,6 +2398,8 @@ namespace EricGameLauncher
 
         private async void PopulateShortcutMenus()
         {
+            using (LogService.StartOperation("App", "PopulateShortcutMenus"))
+            {
             try
             {
                 MenuExeStartMenu.Items.Clear();
@@ -2217,6 +2421,8 @@ namespace EricGameLauncher
                     : await Task.Run(() => ShortcutScanner.GetDesktopItems());
                 _preloadedDesktopTask = null;
 
+                LogService.Write("App", $"PopulateShortcutMenus fetched startMenuItems={startMenuItems?.Count ?? 0} desktopItems={desktopItems?.Count ?? 0}");
+
                 MenuExeStartMenu.Items.Clear();
                 MenuExeDesktop.Items.Clear();
                 MenuAltStartMenu.Items.Clear();
@@ -2235,6 +2441,8 @@ namespace EricGameLauncher
                 PopulateMenuItems(MenuMgrStartMenu, startMenuItems, PropMgrPath);
                 PopulateMenuItems(MenuMgrDesktop, desktopItems, PropMgrPath);
 
+                LogService.Write("App", "PopulateShortcutMenus populated standard menus and custom browse flyouts");
+
                 for (int i = 0; i < 10; i++)
                 {
                     int index = i;
@@ -2248,6 +2456,8 @@ namespace EricGameLauncher
                     PopulateMenuItems(startMenuSub, startMenuItems, _customCommands[i]);
                     PopulateMenuItems(desktopSub, desktopItems, _customCommands[i]);
 
+                    LogService.Write("App", $"PopulateShortcutMenus custom browse index={index} startCount={startMenuItems?.Count ?? 0} desktopCount={desktopItems?.Count ?? 0}");
+
                     flyout.Items.Add(startMenuSub);
                     flyout.Items.Add(desktopSub);
                     flyout.Items.Add(new MenuFlyoutSeparator());
@@ -2256,7 +2466,8 @@ namespace EricGameLauncher
                     _customBrowses[i].Flyout = flyout;
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "PopulateShortcutMenus failed", ex); }
+            }
         }
 
         private void BtnBrowseCustom_Click(int index)
@@ -2264,28 +2475,38 @@ namespace EricGameLauncher
             BrowseFile(_customCommands[index], Win32FileDialog.BuildFilter(Win32FileDialog.FilterAll));
         }
 
-        private void PopulateMenuItems(MenuFlyoutSubItem parent, List<ShortcutScanner.FileItem> items, TextBox targetTextBox)
+        private void PopulateMenuItems(MenuFlyoutSubItem parent, List<ShortcutScanner.FileItem>? items, TextBox? targetTextBox)
         {
+            if (items == null) return;
             foreach (var item in items)
             {
                 if (!item.IsFolder)
                 {
                     var menuItem = new MenuFlyoutItem { Text = item.Name, Tag = item.FullPath };
+                    LogService.Write("App", $"PopulateMenuItems adding item name={item.Name} path={item.FullPath} targetTextBox={(targetTextBox?.Name ?? "")}");
                     menuItem.Click += (s, e) => OnShortcutMenuItemClick(item.FullPath, targetTextBox, item.Name);
                     parent.Items.Add(menuItem);
                 }
-                else if (item.IsFolder && item.Children.Count > 0)
+                    else if (item.IsFolder && item.Children.Count > 0)
                 {
+                    LogService.Write("App", $"PopulateMenuItems entering folder name={item.Name} childCount={item.Children.Count}");
                     PopulateMenuItems(parent, item.Children, targetTextBox);
                 }
             }
         }
 
-        private async void OnShortcutMenuItemClick(string filePath, TextBox targetTextBox, string? displayName = null)
+        private async void OnShortcutMenuItemClick(string filePath, TextBox? targetTextBox, string? displayName = null)
         {
+            using (LogService.StartOperation("App", "OnShortcutMenuItemClick"))
+            {
             try
             {
-                if (string.IsNullOrEmpty(filePath)) return;
+                LogService.Write("App", $"OnShortcutMenuItemClick Start filePath={filePath} displayName={displayName}");
+                if (string.IsNullOrEmpty(filePath))
+                {
+                    LogService.Write("App", "OnShortcutMenuItemClick aborted: empty filePath");
+                    return;
+                }
                 bool isStoreApp = filePath.StartsWith("shell:AppsFolder\\");
 
 
@@ -2328,7 +2549,13 @@ namespace EricGameLauncher
                     }
                 }
 
-                targetTextBox.Text = actualPath;
+                LogService.Write("App", $"OnShortcutMenuItemClick resolved actualPath={actualPath} isStoreApp={isStoreApp} isUrlProtocol={isUrlProtocol} extractFromLnk={extractFromLnk}");
+                if (shortcutInfo != null)
+                {
+                    LogService.Write("App", $"OnShortcutMenuItemClick shortcutInfo AUMID={shortcutInfo.AUMID} TargetPath={shortcutInfo.TargetPath} IconPath={shortcutInfo.IconPath} IsUrl={shortcutInfo.IsUrl}");
+                }
+
+                if (targetTextBox != null) targetTextBox.Text = actualPath;
 
 
                 if (targetTextBox == PropExePath)
@@ -2350,7 +2577,9 @@ namespace EricGameLauncher
                         string? steamExePath = SteamHelper.GetExecutableFromSteamUrl(actualPath);
                         if (!string.IsNullOrEmpty(steamExePath) && File.Exists(steamExePath))
                         {
+                            LogService.Write("App", $"OnShortcutMenuItemClick extracting icon from steamExePath={steamExePath}");
                             iconPath = await IconHelper.GetIconPathAsync(steamExePath, _currentEditingItem.Id, forceExtract: true);
+                            LogService.Write("App", $"OnShortcutMenuItemClick steam iconPath={iconPath}");
                         }
                         else
                         {
@@ -2386,7 +2615,9 @@ namespace EricGameLauncher
                             shouldExtractFromLnk = true;
                         }
 
+                        LogService.Write("App", $"OnShortcutMenuItemClick calling GetIconPathAsync iconSource={iconSource} shouldExtractFromLnk={shouldExtractFromLnk}");
                         iconPath = await IconHelper.GetIconPathAsync(iconSource, _currentEditingItem.Id, forceExtract: true);
+                        LogService.Write("App", $"OnShortcutMenuItemClick GetIconPathAsync returned iconPath={iconPath}");
                     }
 
                     if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
@@ -2397,7 +2628,8 @@ namespace EricGameLauncher
                     }
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "OnShortcutMenuItemClick failed", ex); }
+            }
         }
 
         private void HidePropertyPanel()
@@ -2451,18 +2683,26 @@ namespace EricGameLauncher
 
                 HidePropertyPanel();
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "BtnCloseProperty_Click failed", ex); }
         }
 
         private async void BtnSaveProperty_Click(object sender, RoutedEventArgs e)
         {
+            using (LogService.StartOperation("App", "BtnSaveProperty_Click"))
+            {
             try
             {
-                if (_currentEditingItem == null) return;
+                LogService.Write("App", $"BtnSaveProperty_Click Start currentEditingItemId={_currentEditingItem?.Id} title={_currentEditingItem?.Title}");
+                if (_currentEditingItem == null)
+                {
+                    LogService.Write("App", "BtnSaveProperty_Click aborted: no current editing item");
+                    return;
+                }
 
 
                 if (string.IsNullOrWhiteSpace(PropExePath.Text))
                 {
+                    LogService.Write("App", "BtnSaveProperty_Click validation failed: empty PropExePath");
                     PropExePath.BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 196, 43, 28));
                     _ = Task.Delay(2000).ContinueWith(_ =>
                         DispatcherQueue.TryEnqueue(() => PropExePath.ClearValue(TextBox.BorderBrushProperty)),
@@ -2480,6 +2720,7 @@ namespace EricGameLauncher
 
                     if (existing != null)
                     {
+                        LogService.Write("App", $"BtnSaveProperty_Click validation failed: duplicate ExePath existingId={existing.Id}");
                         PropExePath.BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 196, 43, 28));
                         _ = Task.Delay(2000).ContinueWith(_ =>
                             DispatcherQueue.TryEnqueue(() => PropExePath.ClearValue(TextBox.BorderBrushProperty)),
@@ -2492,6 +2733,8 @@ namespace EricGameLauncher
 
                 SaveToItem();
 
+                LogService.Write("App", $"BtnSaveProperty_Click SaveToItem applied for id={_currentEditingItem.Id} title={_currentEditingItem.Title} exePath={_currentEditingItem.ExePath}");
+
 
                 if (_isNewItemMode)
                 {
@@ -2502,15 +2745,20 @@ namespace EricGameLauncher
                 }
 
                 SaveData();
+                LogService.Write("App", $"BtnSaveProperty_Click SaveData completed itemsCount={_allItems.Count}");
                 HidePropertyPanel();
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "BtnSaveProperty_Click failed", ex); }
+            }
         }
 
         private void BtnDeleteProperty_Click(object sender, RoutedEventArgs e)
         {
+            using (LogService.StartOperation("App", "BtnDeleteProperty_Click"))
+            {
             try
             {
+                LogService.Write("App", $"BtnDeleteProperty_Click Start currentEditingItemId={_currentEditingItem?.Id}");
                 if (_currentEditingItem == null) return;
 
                 if (!_isNewItemMode)
@@ -2519,21 +2767,26 @@ namespace EricGameLauncher
                     _currentEditingItem.Status = (int)AppItemStatus.Recycled;
                     _currentEditingItem.DeletedAt = null;
                     _recycleItems.Add(_currentEditingItem);
+                    LogService.Write("App", $"BtnDeleteProperty_Click recycled itemId={_currentEditingItem.Id}");
                 }
                 else
                 {
                     _allItems.Remove(_currentEditingItem);
+                    LogService.Write("App", $"BtnDeleteProperty_Click removed new temporary item");
                 }
                 
                 SaveData();
                 RefreshView();
                 HidePropertyPanel();
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "BtnDeleteProperty_Click failed", ex); }
+            }
         }
 
         private async void BtnChangeIcon_Click(object sender, RoutedEventArgs e)
         {
+            using (LogService.StartOperation("App", "BtnChangeIcon_Click"))
+            {
             try
             {
 
@@ -2544,24 +2797,50 @@ namespace EricGameLauncher
                 if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
                 {
 
+                    LogService.Write("App", $"BtnChangeIcon_Click selectedFile={filePath}");
+
 
                     PropIcon.Source = null;
 
 
-                    string? newPath = await IconHelper.GetIconPathAsync(filePath, _currentEditingItem!.Id, forceExtract: true);
+                    string? newPath = null;
+                    try
+                    {
+                        if (_currentEditingItem == null)
+                        {
+                            LogService.Write("App", "BtnChangeIcon_Click aborted: no current editing item");
+                            return;
+                        }
+                        newPath = await IconHelper.GetIconPathAsync(filePath, _currentEditingItem.Id, forceExtract: true);
+                        LogService.Write("App", $"BtnChangeIcon_Click GetIconPathAsync returned newPath={newPath}");
+                    }
+                    catch (Exception ex)
+                    {
+                        LogService.Write("App", "BtnChangeIcon_Click GetIconPathAsync failed", ex);
+                    }
 
                     if (!string.IsNullOrEmpty(newPath) && File.Exists(newPath))
                     {
-                        _currentEditingItem.IconPath = null;
-                        _currentEditingItem.IconPath = newPath;
-                        UpdatePropIconView(newPath);
+                        if (_currentEditingItem != null)
+                        {
+                            _currentEditingItem.IconPath = null;
+                            _currentEditingItem.IconPath = newPath;
+                            UpdatePropIconView(newPath);
+                            LogService.Write("App", $"BtnChangeIcon_Click updated item icon id={_currentEditingItem.Id} newPath={newPath}");
+                        }
+                        else
+                        {
+                            LogService.Write("App", "BtnChangeIcon_Click: current editing item became null before update");
+                        }
                     }
                     else
                     {
+                        LogService.Write("App", $"BtnChangeIcon_Click no valid icon produced for selectedFile={filePath} newPath={newPath}");
                     }
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "UpdatePropIconView failed", ex); }
+            }
         }
 
 
@@ -2569,6 +2848,8 @@ namespace EricGameLauncher
 
         private async void BrowseFile(Microsoft.UI.Xaml.Controls.TextBox target, string? filter = null)
         {
+            using (LogService.StartOperation("App", "BrowseFile"))
+            {
             try
             {
                 if (target == null)
@@ -2582,7 +2863,9 @@ namespace EricGameLauncher
                 {
                     filter = Win32FileDialog.BuildFilter(Win32FileDialog.FilterExecutables, Win32FileDialog.FilterAll);
                 }
+                LogService.Write("App", $"BrowseFile invoking dialog filter={filter}");
                 string? filePath = Win32FileDialog.ShowOpenFileDialog(hwnd, I18n.T("FileDialog_SelectFile"), filter);
+                LogService.Write("App", $"BrowseFile dialog returned filePath={filePath}");
 
                 if (!string.IsNullOrEmpty(filePath))
                 {
@@ -2625,6 +2908,11 @@ namespace EricGameLauncher
                         }
                     }
 
+                    LogService.Write("App", $"BrowseFile resolved actualPath={actualPath} isUrlProtocol={isUrlProtocol}");
+                    if (shortcutInfo != null)
+                    {
+                        LogService.Write("App", $"BrowseFile shortcutInfo AUMID={shortcutInfo.AUMID} TargetPath={shortcutInfo.TargetPath} IconPath={shortcutInfo.IconPath} IsUrl={shortcutInfo.IsUrl}");
+                    }
                     target.Text = actualPath;
 
 
@@ -2650,7 +2938,9 @@ namespace EricGameLauncher
                             string? steamExePath = SteamHelper.GetExecutableFromSteamUrl(actualPath);
                             if (!string.IsNullOrEmpty(steamExePath) && File.Exists(steamExePath))
                             {
+                                LogService.Write("App", $"BrowseFile extracting steam icon from {steamExePath}");
                                 iconPath = await IconHelper.GetIconPathAsync(steamExePath, _currentEditingItem.Id, forceExtract: true);
+                                LogService.Write("App", $"BrowseFile steam iconPath={iconPath}");
                             }
                             else
                             {
@@ -2680,7 +2970,9 @@ namespace EricGameLauncher
                             {
                                 iconSource = filePath;
                             }
+                            LogService.Write("App", $"BrowseFile calling GetIconPathAsync iconSource={iconSource}");
                             iconPath = await IconHelper.GetIconPathAsync(iconSource, _currentEditingItem.Id, forceExtract: true);
+                            LogService.Write("App", $"BrowseFile GetIconPathAsync returned iconPath={iconPath}");
                         }
 
                         if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
@@ -2698,22 +2990,23 @@ namespace EricGameLauncher
                 {
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "SearchFlyout_Opened failed", ex); }
+            }
         }
 
         private void BtnBrowseExe_Click(object sender, RoutedEventArgs e)
         {
-            try { BrowseFile(PropExePath); } catch (Exception) { }
+            try { BrowseFile(PropExePath); } catch (Exception ex) { LogService.Write("App", "BtnBrowseExe_Click inner BrowseFile failed", ex); }
         }
 
         private void BtnBrowseAlt_Click(object sender, RoutedEventArgs e)
         {
-            try { BrowseFile(PropAlternativeLaunchCommand); } catch (Exception) { }
+            try { BrowseFile(PropAlternativeLaunchCommand); } catch (Exception ex) { LogService.Write("App", "BtnBrowseAlt_Click inner BrowseFile failed", ex); }
         }
 
         private void BtnBrowseAlongside_Click(object sender, RoutedEventArgs e)
         {
-            try { BrowseFile(PropAlongsideCommand); } catch (Exception) { }
+            try { BrowseFile(PropAlongsideCommand); } catch (Exception ex) { LogService.Write("App", "BtnBrowseAlongside_Click inner BrowseFile failed", ex); }
         }
 
         private void BtnBrowseMgr_Click(object sender, RoutedEventArgs e)
@@ -2722,7 +3015,7 @@ namespace EricGameLauncher
             {
                 BrowseFile(PropMgrPath);
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "BtnBrowseMgr_Click failed", ex); }
         }
 
 
@@ -2732,7 +3025,7 @@ namespace EricGameLauncher
             {
                 SearchBoxFlyout.Focus(FocusState.Programmatic);
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "SearchFlyout_Closing failed", ex); }
         }
 
         private void SearchFlyout_Closing(Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase sender, Microsoft.UI.Xaml.Controls.Primitives.FlyoutBaseClosingEventArgs args)
@@ -2744,7 +3037,7 @@ namespace EricGameLauncher
                     args.Cancel = true;
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "SearchBox_TextChanged failed", ex); }
         }
 
         private void SearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
@@ -2770,7 +3063,7 @@ namespace EricGameLauncher
                 IsFiltered = !string.IsNullOrEmpty(query);
                 UpdateEmptyState();
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "EditOrderFlyout_Opening failed", ex); }
         }
 
         private void EditOrderFlyout_Opening(object sender, object e)
@@ -2781,7 +3074,7 @@ namespace EricGameLauncher
                 OrderItemsControl.ItemsSource = _tempOrderCollection;
                 _orderItemsControl = OrderItemsControl as ListView;
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "OrderList_ContainerContentChanging failed", ex); }
         }
 
         private void OrderList_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
@@ -2801,7 +3094,7 @@ namespace EricGameLauncher
                     }
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "BtnMoveUp_Click failed", ex); }
         }
 
         private void BtnEdit_Click(object sender, RoutedEventArgs e)
@@ -2816,7 +3109,7 @@ namespace EricGameLauncher
                 var item = button?.Tag as AppItem;
                 MoveItem(item, -1);
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "BtnMoveDown_Click failed", ex); }
         }
 
         private void BtnMoveDown_Click(object sender, RoutedEventArgs e)
@@ -2827,7 +3120,7 @@ namespace EricGameLauncher
                 var item = button?.Tag as AppItem;
                 MoveItem(item, 1);
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "EditOrderFlyout_Closed failed", ex); }
         }
 
         private void EditOrderFlyout_Closed(object sender, object e)
@@ -2842,7 +3135,7 @@ namespace EricGameLauncher
                     _tempOrderCollection = null;
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "EditOrderFlyout_Closed failed", ex); }
         }
 
         private void MoveItem(AppItem? item, int offset)
@@ -2931,22 +3224,29 @@ namespace EricGameLauncher
 
         private void MenuIconSize_Click(object sender, RoutedEventArgs e)
         {
+            LogService.Write("UI", "MenuIconSize_Click invoked");
             SizeFlyout.ShowAt(BtnMore);
+            LogService.Write("UI", "MenuIconSize_Click showed SizeFlyout");
         }
 
         private void MenuSort_Click(object sender, RoutedEventArgs e)
         {
+            LogService.Write("UI", "MenuSort_Click invoked");
             EditOrderFlyout.ShowAt(BtnMore);
+            LogService.Write("UI", "MenuSort_Click showed EditOrderFlyout");
         }
 
         private void MenuRecycleBin_Click(object sender, RoutedEventArgs e)
         {
+            LogService.Write("App", "MenuRecycleBin_Click invoked");
             RecycleBinFlyout.ShowAt(BtnMore);
+            LogService.Write("App", "MenuRecycleBin_Click showed RecycleBinFlyout");
         }
 
 
         private void MenuSettings_Click(object sender, RoutedEventArgs e)
         {
+            LogService.Write("UI", "MenuSettings_Click invoked");
             UpdateStorageModeUI();
 
 
@@ -2964,13 +3264,16 @@ namespace EricGameLauncher
             }
 
             SettingsFlyout.ShowAt(BtnMore);
+            LogService.Write("UI", "MenuSettings_Click showed SettingsFlyout");
         }
 
         private void MenuInstall_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                LogService.Write("App", "Install Start");
+                using (LogService.StartOperation("App", "Install"))
+                {
+                    LogService.Write("App", "Install Start");
                 string exePath = Process.GetCurrentProcess().MainModule?.FileName ?? "";
                 if (string.IsNullOrEmpty(exePath)) return;
 
@@ -2991,16 +3294,19 @@ namespace EricGameLauncher
 
                 if (!Directory.Exists(startMenuPath)) Directory.CreateDirectory(startMenuPath);
                 ShortcutResolver.CreateShortcut(exePath, startMenuShortcutPath, description);
-                LogService.Write("App", "Install Complete");
+                    LogService.Write("App", "Install Complete");
+                }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "MenuInstall_Click failed", ex); }
         }
 
         private void MenuUninstall_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                LogService.Write("App", "Uninstall Start");
+                using (LogService.StartOperation("App", "Uninstall"))
+                {
+                    LogService.Write("App", "Uninstall Start");
                 string appName = "EricGameLauncher";
 
                 string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
@@ -3011,9 +3317,10 @@ namespace EricGameLauncher
 
                 if (File.Exists(desktopShortcutPath)) File.Delete(desktopShortcutPath);
                 if (File.Exists(startMenuShortcutPath)) File.Delete(startMenuShortcutPath);
-                LogService.Write("App", "Uninstall Complete");
+                    LogService.Write("App", "Uninstall Complete");
+                }
             }
-            catch (Exception) { }
+            catch (Exception ex) { LogService.Write("App", "MenuUninstall_Click failed", ex); }
         }
 
 
@@ -3078,8 +3385,8 @@ namespace EricGameLauncher
                 _sizeSlider = slider;
                 IconSize = slider.Value;
                 ConfigService.IconSize = slider.Value;
+                LogService.Write("UI", $"SizeSlider_ValueChanged newSize={slider.Value}");
                 ConfigService.SaveConfig();
-
 
                 UpdateGridItemSizes(slider.Value);
             }
@@ -3088,8 +3395,13 @@ namespace EricGameLauncher
         private void UpdateGridItemSizes(double size)
         {
 
-            if (AppGrid == null || AppGrid.Items == null || AppGrid.Items.Count == 0)
+            if (AppGrid == null || AppGrid.Items == null)
+            {
+                LogService.Write("UI", "UpdateGridItemSizes aborted: AppGrid or Items null");
                 return;
+            }
+            LogService.Write("UI", $"UpdateGridItemSizes start size={size} itemCount={AppGrid.Items.Count}");
+            if (AppGrid.Items.Count == 0) return;
 
             foreach (var item in AppGrid.Items)
             {
@@ -3099,6 +3411,7 @@ namespace EricGameLauncher
                     ApplySizeToContainer(gvi, size);
                 }
             }
+            LogService.Write("UI", "UpdateGridItemSizes applied to visible containers");
         }
 
         private void AppGrid_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
@@ -3125,14 +3438,25 @@ namespace EricGameLauncher
             if (bgBorder != null) bgBorder.CornerRadius = new CornerRadius(cornerRadiusBg);
             if (imgBorder != null) imgBorder.CornerRadius = new CornerRadius(cornerRadiusIcon);
             if (titleText != null) titleText.Width = size;
+            LogService.Write("UI", $"ApplySizeToContainer applied size={size} to containerName={(container?.Name ?? "")}");
         }
 
         private async void BtnSwitchStorageMode_Click(object sender, RoutedEventArgs e)
         {
-            bool switchToSystemMode = !ConfigService.IsSystemMode;
-            await ConfigService.SwitchStorageModeAsync(switchToSystemMode);
-            UpdateStorageModeUI();
-            await ConfigService.RefreshGlobalAsync();
+            using (LogService.StartOperation("Config", "BtnSwitchStorageMode_Click"))
+            {
+                try
+                    {
+                        bool switchToSystemMode = !ConfigService.IsSystemMode;
+                        if (ToggleCloseAfterLaunch != null && ConfigService.CloseAfterLaunch != ToggleCloseAfterLaunch.IsOn)
+                        {
+                            ConfigService.CloseAfterLaunch = ToggleCloseAfterLaunch.IsOn;
+                            LogService.Write("Config", $"ToggleCloseAfterLaunch changed to={ToggleCloseAfterLaunch.IsOn}");
+                            ConfigService.SaveConfig();
+                        }
+                }
+                catch (Exception ex) { LogService.Write("Config", "BtnSwitchStorageMode_Click failed", ex); }
+            }
         }
 
 
@@ -3295,9 +3619,11 @@ namespace EricGameLauncher
                 for (int i = 0; i < languages.Count; i++)
                 {
                     LanguageComboBox.Items.Add(I18n.GetDisplayName(languages[i]));
-                        selectedIndex = i;
                 }
                 LanguageComboBox.Tag = languages;
+                // try to select the current language, fallback to first
+                int idx = languages.IndexOf(I18n.CurrentLanguage);
+                if (idx >= 0) selectedIndex = idx;
                 LanguageComboBox.SelectedIndex = selectedIndex;
                 LanguageComboBox.SelectionChanged += LanguageComboBox_SelectionChanged;
 
@@ -3308,7 +3634,7 @@ namespace EricGameLauncher
                     if (BtnOpenCacheFolder != null)
                         ToolTipService.SetToolTip(BtnOpenCacheFolder, I18n.T("Settings_OpenCacheFolder"));
                 }
-                catch (Exception) { }
+                catch (Exception ex) { LogService.Write("App", "ApplyLocalization failed", ex); }
 
                 PropTitleLabel.Text = I18n.T("Property_Title");
                 try
@@ -3317,7 +3643,7 @@ namespace EricGameLauncher
                     if (closeBtn != null)
                         ToolTipService.SetToolTip(closeBtn, I18n.T("Property_Close"));
                 }
-                catch (Exception) { }
+                catch (Exception ex) { LogService.Write("App", "ApplyLocalization failed", ex); }
 
                 PropDisplayNameLabel.Text = I18n.T("Property_DisplayName");
                 PropMainExePathLabel.Text = I18n.T("Property_MainExePath");
@@ -3353,7 +3679,7 @@ namespace EricGameLauncher
                     if (changeIconBtn != null)
                         ToolTipService.SetToolTip(changeIconBtn, I18n.T("Property_ChangeIcon"));
                 }
-                catch (Exception) { }
+                catch (Exception ex) { LogService.Write("App", "ApplyLocalization failed", ex); }
 
                 try
                 {
@@ -3365,7 +3691,7 @@ namespace EricGameLauncher
                     if (mgrDropDown != null)
                         ToolTipService.SetToolTip(mgrDropDown, I18n.T("Property_SelectFile"));
                 }
-                catch (Exception) { }
+                catch (Exception ex) { LogService.Write("App", "ApplyLocalization failed", ex); }
 
                 PropDeleteText.Text = I18n.T("Menu_Delete");
                 ToolTipService.SetToolTip(PropBtnDelete, I18n.T("Property_DeleteItem"));
@@ -3377,7 +3703,7 @@ namespace EricGameLauncher
                     if (saveBtn != null)
                         ToolTipService.SetToolTip(saveBtn, I18n.T("Property_Save"));
                 }
-                catch (Exception) { }
+                catch (Exception ex) { LogService.Write("App", "ApplyLocalization failed", ex); }
 
                 EmptyStateText.Text = I18n.T("Empty_Description");
 
@@ -3402,8 +3728,9 @@ namespace EricGameLauncher
                 if (MigrationTitle != null) MigrationTitle.Text = I18n.T("Migration_OverlayTitle");
                 if (MigrationSubTitle != null) MigrationSubTitle.Text = I18n.T("Migration_OverlaySubTitle");
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                LogService.Write("App", "ApplyLocalization failed", ex);
             }
         }
 
@@ -3450,12 +3777,17 @@ namespace EricGameLauncher
 
         private async Task StartUpdateFlowAsync(UpdateService.ReleaseInfo release, bool isForced = false)
         {
-            try { await ShowReleaseDialogAsync(release, hasUpdate: true, isForced); }
-            catch { }
+            using (LogService.StartOperation("Update", "StartUpdateFlowAsync"))
+            {
+                try { await ShowReleaseDialogAsync(release, hasUpdate: true, isForced); }
+                catch (Exception ex) { LogService.Write("Update", "StartUpdateFlowAsync failed", ex); }
+            }
         }
 
         private async Task ShowReleaseDialogAsync(UpdateService.ReleaseInfo release, bool hasUpdate, bool isForced = false)
         {
+            using (LogService.StartOperation("Update", "ShowReleaseDialogAsync"))
+            {
             string downloadUrl = release.assets.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.browser_download_url ?? "";
             if (hasUpdate && string.IsNullOrEmpty(downloadUrl)) return;
 
@@ -3472,14 +3804,15 @@ namespace EricGameLauncher
                 XamlRoot = this.Content.XamlRoot
             };
 
-            if (isForced)
+                if (isForced)
             {
                 dialog.Closing += (s, e) =>
                 {
                     if (e.Result != ContentDialogResult.Primary)
                     {
                         e.Cancel = true;
-                        Application.Current.Exit();
+                        LogService.Write("App", "Exit requested (forced update dialog)");
+                        try { Application.Current.Exit(); } catch (Exception ex) { LogService.Write("App", "Exit failed (forced update dialog)", ex); }
                     }
                 };
             }
@@ -3491,12 +3824,16 @@ namespace EricGameLauncher
             if (result == ContentDialogResult.Primary && !string.IsNullOrEmpty(downloadUrl))
             {
                 UpdateService.StartUpdater(downloadUrl);
-                Application.Current.Exit();
+                LogService.Write("App", "Exit requested (update start)");
+                try { Application.Current.Exit(); } catch (Exception ex) { LogService.Write("App", "Exit failed (update start)", ex); }
+            }
             }
         }
 
         private async Task<(Grid contentGrid, double dialogW, double dialogH)> BuildReleaseContentAsync(UpdateService.ReleaseInfo release, bool prependTitle)
         {
+            using (LogService.StartOperation("Update", "BuildReleaseContentAsync"))
+            {
             if (!System.IO.Directory.Exists(ConfigService.SystemCachePath))
                 System.IO.Directory.CreateDirectory(ConfigService.SystemCachePath);
             Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", System.IO.Path.Combine(ConfigService.SystemCachePath, "WebView2"));
@@ -3580,8 +3917,10 @@ namespace EricGameLauncher
 
             return (grid, dialogW, dialogH);
         }
+    }
         private async void VersionText_PointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
+            LogService.Write("App", "VersionText_PointerPressed invoked");
             if (HasUpdate && _pendingUpdate != null)
             {
                 bool isForced = false;
@@ -3596,6 +3935,7 @@ namespace EricGameLauncher
                     isForced = UpdateService.CheckForceUpdateAsync();
                 }
                 await StartUpdateFlowAsync(_pendingUpdate, isForced);
+                LogService.Write("App", "VersionText_PointerPressed started update flow");
             }
         }
     }

@@ -24,7 +24,17 @@ namespace updater.cfgver
                     File.AppendAllText(path, line);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                try
+                {
+                    string fbdir = Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher", "log");
+                    Directory.CreateDirectory(fbdir);
+                    string fb = Path.Combine(fbdir, "updater.cfgver.fallback.log");
+                    File.AppendAllText(fb, ex.ToString() + Environment.NewLine);
+                }
+                catch { }
+            }
         }
 
         [SupportedOSPlatform("windows")]
@@ -65,7 +75,7 @@ namespace updater.cfgver
                     rulesArray = JsonNode.Parse(rulesJson);
                 }
             }
-            catch (Exception ex) { Log($"RulesLoadFailed info={ex.Message}"); return; }
+            catch (Exception ex) { Log($"RulesLoadFailed info={ex}"); return; }
 
             if (rulesArray == null) return;
 
@@ -75,7 +85,7 @@ namespace updater.cfgver
                 string configJson = File.ReadAllText(inputPath);
                 configRoot = JsonNode.Parse(configJson)?.AsObject();
             }
-            catch (Exception ex) { Log($"ConfigReadFailed info={ex.Message}"); return; }
+            catch (Exception ex) { Log($"ConfigReadFailed info={ex}"); return; }
 
             if (configRoot == null) return;
 
@@ -176,7 +186,7 @@ namespace updater.cfgver
                                             int statusValue = normalValue;
                                             if (obj.TryGetPropertyValue(statusField, out var statusNode) && statusNode != null)
                                             {
-                                                try { statusValue = statusNode.GetValue<int>(); } catch { statusValue = normalValue; }
+                                                try { statusValue = statusNode.GetValue<int>(); } catch (Exception ex) { Log($"ParseStatusFailed {ex}"); statusValue = normalValue; }
                                             }
 
                                             if (statusValue != normalValue)
@@ -204,7 +214,7 @@ namespace updater.cfgver
             {
                 File.Copy(inputPath, backupPath, true);
             }
-            catch (Exception ex) { Log($"BackupFailed info={ex.Message}"); return; }
+            catch (Exception ex) { Log($"BackupFailed info={ex}"); return; }
 
             try
             {
@@ -212,7 +222,7 @@ namespace updater.cfgver
                 string newJson = configRoot.ToJsonString(options);
                 File.WriteAllText(inputPath, newJson);
             }
-            catch (Exception ex) { Log($"WriteFailed info={ex.Message}"); }
+            catch (Exception ex) { Log($"WriteFailed info={ex}"); }
             Log($"End duration={sw.ElapsedMilliseconds}ms modified={(migratedAny ? "yes" : "no")}");
         }
     }

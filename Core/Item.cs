@@ -32,6 +32,7 @@ public static class PathHashHelper
 {
     public static string GetPathHash(string path)
     {
+        try { LogService.Write("Item", $"GetPathHash called path={(path==null?"null":path)}"); } catch { }
         if (string.IsNullOrEmpty(path))
             return Guid.NewGuid().ToString("N")[..16];
 
@@ -41,8 +42,9 @@ public static class PathHashHelper
         StringBuilder sb = new();
         for (int i = 0; i < 8; i++)
             sb.Append(hashBytes[i].ToString("x2"));
-
-        return sb.ToString();
+        var res = sb.ToString();
+        try { LogService.Write("Item", $"GetPathHash result={res}"); } catch { }
+        return res;
     }
 
     public static bool VerifyPathHash(string path, string hash) => GetPathHash(path) == hash;
@@ -392,7 +394,9 @@ public class AppItem : INotifyPropertyChanged
         {
             if (_titlePinyin == null && !string.IsNullOrEmpty(_title))
             {
+                try { LogService.Write("Item", $"Computing TitlePinyin for title={_title}"); } catch { }
                 _titlePinyin = TinyPinyin.PinyinHelper.GetPinyin(_title, "").ToLower();
+                try { LogService.Write("Item", $"Computed TitlePinyin={_titlePinyin}"); } catch { }
             }
             return _titlePinyin ?? "";
         }
@@ -405,6 +409,7 @@ public class AppItem : INotifyPropertyChanged
         {
             if (_titlePinyinInitial == null && !string.IsNullOrEmpty(_title))
             {
+                try { LogService.Write("Item", $"Computing TitlePinyinInitial for title={_title}"); } catch { }
                 var chars = _title.ToCharArray();
                 var initials = new StringBuilder();
                 foreach (var c in chars)
@@ -421,6 +426,7 @@ public class AppItem : INotifyPropertyChanged
                     }
                 }
                 _titlePinyinInitial = initials.ToString().ToLower();
+                try { LogService.Write("Item", $"Computed TitlePinyinInitial={_titlePinyinInitial}"); } catch { }
             }
             return _titlePinyinInitial ?? "";
         }
@@ -433,6 +439,7 @@ public class AppItem : INotifyPropertyChanged
         {
             if (_titleEnglishInitial == null && !string.IsNullOrEmpty(_title))
             {
+                try { LogService.Write("Item", $"Computing TitleEnglishInitial for title={_title}"); } catch { }
                 var initials = new StringBuilder();
                 bool lastWasSpace = true;
                 bool lastWasLower = false;
@@ -465,6 +472,7 @@ public class AppItem : INotifyPropertyChanged
                 }
 
                 _titleEnglishInitial = initials.ToString();
+                try { LogService.Write("Item", $"Computed TitleEnglishInitial={_titleEnglishInitial}"); } catch { }
             }
             return _titleEnglishInitial ?? "";
         }
@@ -504,7 +512,7 @@ public class AppItem : INotifyPropertyChanged
                 }
             }
         }
-        catch { }
+        catch (Exception ex) { LogService.Write("App", "GetCustomMenuItems parse failed", ex); }
         return result;
     }
 
@@ -562,6 +570,13 @@ public class AppItem : INotifyPropertyChanged
     protected bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
         if (Equals(field, value)) return false;
+        try
+        {
+            string oldVal = field == null ? "null" : field.ToString() ?? "";
+            string newVal = value == null ? "null" : value.ToString() ?? "";
+            LogService.Write("App", $"SetProperty {propertyName} from={oldVal} to={newVal}");
+        }
+        catch { }
         field = value;
         OnPropertyChanged(propertyName);
         return true;
@@ -603,52 +618,61 @@ public class AppItemDto
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public AlongActionDto? AlongsideAction { get; set; }
 
-    public static AppItemDto FromViewModel(AppItem vm) => new AppItemDto
+    public static AppItemDto FromViewModel(AppItem vm)
     {
-        Id = vm.Id,
-        Status = vm.Status,
-        DeletedAt = vm.DeletedAt,
-        Title = vm.Title,
-        IconPath = !string.IsNullOrEmpty(vm.IconPath) ? Path.GetFileName(vm.IconPath) : null,
-        CustomMenu = vm.CustomMenu,
-        Platform = vm.Platform,
-        MainAction = new ActionDto { Path = vm.ExePath, IsAdmin = vm.IsAdmin },
-        ManagerAction = string.IsNullOrEmpty(vm.MgrPath) ? null
-            : new ActionDto { Path = vm.MgrPath, IsAdmin = vm.IsMgrAdmin },
-        AltAction = (vm.UseAlternativeLaunch || !string.IsNullOrEmpty(vm.AlternativeLaunchCommand))
-            ? new AltActionDto { Enabled = vm.UseAlternativeLaunch, Path = vm.AlternativeLaunchCommand, IsAdmin = vm.IsAltAdmin }
-            : null,
-        AlongsideAction = (vm.RunAlongside || !string.IsNullOrEmpty(vm.AlongsideCommand))
-            ? new AlongActionDto { Enabled = vm.RunAlongside, Path = vm.AlongsideCommand, IsAdmin = vm.IsAlongsideAdmin }
-            : null,
-    };
+        if (vm == null) throw new ArgumentNullException(nameof(vm));
+        try { LogService.Write("App", $"AppItemDto.FromViewModel called id={vm.Id} title={vm.Title}"); } catch { }
+        return new AppItemDto
+        {
+            Id = vm.Id,
+            Status = vm.Status,
+            DeletedAt = vm.DeletedAt,
+            Title = vm.Title,
+            IconPath = !string.IsNullOrEmpty(vm.IconPath) ? Path.GetFileName(vm.IconPath!) : null,
+            CustomMenu = vm.CustomMenu,
+            Platform = vm.Platform,
+            MainAction = new ActionDto { Path = vm.ExePath, IsAdmin = vm.IsAdmin },
+            ManagerAction = string.IsNullOrEmpty(vm.MgrPath) ? null
+                : new ActionDto { Path = vm.MgrPath, IsAdmin = vm.IsMgrAdmin },
+            AltAction = (vm.UseAlternativeLaunch || !string.IsNullOrEmpty(vm.AlternativeLaunchCommand))
+                ? new AltActionDto { Enabled = vm.UseAlternativeLaunch, Path = vm.AlternativeLaunchCommand, IsAdmin = vm.IsAltAdmin }
+                : null,
+            AlongsideAction = (vm.RunAlongside || !string.IsNullOrEmpty(vm.AlongsideCommand))
+                ? new AlongActionDto { Enabled = vm.RunAlongside, Path = vm.AlongsideCommand, IsAdmin = vm.IsAlongsideAdmin }
+                : null,
+        };
+    }
 
-    public AppItem ToViewModel(string iconCachePath) => new AppItem
+    public AppItem ToViewModel(string iconCachePath)
     {
-        ExePath = MainAction?.Path,
-        IsAdmin = MainAction?.IsAdmin ?? false,
-        Id = string.IsNullOrEmpty(Id) ? PathHashHelper.GetPathHash(MainAction?.Path ?? "") : Id,
-        Status = Status,
-        DeletedAt = DeletedAt,
-        Title = Title,
-        IconPath = (string.IsNullOrEmpty(IconPath) || Path.IsPathRooted(IconPath))
-                        ? IconPath
-                        : (IconPath.StartsWith("ico\\", StringComparison.OrdinalIgnoreCase) || IconPath.StartsWith("ico/", StringComparison.OrdinalIgnoreCase))
-                           ? Path.Combine(iconCachePath, Path.GetFileName(IconPath))
-                           : (!IconPath.Contains(Path.DirectorySeparatorChar) && !IconPath.Contains(Path.AltDirectorySeparatorChar))
-                              ? Path.Combine(iconCachePath, IconPath)
-                              : IconPath,
-        CustomMenu = CustomMenu,
-        Platform = Platform,
-        MgrPath = ManagerAction?.Path,
-        IsMgrAdmin = ManagerAction?.IsAdmin ?? false,
-        UseAlternativeLaunch = AltAction?.Enabled ?? false,
-        AlternativeLaunchCommand = AltAction?.Path,
-        IsAltAdmin = AltAction?.IsAdmin ?? false,
-        RunAlongside = AlongsideAction?.Enabled ?? false,
-        AlongsideCommand = AlongsideAction?.Path,
-        IsAlongsideAdmin = AlongsideAction?.IsAdmin ?? false,
-    };
+        try { LogService.Write("App", $"AppItem.ToViewModel called id={Id} title={Title}"); } catch { }
+        return new AppItem
+        {
+            ExePath = MainAction?.Path,
+            IsAdmin = MainAction?.IsAdmin ?? false,
+            Id = string.IsNullOrEmpty(Id) ? PathHashHelper.GetPathHash(MainAction?.Path ?? "") : Id,
+            Status = Status,
+            DeletedAt = DeletedAt,
+            Title = Title,
+            IconPath = (string.IsNullOrEmpty(IconPath) || Path.IsPathRooted(IconPath))
+                            ? IconPath
+                            : (IconPath.StartsWith("ico\\", StringComparison.OrdinalIgnoreCase) || IconPath.StartsWith("ico/", StringComparison.OrdinalIgnoreCase))
+                               ? Path.Combine(iconCachePath, Path.GetFileName(IconPath))
+                               : (!IconPath.Contains(Path.DirectorySeparatorChar) && !IconPath.Contains(Path.AltDirectorySeparatorChar))
+                                  ? Path.Combine(iconCachePath, IconPath)
+                                  : IconPath,
+            CustomMenu = CustomMenu,
+            Platform = Platform,
+            MgrPath = ManagerAction?.Path,
+            IsMgrAdmin = ManagerAction?.IsAdmin ?? false,
+            UseAlternativeLaunch = AltAction?.Enabled ?? false,
+            AlternativeLaunchCommand = AltAction?.Path,
+            IsAltAdmin = AltAction?.IsAdmin ?? false,
+            RunAlongside = AlongsideAction?.Enabled ?? false,
+            AlongsideCommand = AlongsideAction?.Path,
+            IsAlongsideAdmin = AlongsideAction?.IsAdmin ?? false,
+        };
+    }
 
     public class ActionDto
     {
@@ -687,95 +711,119 @@ public static class IconHelper
 
     public static async Task<string?> GetIconPathAsync(string exePath, string itemId, bool forceExtract = false)
     {
-        if (string.IsNullOrEmpty(exePath)) return null;
-        string iconPath = Path.Combine(CachePath, $"{itemId}.png");
-        if (forceExtract && File.Exists(iconPath))
+        using (LogService.StartOperation("Item", "GetIconPathAsync"))
         {
-            try { File.Delete(iconPath); } catch { }
+            if (string.IsNullOrEmpty(exePath)) return null;
+            string iconPath = Path.Combine(CachePath, $"{itemId}.png");
+            if (forceExtract && File.Exists(iconPath))
+            {
+                try { File.Delete(iconPath); } catch (Exception ex) { LogService.Write("App", "Delete icon cache failed", ex); }
+            }
+            if (!forceExtract && File.Exists(iconPath) && new FileInfo(iconPath).Length > 0) return iconPath;
+            return await ExtractAndSaveIconAsync(exePath, itemId);
         }
-        if (!forceExtract && File.Exists(iconPath) && new FileInfo(iconPath).Length > 0) return iconPath;
-        return await ExtractAndSaveIconAsync(exePath, itemId);
     }
 
     public static async Task<string?> ExtractAndSaveIconAsync(string sourcePath, string itemId, bool extractFromLnk = false)
     {
-        try
+        using (LogService.StartOperation("Item", "ExtractAndSaveIconAsync"))
         {
-            if (string.IsNullOrEmpty(sourcePath)) return null;
-            bool isStoreApp = sourcePath.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase);
-
-            string targetPath = sourcePath;
-            int iconIndex = 0;
-
-            if (!isStoreApp)
+            try
             {
-                if (sourcePath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+                LogService.Write("Item", $"ExtractAndSaveIconAsync Start source={sourcePath} itemId={itemId} extractFromLnk={extractFromLnk}");
+                if (string.IsNullOrEmpty(sourcePath)) return null;
+                bool isStoreApp = sourcePath.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase);
+
+                string targetPath = sourcePath;
+                int iconIndex = 0;
+
+                if (!isStoreApp)
                 {
-                    if (!extractFromLnk)
+                    if (sourcePath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
                     {
-                        string? resolvedPath = ShortcutResolver.GetLnkTarget(sourcePath);
-                        if (!string.IsNullOrEmpty(resolvedPath) && File.Exists(resolvedPath)) targetPath = resolvedPath;
-                    }
-                    else
-                    {
-                        var shortcutInfo = ShortcutResolver.GetShortcutInfo(sourcePath);
-                        if (shortcutInfo != null && !string.IsNullOrEmpty(shortcutInfo.IconPath) && File.Exists(shortcutInfo.IconPath)) { targetPath = shortcutInfo.IconPath; iconIndex = shortcutInfo.IconIndex; }
-                    }
-                }
-                else if (sourcePath.EndsWith(".url", StringComparison.OrdinalIgnoreCase))
-                {
-                    var urlInfo = ShortcutResolver.GetUrlFileInfo(sourcePath);
-                    if (urlInfo != null && !string.IsNullOrEmpty(urlInfo.IconPath) && File.Exists(urlInfo.IconPath)) { targetPath = urlInfo.IconPath; iconIndex = urlInfo.IconIndex; }
-                }
-            }
-
-            if (!Directory.Exists(CachePath)) Directory.CreateDirectory(CachePath);
-
-            string savePath = Path.Combine(CachePath, $"{itemId}.png");
-            await ForceDeleteFileAsync(savePath);
-
-            Icon? icon = null;
-            if (isStoreApp)
-            {
-                if (ExtractStoreAppIcon(sourcePath, savePath)) return savePath;
-            }
-            else
-            {
-                string ext = Path.GetExtension(targetPath)?.ToLowerInvariant() ?? "";
-                var imageExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".webp" };
-
-                if (imageExts.Contains(ext))
-                {
-                    try
-                    {
-                        using (var img = System.Drawing.Image.FromFile(targetPath))
+                        if (!extractFromLnk)
                         {
-                            img.Save(savePath, ImageFormat.Png);
+                            string? resolvedPath = ShortcutResolver.GetLnkTarget(sourcePath);
+                            LogService.Write("Item", $"ExtractAndSaveIconAsync resolved lnk target={resolvedPath}");
+                            if (!string.IsNullOrEmpty(resolvedPath) && File.Exists(resolvedPath)) targetPath = resolvedPath;
                         }
-                        await Task.Delay(50);
-                        if (File.Exists(savePath) && new FileInfo(savePath).Length > 0) return savePath;
+                        else
+                        {
+                            var shortcutInfo = ShortcutResolver.GetShortcutInfo(sourcePath);
+                            if (shortcutInfo != null && !string.IsNullOrEmpty(shortcutInfo.IconPath) && File.Exists(shortcutInfo.IconPath)) { targetPath = shortcutInfo.IconPath; iconIndex = shortcutInfo.IconIndex; }
+                            LogService.Write("Item", $"ExtractAndSaveIconAsync shortcutInfo iconPath={shortcutInfo?.IconPath} index={shortcutInfo?.IconIndex}");
+                        }
                     }
-                    catch { }
+                    else if (sourcePath.EndsWith(".url", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var urlInfo = ShortcutResolver.GetUrlFileInfo(sourcePath);
+                        LogService.Write("Item", $"ExtractAndSaveIconAsync urlInfo iconPath={urlInfo?.IconPath} index={urlInfo?.IconIndex}");
+                        if (urlInfo != null && !string.IsNullOrEmpty(urlInfo.IconPath) && File.Exists(urlInfo.IconPath)) { targetPath = urlInfo.IconPath; iconIndex = urlInfo.IconIndex; }
+                    }
                 }
-                else if (ext == ".ico")
+
+                if (!Directory.Exists(CachePath)) Directory.CreateDirectory(CachePath);
+
+                string savePath = Path.Combine(CachePath, $"{itemId}.png");
+                await ForceDeleteFileAsync(savePath);
+
+                Icon? icon = null;
+                if (isStoreApp)
                 {
-                    icon = ExtractLargestIcon(targetPath, iconIndex) ?? Icon.ExtractAssociatedIcon(targetPath);
+                    LogService.Write("Item", $"ExtractAndSaveIconAsync attempting store app extraction for {sourcePath}");
+                    if (ExtractStoreAppIcon(sourcePath, savePath))
+                    {
+                        LogService.Write("Item", $"ExtractAndSaveIconAsync store app icon saved={savePath}");
+                        return savePath;
+                    }
                 }
                 else
                 {
-                    icon = ExtractLargestIcon(targetPath, iconIndex) ?? Icon.ExtractAssociatedIcon(targetPath);
-                }
-            }
+                    string ext = Path.GetExtension(targetPath)?.ToLowerInvariant() ?? "";
+                    var imageExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".webp" };
 
-            if (icon != null)
-            {
-                try { using var bmp = icon.ToBitmap(); bmp.Save(savePath, ImageFormat.Png); } finally { icon.Dispose(); }
-                await Task.Delay(50);
-                if (File.Exists(savePath) && new FileInfo(savePath).Length > 0) return savePath;
+                    if (imageExts.Contains(ext))
+                    {
+                        try
+                        {
+                            using (var img = System.Drawing.Image.FromFile(targetPath))
+                            {
+                                img.Save(savePath, ImageFormat.Png);
+                            }
+                            await Task.Delay(50);
+                            if (File.Exists(savePath) && new FileInfo(savePath).Length > 0)
+                            {
+                                LogService.Write("Item", $"ExtractAndSaveIconAsync saved image icon={savePath}");
+                                return savePath;
+                            }
+                        }
+                        catch (Exception ex) { LogService.Write("Item", "Save image icon failed", ex); }
+                    }
+                    else if (ext == ".ico")
+                    {
+                        icon = ExtractLargestIcon(targetPath, iconIndex) ?? Icon.ExtractAssociatedIcon(targetPath);
+                    }
+                    else
+                    {
+                        icon = ExtractLargestIcon(targetPath, iconIndex) ?? Icon.ExtractAssociatedIcon(targetPath);
+                    }
+                }
+
+                if (icon != null)
+                {
+                    try { using var bmp = icon.ToBitmap(); bmp.Save(savePath, ImageFormat.Png); } finally { icon.Dispose(); }
+                    await Task.Delay(50);
+                    if (File.Exists(savePath) && new FileInfo(savePath).Length > 0)
+                    {
+                        LogService.Write("Item", $"ExtractAndSaveIconAsync saved extracted icon={savePath}");
+                        return savePath;
+                    }
+                }
+                LogService.Write("Item", "ExtractAndSaveIconAsync failed to produce icon");
+                return null;
             }
-            return null;
+            catch (Exception ex) { LogService.Write("Item", "ExtractAndSaveIcon failed", ex); return null; }
         }
-        catch { return null; }
     }
 
     private static bool ExtractStoreAppIcon(string shellPath, string savePath)
@@ -805,8 +853,9 @@ public static class IconHelper
                             return true;
                         }
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
+                        LogService.Write("Item", "ExtractStoreAppIcon: save bitmap failed", ex);
                     }
                     finally { DeleteObject(hBitmap); }
                 }
@@ -835,7 +884,7 @@ public static class IconHelper
                 finally { ILFree(pidl); }
             }
         }
-        catch (Exception) { }
+        catch (Exception ex) { LogService.Write("App", "ExtractStoreAppIcon failed", ex); }
         return false;
     }
 
@@ -941,16 +990,19 @@ public static class IconHelper
                 }
             }
         }
-        catch (Exception) { }
+        catch (Exception ex) { LogService.Write("App", "ExtractLargestIcon failed", ex); }
         return null;
     }
 
     private static async Task ForceDeleteFileAsync(string filePath)
     {
-        if (!File.Exists(filePath)) return;
-        for (int i = 0; i < 3; i++)
+        using (LogService.StartOperation("Item", "ForceDeleteFileAsync"))
         {
-            try { await Task.Run(() => File.Delete(filePath)); return; } catch (Exception) { await Task.Delay(50); }
+            if (!File.Exists(filePath)) return;
+            for (int i = 0; i < 3; i++)
+            {
+                try { await Task.Run(() => File.Delete(filePath)); return; } catch (Exception ex) { LogService.Write("App", "ForceDeleteFile attempt failed", ex); await Task.Delay(50); }
+            }
         }
     }
 }

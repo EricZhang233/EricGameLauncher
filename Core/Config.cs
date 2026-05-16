@@ -66,19 +66,22 @@ public static class ServerConfigManager
 
     public static async Task FetchConfigAsync()
     {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        try
+        using (LogService.StartOperation("Config", "FetchConfigAsync"))
         {
-            LogService.Write("Network", "ServerConfig Fetch Start");
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("EricGameLauncher");
-            var json = await client.GetStringAsync("https://raw.githubusercontent.com/EricZhang233/EricGameLauncher/master/ServerCfg.json");
-            CurrentConfig = JsonSerializer.Deserialize<ServerConfigInfo>(json);
-            LogService.Write("Network", $"ServerConfig Fetch End Duration={sw.ElapsedMilliseconds}ms Size={json?.Length ?? 0}");
-        }
-        catch (Exception ex)
-        {
-            CurrentConfig = null;
-            LogService.Write("Network", $"ServerConfig Fetch Failed Duration={sw.ElapsedMilliseconds}ms Error={ex.Message}");
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                LogService.Write("Network", "ServerConfig Fetch Start");
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("EricGameLauncher");
+                var json = await client.GetStringAsync("https://raw.githubusercontent.com/EricZhang233/EricGameLauncher/master/ServerCfg.json");
+                CurrentConfig = JsonSerializer.Deserialize<ServerConfigInfo>(json);
+                LogService.Write("Network", $"ServerConfig Fetch End Duration={sw.ElapsedMilliseconds}ms Size={json?.Length ?? 0}");
+            }
+            catch (Exception ex)
+            {
+                CurrentConfig = null;
+                LogService.Write("Network", $"ServerConfig Fetch Failed Duration={sw.ElapsedMilliseconds}ms", ex);
+            }
         }
     }
 }
@@ -165,14 +168,14 @@ public static class ConfigService
                     string destFile = Path.Combine(newIconPath, fileName);
                     File.Copy(iconFile, destFile, true);
                 }
-                try { Directory.Delete(oldIconPath, true); } catch (Exception) { }
+                try { Directory.Delete(oldIconPath, true); } catch (Exception ex) { LogService.Write("Config", "Delete old icon path failed", ex); }
             }
 
             CurrentDataPath = newPath;
             SteamHelper.ClearCache();
             LoadConfigData();
         }
-        catch (Exception) { }
+        catch (Exception ex) { LogService.Write("Config", "SwitchStorageMode failed", ex); }
     }
 
     public static Task SwitchStorageModeAsync(bool useSystemPath) => Task.Run(() => SwitchStorageMode(useSystemPath));
@@ -240,6 +243,7 @@ public static class ConfigService
             }
 
             _configData = JsonSerializer.Deserialize<ConfigData>(jsonString) ?? new ConfigData();
+            LogService.Write("Config", $"LoadConfigData deserialized jsonSize={jsonString.Length} items={_configData.Items?.Count ?? 0} recycle={_configData.RecycleBinItems?.Count ?? 0}");
             _configData.Settings ??= new AppSettings();
             _configData.Items ??= [];
             _configData.RecycleBinItems ??= [];
@@ -282,7 +286,7 @@ public static class ConfigService
         }
         catch (Exception ex)
         {
-            LogService.Write("Config", $"LoadConfigData failed: {ex.Message}");
+            LogService.Write("Config", $"LoadConfigData failed", ex);
             if (_configData == null) _configData = new ConfigData();
         }
     }
@@ -314,7 +318,7 @@ public static class ConfigService
                 if (!Directory.Exists(CurrentDataPath)) Directory.CreateDirectory(CurrentDataPath);
                 await File.WriteAllTextAsync(jsonPath, jsonString);
             }
-            catch (Exception ex) { LogService.Write("Config", $"SaveConfigData failed: {ex.Message}"); }
+            catch (Exception ex) { LogService.Write("Config", $"SaveConfigData failed", ex); }
             finally
             {
                 _saveSemaphore.Release();
@@ -326,13 +330,13 @@ public static class ConfigService
     public static bool CloseAfterLaunch
     {
         get => _configData?.Settings?.CloseAfterLaunch ?? false;
-        set { if (_configData?.Settings != null) _configData.Settings.CloseAfterLaunch = value; }
+        set { if (_configData?.Settings != null) { LogService.Write("Config", $"CloseAfterLaunch changed to={value}"); _configData.Settings.CloseAfterLaunch = value; } }
     }
 
     public static double IconSize
     {
         get => _configData?.Settings?.IconSize ?? 118;
-        set { if (_configData?.Settings != null) _configData.Settings.IconSize = value; }
+        set { if (_configData?.Settings != null) { LogService.Write("Config", $"IconSize changed to={value}"); _configData.Settings.IconSize = value; } }
     }
 
     public static string Language
@@ -351,174 +355,190 @@ public static class ConfigService
             }
             return lang;
         }
-        set { if (_configData?.Settings != null) _configData.Settings.Language = value; }
+        set { if (_configData?.Settings != null) { LogService.Write("Config", $"Language set to={value}"); _configData.Settings.Language = value; } }
     }
 
     public static string UpdateChannel
     {
         get => _configData?.Settings?.UpdateChannel ?? "stable";
-        set { if (_configData?.Settings != null) _configData.Settings.UpdateChannel = value; }
+        set { if (_configData?.Settings != null) { LogService.Write("Config", $"UpdateChannel set to={value}"); _configData.Settings.UpdateChannel = value; } }
     }
 
     public static bool IsSystemMode => CurrentDataPath == SystemBasePath;
 
     public static async Task<bool> ReconstructMissingConfigAsync()
     {
-        if (_configData == null) return false;
-
-        var items = _configData.Items ?? [];
-        var recycleItems = _configData.RecycleBinItems ?? [];
-        if (items.Count == 0 && recycleItems.Count == 0) return false;
-
-        bool modified = false;
-        LogService.Write("Config", "Reconstruct Start");
-        foreach (var item in items.Concat(recycleItems))
+        using (LogService.StartOperation("Config", "ReconstructMissingConfigAsync"))
         {
-            bool itemChanged = false;
+            if (_configData == null) return false;
 
-            string? exePath = item.MainAction?.Path;
-            if (string.IsNullOrEmpty(item.Platform) && !string.IsNullOrEmpty(exePath))
+            var items = _configData.Items ?? [];
+            var recycleItems = _configData.RecycleBinItems ?? [];
+            if (items.Count == 0 && recycleItems.Count == 0) return false;
+
+            bool modified = false;
+            LogService.Write("Config", "Reconstruct Start");
+            foreach (var item in items.Concat(recycleItems))
             {
-                try
+                bool itemChanged = false;
+
+                string? exePath = item.MainAction?.Path;
+                if (string.IsNullOrEmpty(item.Platform) && !string.IsNullOrEmpty(exePath))
                 {
-                    var platform = await GamePlatformHelper.DetectPlatformAsync(exePath);
-                    if (platform != null)
+                    try
                     {
-                        item.Platform = platform.PlatformName;
-                        itemChanged = true;
-                        LogService.Write("Config", $"Reconstruct Set platform: {item.Platform} {item.Title}");
+                        var platform = await GamePlatformHelper.DetectPlatformAsync(exePath);
+                        if (platform != null)
+                        {
+                            item.Platform = platform.PlatformName;
+                            itemChanged = true;
+                            LogService.Write("Config", $"Reconstruct Set platform: {item.Platform} {item.Title}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogService.Write("Config", $"Reconstruct Detect platform failed: {item.Title}", ex);
                     }
                 }
-                catch (Exception ex)
-                {
-                    LogService.Write("Config", $"Reconstruct Detect platform failed: {item.Title} {ex.Message}");
-                }
+
+                if (itemChanged) modified = true;
             }
 
-            if (itemChanged) modified = true;
+            if (modified)
+            {
+                SaveConfigData();
+            }
+            LogService.Write("Config", "Reconstruct End");
+            return modified;
         }
-
-        if (modified)
-        {
-            SaveConfigData();
-        }
-        LogService.Write("Config", "Reconstruct End");
-        return modified;
     }
 
     public static void SaveConfig() => SaveConfigData();
 
     public static async Task RefreshGlobalAsync()
     {
-        var sw = Stopwatch.StartNew();
-        LogService.Write("Config", "RefreshGlobal Start");
-        var items = LoadItems();
-        var recycleItems = LoadRecycleBinItems();
-        var allItems = items.Concat(recycleItems).ToList();
-        LogService.Write("Config", $"RefreshGlobal AfterLoadItems {sw.ElapsedMilliseconds}ms");
-        var rebuildTasks = new List<Task>();
-        int successfulRebuilds = 0;
-
-        foreach (var item in allItems)
+        using (LogService.StartOperation("Config", "RefreshGlobalAsync"))
         {
-            if (string.IsNullOrEmpty(item.IconPath) || !File.Exists(item.IconPath))
-            {
-                rebuildTasks.Add(Task.Run(async () =>
-                {
-                    try
-                    {
-                        string? sourcePath = item.ExePath;
-                        string? resolvedPath = null;
+            var sw = Stopwatch.StartNew();
+            LogService.Write("Config", "RefreshGlobal Start");
+            var items = LoadItems();
+            var recycleItems = LoadRecycleBinItems();
+            var allItems = items.Concat(recycleItems).ToList();
+            LogService.Write("Config", $"RefreshGlobal AfterLoadItems {sw.ElapsedMilliseconds}ms");
+            var rebuildTasks = new List<Task>();
+            int successfulRebuilds = 0;
 
-                        if (SteamHelper.ExtractAppIdFromUrl(item.ExePath!) is int)
-                            resolvedPath = SteamHelper.GetExecutableFromSteamUrl(item.ExePath!);
-                        else if (GamePlatformHelper.DetectPlatform(item.ExePath!)?.PlatformName == "Epic Games")
-                            resolvedPath = EpicGamesHelper.GetExecutableFromEpicUrl(item.ExePath!);
-                        else if (!string.IsNullOrEmpty(item.ExePath) &&
-                                    (item.ExePath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) ||
-                                        item.ExePath.EndsWith(".url", StringComparison.OrdinalIgnoreCase)))
+            foreach (var item in allItems)
+            {
+                if (string.IsNullOrEmpty(item.IconPath) || !File.Exists(item.IconPath))
+                {
+                    rebuildTasks.Add(Task.Run(async () =>
+                    {
+                        try
                         {
-                            if (File.Exists(item.ExePath))
+                            string? sourcePath = item.ExePath;
+                            string? resolvedPath = null;
+
+                            if (SteamHelper.ExtractAppIdFromUrl(item.ExePath!) is int)
+                                resolvedPath = SteamHelper.GetExecutableFromSteamUrl(item.ExePath!);
+                            else if (GamePlatformHelper.DetectPlatform(item.ExePath!)?.PlatformName == "Epic Games")
+                                resolvedPath = EpicGamesHelper.GetExecutableFromEpicUrl(item.ExePath!);
+                            else if (!string.IsNullOrEmpty(item.ExePath) &&
+                                        (item.ExePath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) ||
+                                            item.ExePath.EndsWith(".url", StringComparison.OrdinalIgnoreCase)))
                             {
-                                if (item.ExePath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+                                if (File.Exists(item.ExePath))
                                 {
-                                    var info = ShortcutResolver.GetShortcutInfo(item.ExePath);
-                                    if (info != null && !string.IsNullOrEmpty(info.TargetPath))
-                                        resolvedPath = info.TargetPath;
-                                }
-                                else if (item.ExePath.EndsWith(".url", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    var info = ShortcutResolver.GetUrlFileInfo(item.ExePath);
-                                    if (info != null && !string.IsNullOrEmpty(info.TargetPath))
-                                        resolvedPath = info.TargetPath;
+                                    if (item.ExePath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        var info = ShortcutResolver.GetShortcutInfo(item.ExePath);
+                                        if (info != null && !string.IsNullOrEmpty(info.TargetPath))
+                                            resolvedPath = info.TargetPath;
+                                    }
+                                    else if (item.ExePath.EndsWith(".url", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        var info = ShortcutResolver.GetUrlFileInfo(item.ExePath);
+                                        if (info != null && !string.IsNullOrEmpty(info.TargetPath))
+                                            resolvedPath = info.TargetPath;
+                                    }
                                 }
                             }
-                        }
-                        else
-                        {
-                            resolvedPath = item.ExePath;
-                        }
+                            else
+                            {
+                                resolvedPath = item.ExePath;
+                            }
 
-                        string? iconPath = null;
-                        bool resolvedIsStoreApp = !string.IsNullOrEmpty(resolvedPath) &&
-                                                    resolvedPath.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase);
-                        bool sourceIsStoreApp = !string.IsNullOrEmpty(sourcePath) &&
-                                                sourcePath.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase);
+                            string? iconPath = null;
+                            bool resolvedIsStoreApp = !string.IsNullOrEmpty(resolvedPath) &&
+                                                        resolvedPath.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase);
+                            bool sourceIsStoreApp = !string.IsNullOrEmpty(sourcePath) &&
+                                                    sourcePath.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase);
 
-                        if (!string.IsNullOrEmpty(resolvedPath) &&
-                            (resolvedIsStoreApp || File.Exists(resolvedPath)))
-                        {
-                            iconPath = await IconHelper.GetIconPathAsync(resolvedPath, item.Id);
-                            if (string.IsNullOrEmpty(iconPath) &&
-                                !string.IsNullOrEmpty(sourcePath) &&
-                                (sourceIsStoreApp || File.Exists(sourcePath)) &&
-                                sourcePath != resolvedPath)
+                            if (!string.IsNullOrEmpty(resolvedPath) &&
+                                (resolvedIsStoreApp || File.Exists(resolvedPath)))
+                            {
+                                iconPath = await IconHelper.GetIconPathAsync(resolvedPath, item.Id);
+                                if (string.IsNullOrEmpty(iconPath) &&
+                                    !string.IsNullOrEmpty(sourcePath) &&
+                                    (sourceIsStoreApp || File.Exists(sourcePath)) &&
+                                    sourcePath != resolvedPath)
+                                {
+                                    iconPath = await IconHelper.GetIconPathAsync(sourcePath, item.Id);
+                                }
+                            }
+                            else if (!string.IsNullOrEmpty(sourcePath) &&
+                                        (sourceIsStoreApp || File.Exists(sourcePath)))
                             {
                                 iconPath = await IconHelper.GetIconPathAsync(sourcePath, item.Id);
                             }
-                        }
-                        else if (!string.IsNullOrEmpty(sourcePath) &&
-                                    (sourceIsStoreApp || File.Exists(sourcePath)))
-                        {
-                            iconPath = await IconHelper.GetIconPathAsync(sourcePath, item.Id);
-                        }
 
-                        if (!string.IsNullOrEmpty(iconPath))
-                        {
-                            Interlocked.Increment(ref successfulRebuilds);
-                            item.IconPath = iconPath;
+                            if (!string.IsNullOrEmpty(iconPath))
+                            {
+                                Interlocked.Increment(ref successfulRebuilds);
+                                item.IconPath = iconPath;
+                            }
                         }
-                    }
-                    catch { }
-                }));
+                        catch (Exception ex) { LogService.Write("Config", "RefreshGlobal rebuild task failed", ex); }
+                    }));
+                }
             }
-        }
 
-        if (rebuildTasks.Any())
-        {
-            LogService.Write("Config", $"RefreshGlobal BeforeRebuildAwait {sw.ElapsedMilliseconds}ms");
-            await Task.WhenAll(rebuildTasks);
-            LogService.Write("Config", $"RefreshGlobal AfterRebuildAwait {sw.ElapsedMilliseconds}ms");
-            if (successfulRebuilds > 0)
+            if (rebuildTasks.Any())
             {
-                SaveItems(items, recycleItems, false);
+                LogService.Write("Config", $"RefreshGlobal BeforeRebuildAwait {sw.ElapsedMilliseconds}ms");
+                await Task.WhenAll(rebuildTasks);
+                LogService.Write("Config", $"RefreshGlobal AfterRebuildAwait {sw.ElapsedMilliseconds}ms");
+                if (successfulRebuilds > 0)
+                {
+                    SaveItems(items, recycleItems, false);
+                }
             }
-        }
 
-        DataChanged?.Invoke();
-        LogService.Write("Config", $"RefreshGlobal AfterDataChanged {sw.ElapsedMilliseconds}ms");
+            DataChanged?.Invoke();
+            LogService.Write("Config", $"RefreshGlobal AfterDataChanged {sw.ElapsedMilliseconds}ms");
+        }
     }
 
     public static (int X, int Y, int Width, int Height) GetWindowBounds()
     {
+        try { LogService.Write("Config", "GetWindowBounds called"); } catch { }
         var bounds = _configData?.Settings?.WindowBounds;
-        if (bounds != null && bounds.Length == 4) return (bounds[0], bounds[1], bounds[2], bounds[3]);
+        if (bounds != null && bounds.Length == 4)
+        {
+            try { LogService.Write("Config", $"GetWindowBounds returning x={bounds[0]} y={bounds[1]} w={bounds[2]} h={bounds[3]}"); } catch { }
+            return (bounds[0], bounds[1], bounds[2], bounds[3]);
+        }
+        try { LogService.Write("Config", "GetWindowBounds returning default"); } catch { }
         return (-1, -1, 950, 650);
     }
 
     public static void SetWindowBounds(int x, int y, int width, int height)
     {
+        try { LogService.Write("Config", $"SetWindowBounds called x={x} y={y} w={width} h={height}"); } catch { }
         if (_configData?.Settings != null)
+        {
             _configData.Settings.WindowBounds = new int[] { x, y, width, height };
+            try { LogService.Write("Config", "SetWindowBounds applied"); } catch { }
+        }
     }
 }

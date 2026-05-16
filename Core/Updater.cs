@@ -35,53 +35,63 @@ public class UpdateService
 
     public static async Task<ReleaseInfo?> GetLatestReleaseAsync()
     {
-        try
+        using (LogService.StartOperation("Update", "GetLatestReleaseAsync"))
         {
-            if (!client.DefaultRequestHeaders.Contains("User-Agent"))
-                client.DefaultRequestHeaders.Add("User-Agent", "EricGameLauncher-Updater");
-            if (!client.DefaultRequestHeaders.Contains("Accept"))
-                client.DefaultRequestHeaders.Add("Accept", "application/vnd.github.v3.html+json");
+            try
+            {
+                if (!client.DefaultRequestHeaders.Contains("User-Agent"))
+                    client.DefaultRequestHeaders.Add("User-Agent", "EricGameLauncher-Updater");
+                if (!client.DefaultRequestHeaders.Contains("Accept"))
+                    client.DefaultRequestHeaders.Add("Accept", "application/vnd.github.v3.html+json");
 
-            var releases = await client.GetFromJsonAsync<List<ReleaseInfo>>(AllReleasesApiUrl);
-            if (releases == null || releases.Count == 0) return null;
+                var releases = await client.GetFromJsonAsync<List<ReleaseInfo>>(AllReleasesApiUrl);
+                LogService.Write("Update", $"GetLatestReleaseAsync fetched releasesCount={(releases?.Count ?? 0)}");
+                if (releases == null || releases.Count == 0) return null;
 
-            var sortedReleases = releases
-                .OrderByDescending(r =>
-                {
-                    var m = Regex.Match(r.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
-                    return m.Success ? NormalizeVersion(m.Value) : new Version(0, 0, 0);
-                })
-                .ToList();
-
-            return MergeReleases(sortedReleases);
+                var sortedReleases = releases
+                    .OrderByDescending(r =>
+                    {
+                        var m = Regex.Match(r.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
+                        return m.Success ? NormalizeVersion(m.Value) : new Version(0, 0, 0);
+                    })
+                    .ToList();
+                var merged = MergeReleases(sortedReleases);
+                LogService.Write("Update", $"GetLatestReleaseAsync mergedTag={(merged?.tag_name ?? "null")}");
+                return merged;
+            }
+            catch (Exception ex) { LogService.Write("Update", "GetLatestReleaseAsync failed", ex); return null; }
         }
-        catch { return null; }
     }
 
     public static async Task<ReleaseInfo?> GetLatestStableReleaseAsync()
     {
-        try
+        using (LogService.StartOperation("Update", "GetLatestStableReleaseAsync"))
         {
-            if (!client.DefaultRequestHeaders.Contains("User-Agent"))
-                client.DefaultRequestHeaders.Add("User-Agent", "EricGameLauncher-Updater");
-            if (!client.DefaultRequestHeaders.Contains("Accept"))
-                client.DefaultRequestHeaders.Add("Accept", "application/vnd.github.v3.html+json");
+            try
+            {
+                if (!client.DefaultRequestHeaders.Contains("User-Agent"))
+                    client.DefaultRequestHeaders.Add("User-Agent", "EricGameLauncher-Updater");
+                if (!client.DefaultRequestHeaders.Contains("Accept"))
+                    client.DefaultRequestHeaders.Add("Accept", "application/vnd.github.v3.html+json");
 
-            var releases = await client.GetFromJsonAsync<List<ReleaseInfo>>(AllReleasesApiUrl);
-            if (releases == null || releases.Count == 0) return null;
+                var releases = await client.GetFromJsonAsync<List<ReleaseInfo>>(AllReleasesApiUrl);
+                LogService.Write("Update", $"GetLatestStableReleaseAsync fetched releasesCount={(releases?.Count ?? 0)}");
+                if (releases == null || releases.Count == 0) return null;
 
-            var sortedReleases = releases
-                .Where(r => !r.prerelease)
-                .OrderByDescending(r =>
-                {
-                    var m = Regex.Match(r.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
-                    return m.Success ? NormalizeVersion(m.Value) : new Version(0, 0, 0);
-                })
-                .ToList();
-
-            return MergeReleases(sortedReleases);
+                var sortedReleases = releases
+                    .Where(r => !r.prerelease)
+                    .OrderByDescending(r =>
+                    {
+                        var m = Regex.Match(r.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
+                        return m.Success ? NormalizeVersion(m.Value) : new Version(0, 0, 0);
+                    })
+                    .ToList();
+                var merged = MergeReleases(sortedReleases);
+                LogService.Write("Update", $"GetLatestStableReleaseAsync mergedTag={(merged?.tag_name ?? "null")}");
+                return merged;
+            }
+            catch (Exception ex) { LogService.Write("Update", "GetLatestStableReleaseAsync failed", ex); return null; }
         }
-        catch { return null; }
     }
 
     private static ReleaseInfo? MergeReleases(List<ReleaseInfo> sortedReleases)
@@ -94,6 +104,8 @@ public class UpdateService
             var m = Regex.Match(r.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
             return m.Success && NormalizeVersion(m.Value) > currentVersion;
         }).ToList();
+
+        LogService.Write("Update", $"MergeReleases found sorted={sortedReleases.Count} newerReleases={newerReleases.Count}");
 
         if (newerReleases.Count <= 1)
             return sortedReleases.FirstOrDefault();
@@ -110,6 +122,8 @@ public class UpdateService
             string rBodyHtml = !string.IsNullOrEmpty(r.body_html) ? r.body_html : r.body;
             mergedBodyHtml += $"<hr/><h2>{r.name}</h2>{rBodyHtml}";
         }
+
+        LogService.Write("Update", $"MergeReleases merged latest={latest.tag_name} olderCount={olderNew.Count}");
 
         return new ReleaseInfo
         {
@@ -144,12 +158,13 @@ public class UpdateService
                 return currentV < minV;
             }
         }
-        catch { }
+        catch (Exception ex) { LogService.Write("Update", "CheckForceUpdateAsync failed", ex); }
         return false;
     }
 
     public static Version NormalizeVersion(string versionStr)
     {
+        try { LogService.Write("Update", $"NormalizeVersion called versionStr={versionStr}"); } catch { }
         if (Version.TryParse(versionStr, out Version? v) && v != null)
         {
             int major = v.Major >= 0 ? v.Major : 0;
@@ -158,32 +173,36 @@ public class UpdateService
             int revision = v.Revision >= 0 ? v.Revision : 0;
             return new Version(major, minor, build, revision);
         }
+        try { LogService.Write("Update", "NormalizeVersion returning default 0.0.0.0"); } catch { }
         return new Version(0, 0, 0, 0);
     }
 
     public static async Task<ReleaseInfo?> CheckForUpdateAsync(string channel = "stable")
     {
-        var sw = Stopwatch.StartNew();
-        try
+        using (LogService.StartOperation("Update", "CheckForUpdateAsync"))
         {
-            LogService.Write("Update", $"CheckForUpdate Start channel={channel} currentVer={AppVersion.Version}");
-            var release = await GetReleaseAsync(channel);
-            if (release == null || string.IsNullOrEmpty(release.tag_name)) return null;
+            var sw = Stopwatch.StartNew();
+            try
+            {
+                LogService.Write("Update", $"CheckForUpdate Start channel={channel} currentVer={AppVersion.Version}");
+                var release = await GetReleaseAsync(channel);
+                if (release == null || string.IsNullOrEmpty(release.tag_name)) return null;
 
-            var match = Regex.Match(release.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
-            if (!match.Success) return null;
+                var match = Regex.Match(release.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
+                if (!match.Success) return null;
 
-            Version latestVersion = NormalizeVersion(match.Value);
-            Version currentVersion = NormalizeVersion(AppVersion.Version);
+                Version latestVersion = NormalizeVersion(match.Value);
+                Version currentVersion = NormalizeVersion(AppVersion.Version);
 
-            var result = latestVersion > currentVersion ? release : null;
-            LogService.Write("Update", $"CheckForUpdate End hasUpdate={(result != null)} targetVer={release.tag_name} duration={sw.ElapsedMilliseconds}ms");
-            return result;
-        }
-        catch (Exception ex)
-        {
-            LogService.Write("Update", $"CheckForUpdate Failed: duration={sw.ElapsedMilliseconds}ms error={ex.Message}");
-            return null;
+                var result = latestVersion > currentVersion ? release : null;
+                LogService.Write("Update", $"CheckForUpdate End hasUpdate={(result != null)} targetVer={release.tag_name} duration={sw.ElapsedMilliseconds}ms");
+                return result;
+            }
+            catch (Exception ex)
+            {
+                LogService.Write("Update", $"CheckForUpdate Failed: duration={sw.ElapsedMilliseconds}ms", ex);
+                return null;
+            }
         }
     }
 
@@ -231,7 +250,7 @@ public class UpdateService
         }
         catch (Exception ex)
         {
-            LogService.Write("Update", $"StartUpdater Failed: duration={sw.ElapsedMilliseconds}ms error={ex.Message}");
+            LogService.Write("Update", $"StartUpdater Failed: duration={sw.ElapsedMilliseconds}ms", ex);
         }
     }
 }
