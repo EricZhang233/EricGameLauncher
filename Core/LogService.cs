@@ -1,8 +1,13 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Diagnostics;
+using System.Text;
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Threading;
+using System.Threading.Channels;
+using System.Threading.Tasks;
 
 namespace EricGameLauncher;
 
@@ -10,16 +15,14 @@ internal static class LogService
 {
     private static readonly object _lock = new();
     private static int _startupRefCount = 0;
-    private const long MaxLogFileBytes = 5 * 1024 * 1024; // 5 MB
+    private const long MaxLogFileBytes = 5 * 1024 * 1024;
 
     private static string LogDir => Path.Combine(ConfigService.SystemCachePath, "log");
+    private static string LogFilePath => Path.Combine(LogDir, "app.log");
 
     internal static void StartupEnter()
     {
-        lock (_lock)
-        {
-            _startupRefCount++;
-        }
+        lock (_lock) { _startupRefCount++; }
     }
 
     internal static void StartupExit()
@@ -31,58 +34,85 @@ internal static class LogService
         }
     }
 
-    private static bool IsStartupActive
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return _startupRefCount > 0;
-            }
-        }
-    }
-
     internal enum LogLevel { Debug, Info, Warn, Error }
 
-    internal static void Write(string tag, string message, Exception? ex = null, string? operationId = null, LogLevel level = LogLevel.Info, [CallerMemberName] string caller = "", [CallerFilePath] string callerFile = "", [CallerLineNumber] int callerLine = 0)
+    private sealed class LogEntry
+    {
+        public DateTime Timestamp;
+        public string? Tag;
+        public string? Message;
+        public Exception? Exception;
+        public string? OperationId;
+        public LogLevel Level;
+        public string? Caller;
+        public string? CallerFile;
+        public int CallerLine;
+    }
+
+    private static readonly ConcurrentQueue<LogEntry> _entryPool = new();
+
+    private static LogEntry RentEntry()
+    {
+        if (_entryPool.TryDequeue(out var e)) return e;
+        return new LogEntry();
+    }
+
+    private static void ReturnEntry(LogEntry e)
+    {
+        e.Timestamp = default;
+        e.Tag = null;
+        e.Message = null;
+        e.Exception = null;
+        e.OperationId = null;
+        e.Level = default;
+        e.Caller = null;
+        e.CallerFile = null;
+        e.CallerLine = 0;
+        _entryPool.Enqueue(e);
+    }
+
+    private static readonly Channel<LogEntry> _channel;
+    private static readonly CancellationTokenSource _cts = new();
+    private static readonly Task _writerTask;
+
+    static LogService()
+    {
+        var options = new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = false
+        };
+        _channel = Channel.CreateUnbounded<LogEntry>(options);
+        _writerTask = Task.Run(WriteLoop);
+    }
+
+    internal static void Write(
+        string tag,
+        string message,
+        Exception? ex = null,
+        string? operationId = null,
+        LogLevel level = LogLevel.Info,
+        [CallerMemberName] string caller = "",
+        [CallerFilePath] string callerFile = "",
+        [CallerLineNumber] int callerLine = 0)
     {
         try
         {
             if (string.IsNullOrEmpty(tag)) tag = "LOG";
             if (message == null) message = string.Empty;
-            Directory.CreateDirectory(LogDir);
+
             string callerFileName = string.IsNullOrEmpty(callerFile) ? string.Empty : Path.GetFileName(callerFile);
-            string exText = string.Empty;
-            if (ex != null)
-            {
-                try
-                {
-                    exText = $" Exception={ex.GetType().FullName}:{ex.Message} Stack={ex.StackTrace}";
-                }
-                catch { }
-            }
-            string meta = $"{callerFileName}:{callerLine}.{caller}";
-            string lvl = level.ToString().ToUpperInvariant();
-            string op = string.IsNullOrEmpty(operationId) ? string.Empty : $" op={operationId}";
-            string line = $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}Z {tag}/{lvl}] {meta}{op} | {message}{exText}{Environment.NewLine}";
-            string fileName;
-            if (string.Equals(callerFileName, "LogService.cs", StringComparison.OrdinalIgnoreCase))
-            {
-                fileName = "logmgr.log";
-            }
-            else
-            {
-                fileName = ResolveLogFile(tag);
-            }
-            string modulePath = Path.Combine(LogDir, fileName);
-            RotateIfNeeded(modulePath);
-            WriteLine(modulePath, line);
-            if (IsStartupActive && !string.Equals(fileName, "startup.log", StringComparison.OrdinalIgnoreCase))
-            {
-                string startupPath = Path.Combine(LogDir, "startup.log");
-                RotateIfNeeded(startupPath);
-                WriteLine(startupPath, line);
-            }
+            var entry = RentEntry();
+            entry.Timestamp = DateTime.UtcNow;
+            entry.Tag = tag;
+            entry.Message = message;
+            entry.Exception = ex;
+            entry.OperationId = operationId;
+            entry.Level = level;
+            entry.Caller = caller;
+            entry.CallerFile = callerFileName;
+            entry.CallerLine = callerLine;
+            _channel.Writer.TryWrite(entry);
         }
         catch { }
     }
@@ -115,6 +145,77 @@ internal static class LogService
         return new OperationTimer(tag, name, operationId);
     }
 
+    private static async Task WriteLoop()
+    {
+        try { Directory.CreateDirectory(LogDir); } catch { }
+
+        StreamWriter? writer = null;
+
+        try
+        {
+            while (await _channel.Reader.WaitToReadAsync(_cts.Token))
+            {
+                if (writer == null)
+                {
+                    RotateIfNeeded(LogFilePath);
+                    writer = new StreamWriter(LogFilePath, append: true) { AutoFlush = false };
+                }
+
+                var sb = new StringBuilder(512);
+                while (_channel.Reader.TryRead(out var entry))
+                {
+                    sb.Clear();
+                    sb.Append('[');
+                    sb.Append(entry.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+                    sb.Append("Z ");
+                    sb.Append(entry.Tag);
+                    sb.Append('/');
+                    sb.Append(entry.Level.ToString().ToUpperInvariant());
+                    sb.Append("] ");
+                    sb.Append(entry.CallerFile);
+                    sb.Append(':');
+                    sb.Append(entry.CallerLine);
+                    sb.Append('.');
+                    sb.Append(entry.Caller);
+                    if (!string.IsNullOrEmpty(entry.OperationId))
+                    {
+                        sb.Append(" op=");
+                        sb.Append(entry.OperationId);
+                    }
+                    sb.Append(" | ");
+                    sb.Append(entry.Message);
+                    if (entry.Exception != null)
+                    {
+                        try
+                        {
+                            sb.Append(" Exception=");
+                            sb.Append(entry.Exception.GetType().FullName);
+                            sb.Append(':');
+                            sb.Append(entry.Exception.Message);
+                            sb.Append(" Stack=");
+                            sb.Append(entry.Exception.StackTrace);
+                        }
+                        catch { }
+                    }
+
+                    await writer.WriteLineAsync(sb.ToString());
+                    // return pooled entry
+                    try { ReturnEntry(entry); } catch { }
+                }
+
+                await writer.FlushAsync();
+            }
+        }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            if (writer != null)
+            {
+                try { await writer.DisposeAsync(); } catch { }
+            }
+        }
+    }
+
     private static void RotateIfNeeded(string path)
     {
         try
@@ -128,33 +229,11 @@ internal static class LogService
         catch { }
     }
 
-    private static string ResolveLogFile(string tag)
+    internal static void FlushAndStop()
     {
-        string t = tag.ToLowerInvariant();
-        return t switch
-        {
-            "startup" => "startup.log",
-            "update" => "update.log",
-            "scan" => "scan.log",
-            "network" => "network.log",
-            "config" => "config.log",
-            "ui" => "ui.log",
-            "platform" => "platform.log",
-            "item" => "item.log",
-            "shortcut" => "shortcut.log",
-            "shell" => "shell.log",
-            "run" => "run.log",
-            "i18n" => "i18n.log",
-            // default application-wide log
-            _ => "app.log"
-        };
-    }
-
-    private static void WriteLine(string path, string line)
-    {
-        lock (_lock)
-        {
-            File.AppendAllText(path, line);
-        }
+        _channel.Writer.Complete();
+        _cts.Cancel();
+        try { _writerTask.Wait(TimeSpan.FromSeconds(3)); } catch { }
+        try { _writerTask.Dispose(); } catch { }
     }
 }
