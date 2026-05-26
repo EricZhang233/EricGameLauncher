@@ -50,6 +50,8 @@ announcements:
       由于用户环境中配置文件不尽相同，我们无法提供自动迁移工具。请您更新此版本后，手动重新配置您的设置。
       你可以在github中的历史release中下载1.0.20.1版本的安装包，以便继续使用旧版本，直到你准备好迁移到新版本。但请注意，旧版本将不再接收更新和支持。
       我们建议您尽快迁移到新版本，以享受更好的性能和更多的功能。感谢您的理解和支持！
+
+      1.0.20.1版本下载：https://github.com/EricZhang233/EricGameLauncher/releases/tag/1.0.20.1
     body_en: |
       After updating to version 1.1.0, there will be a significant change in the configuration file format. Please note the following:
       The old version of the configuration file will no longer be compatible.
@@ -57,6 +59,8 @@ announcements:
       Due to the varying configurations in user environments, we are unable to provide an automatic migration tool. Please manually reconfigure your settings after updating to this version.
       You can download the installation package for version 1.0.20.1 from our GitHub releases page to continue using the old version until you are ready to migrate to the new version. Please note that the old version will no longer receive updates or support.
       We recommend migrating to the new version as soon as possible to enjoy improved performance and additional features. Thank you for your understanding and support!
+      
+      Download for version 1.0.20.1: https://github.com/EricZhang233/EricGameLauncher/releases/tag/1.0.20.1
     time: "2026-05-26T00:00:00Z"
     position: normal
     visible: true
