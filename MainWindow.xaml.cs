@@ -24,6 +24,7 @@ namespace EricGameLauncher
         private ObservableCollection<AppItem> _allItems = new();
         private ObservableCollection<AppItem> _recycleItems = new();
         private ObservableCollection<AppItem> _viewItems = new();
+        private ObservableCollection<AnnouncementListItem> _announcementItems = new();
         private AppItem? _currentEditingItem = null;
         private bool _isNewItemMode = false;
         private ObservableCollection<AppItem>? _tempOrderCollection;
@@ -227,12 +228,15 @@ namespace EricGameLauncher
             this.SetTitleBar(TitleBarGrid);
 
             ConfigService.Initialize();
+            ServerConfigManager.LoadReadIds();
 
             I18n.Load(ConfigService.Language);
             I18n.LanguageChanged += () =>
             {
                 DispatcherQueue.TryEnqueue(() => ApplyLocalization());
             };
+
+            ServerConfigManager.AnnouncementsUpdated += OnAnnouncementsUpdated;
 
             ConfigService.IconSize = ConfigService.IconSize;
             ConfigService.DataChanged += () =>
@@ -247,6 +251,7 @@ namespace EricGameLauncher
 
             LoadSettings();
             ApplyLocalization();
+            RefreshAnnouncementList();
 
             _hWnd = WindowNative.GetWindowHandle(this);
             _oldWndProc = SetWindowLongPtr(_hWnd, GWLP_WNDPROC, Marshal.GetFunctionPointerForDelegate(_wndProcDelegate = new WndProc(WindowProcess)));
@@ -592,6 +597,7 @@ namespace EricGameLauncher
             using (LogService.StartOperation("App", "Shutdown"))
             {
                 LogService.Write("App", "MainWindow_Closed Start");
+                ServerConfigManager.AnnouncementsUpdated -= OnAnnouncementsUpdated;
                 if (_oldWndProc != IntPtr.Zero)
                 {
                     SetWindowLongPtr(_hWnd, GWLP_WNDPROC, _oldWndProc);
@@ -3163,6 +3169,98 @@ namespace EricGameLauncher
             catch (Exception ex) { LogService.Write("App", "SearchFlyout_Closing failed", ex); }
         }
 
+        private void AnnouncementFlyout_Opened(object sender, object e)
+        {
+            try
+            {
+                RefreshAnnouncementList();
+                LogService.Write("Announcement", "Announcement flyout opened");
+            }
+            catch (Exception ex) { LogService.Write("Announcement", "AnnouncementFlyout_Opened failed", ex); }
+        }
+
+        private void AnnouncementsListView_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            try
+            {
+                if (e.ClickedItem is not AnnouncementListItem item) return;
+
+                foreach (var row in _announcementItems)
+                {
+                    if (!ReferenceEquals(row, item) && row.IsExpanded)
+                    {
+                        row.IsExpanded = false;
+                    }
+                }
+
+                item.IsExpanded = !item.IsExpanded;
+
+                if (!item.IsRead)
+                {
+                    ServerConfigManager.MarkAsRead(item.Id, notify: false);
+                    item.IsRead = true;
+                }
+
+                int unreadCount = _announcementItems.Count(x => !x.IsRead);
+                UpdateAnnouncementButtonIndicator(unreadCount);
+                LogService.Write("Announcement", $"Announcement clicked id={item.Id}");
+            }
+            catch (Exception ex) { LogService.Write("Announcement", "AnnouncementsListView_ItemClick failed", ex); }
+        }
+
+        private void OnAnnouncementsUpdated()
+        {
+            try
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    RefreshAnnouncementList();
+                });
+            }
+            catch (Exception ex) { LogService.Write("Announcement", "OnAnnouncementsUpdated failed", ex); }
+        }
+
+        private void RefreshAnnouncementList()
+        {
+            try
+            {
+                var activeAnnouncements = ServerConfigManager.GetActiveAnnouncements();
+                _announcementItems = new ObservableCollection<AnnouncementListItem>(activeAnnouncements.Select(AnnouncementListItem.FromAnnouncement));
+
+                if (AnnouncementsListView != null)
+                {
+                    AnnouncementsListView.ItemsSource = _announcementItems;
+                    AnnouncementsListView.Visibility = _announcementItems.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+                }
+
+                if (AnnouncementsEmptyText != null)
+                {
+                    AnnouncementsEmptyText.Visibility = _announcementItems.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
+                }
+
+                int unreadCount = _announcementItems.Count(x => !x.IsRead);
+                UpdateAnnouncementButtonIndicator(unreadCount);
+                ToolTipService.SetToolTip(AnnouncementButton, I18n.T("Menu_Announcements"));
+
+                LogService.Write("Announcement", $"Announcement list refreshed total={_announcementItems.Count} unread={unreadCount}");
+            }
+            catch (Exception ex) { LogService.Write("Announcement", "RefreshAnnouncementList failed", ex); }
+        }
+
+        private void UpdateAnnouncementButtonIndicator(int unreadCount)
+        {
+            if (AnnouncementButtonIcon == null) return;
+
+            if (unreadCount > 0)
+            {
+                AnnouncementButtonIcon.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 196, 43, 28));
+            }
+            else
+            {
+                AnnouncementButtonIcon.ClearValue(FontIcon.ForegroundProperty);
+            }
+        }
+
         private void SearchFlyout_Closing(Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase sender, Microsoft.UI.Xaml.Controls.Primitives.FlyoutBaseClosingEventArgs args)
         {
             try
@@ -3690,6 +3788,8 @@ namespace EricGameLauncher
         {
             try
             {
+                AnnouncementsTitleText.Text = I18n.T("Announcements_Title");
+                AnnouncementsEmptyText.Text = I18n.T("Announcements_None");
                 ToolTipService.SetToolTip(SearchButton, I18n.T("TitleBar_Search"));
                 SearchBoxFlyout.PlaceholderText = I18n.T("TitleBar_SearchPlaceholder");
                 ToolTipService.SetToolTip(BtnMore, I18n.T("TitleBar_More"));
@@ -3862,6 +3962,7 @@ namespace EricGameLauncher
 
                 if (MigrationTitle != null) MigrationTitle.Text = I18n.T("Migration_OverlayTitle");
                 if (MigrationSubTitle != null) MigrationSubTitle.Text = I18n.T("Migration_OverlaySubTitle");
+                RefreshAnnouncementList();
             }
             catch (Exception ex)
             {

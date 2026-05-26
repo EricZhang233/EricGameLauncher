@@ -1,11 +1,13 @@
 ﻿using System;
 using System.IO;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Nodes;
+using System.Linq;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Channels;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
 using System.Runtime.Versioning;
 
@@ -39,9 +41,12 @@ namespace updater.cfgver
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             Log($"Start argsCount={args.Length}");
+            if (TryHandleCommandMode(args)) return;
             if (args.Length == 0)
             {
                 Console.WriteLine("Usage: updater.cfgver.exe <config_path>");
+                Console.WriteLine("       updater.cfgver.exe --run-bat <path> [--args <args>] [--workdir <dir>] [--wait]");
+                Console.WriteLine("       updater.cfgver.exe --run-cmd <command> [--workdir <dir>] [--wait]");
                 Log("InvalidArgs");
                 return;
             }
@@ -60,94 +65,109 @@ namespace updater.cfgver
                 return;
             }
 
-            JsonNode? rulesArray = null;
+            List<Dictionary<string, object>> rulesArray = new();
             try
             {
                 var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-                using var stream = assembly.GetManifestResourceStream("updater.cfgver.migration_rules.json");
+                using var stream = assembly.GetManifestResourceStream("updater.cfgver.migration_rules.yaml");
                 if (stream != null)
                 {
                     using var reader = new StreamReader(stream);
-                    string rulesJson = reader.ReadToEnd();
-                    rulesArray = JsonNode.Parse(rulesJson);
+                    string rulesYaml = reader.ReadToEnd();
+                    var deserializer = new DeserializerBuilder()
+                        .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                        .Build();
+                    var yamlObj = deserializer.Deserialize<object>(rulesYaml);
+                    var normalized = NormalizeYamlObject(yamlObj) as List<object>;
+                    if (normalized != null)
+                    {
+                        rulesArray = normalized
+                            .OfType<Dictionary<string, object>>()
+                            .ToList();
+                    }
                 }
             }
             catch (Exception ex) { Log($"RulesLoadFailed info={ex}"); return; }
 
-            if (rulesArray == null) return;
+            if (rulesArray.Count == 0) return;
 
-            JsonObject? configRoot;
+            Dictionary<string, object>? configRoot;
             try
             {
-                string configJson = File.ReadAllText(inputPath);
-                configRoot = JsonNode.Parse(configJson)?.AsObject();
+                string configYaml = File.ReadAllText(inputPath);
+                var deserializer = new DeserializerBuilder()
+                    .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                    .Build();
+                var yamlObj = deserializer.Deserialize<object>(configYaml);
+                configRoot = NormalizeYamlObject(yamlObj) as Dictionary<string, object>;
             }
             catch (Exception ex) { Log($"ConfigReadFailed info={ex}"); return; }
 
             if (configRoot == null) return;
 
             int currentVersion = 1;
-            if (configRoot.TryGetPropertyValue("Version", out var verNode) && verNode != null)
-            {
-                currentVersion = verNode.GetValue<int>();
-            }
+            if (configRoot.TryGetValue("Version", out var verObj))
+                currentVersion = GetInt(verObj, 1);
 
             bool migratedAny = false;
             int startVersion = currentVersion;
 
             while (true)
             {
-                JsonNode? matchingRule = null;
-                if (rulesArray is JsonArray arr)
+                Dictionary<string, object>? matchingRule = null;
+                foreach (var rule in rulesArray)
                 {
-                    foreach (var rule in arr)
+                    if (TryGetInt(rule, "From", out var fromVersion) && fromVersion == currentVersion)
                     {
-                        if (rule?["From"]?.GetValue<int>() == currentVersion)
-                        {
-                            matchingRule = rule;
-                            break;
-                        }
+                        matchingRule = rule;
+                        break;
                     }
                 }
 
                 if (matchingRule == null) break;
 
-                int nextVersion = matchingRule["To"]!.GetValue<int>();
+                int nextVersion = GetInt(matchingRule["To"], currentVersion);
 
-                var transformations = matchingRule["Transformations"]?.AsArray();
-                if (transformations != null && configRoot.TryGetPropertyValue("items", out var itemsNode) && itemsNode is JsonArray itemsArr)
+                if (TryGetList(matchingRule, "Commands", out var commands))
+                {
+                    foreach (var cmd in commands)
+                    {
+                        if (cmd is not Dictionary<string, object> cmdObj) continue;
+                        ExecuteCommandDict(cmdObj);
+                    }
+                }
+
+                if (TryGetList(matchingRule, "Transformations", out var transformations) && TryGetList(configRoot, "items", out var itemsArr))
                 {
                     foreach (var itemNode in itemsArr)
                     {
-                        if (itemNode is JsonObject itemObj)
+                        if (itemNode is Dictionary<string, object> itemObj)
                         {
                             foreach (var tf in transformations)
                             {
-                                if (tf is not JsonObject tfObj) continue;
-                                string tfType = tfObj["Type"]?.GetValue<string>() ?? "";
+                                if (tf is not Dictionary<string, object> tfObj) continue;
+                                string tfType = GetString(tfObj, "Type");
 
                                 if (tfType == "MoveAndGroup")
                                 {
-                                    string targetObjName = tfObj["Target"]?.GetValue<string>() ?? "";
-                                    var sourceFields = tfObj["SourceFields"]?.AsObject();
+                                    string targetObjName = GetString(tfObj, "Target");
+                                    if (!TryGetDict(tfObj, "SourceFields", out var sourceFields)) continue;
 
-                                    if (sourceFields != null && !string.IsNullOrEmpty(targetObjName))
+                                    if (!string.IsNullOrEmpty(targetObjName))
                                     {
-                                        JsonObject newObj = new JsonObject();
+                                        var newObj = new Dictionary<string, object>();
                                         bool hasAnyField = false;
 
                                         foreach (var field in sourceFields)
                                         {
                                             string newPropName = field.Key;
-                                            string oldPropName = field.Value?.GetValue<string>() ?? "";
+                                            string oldPropName = field.Value?.ToString() ?? "";
 
-                                            if (itemObj.TryGetPropertyValue(oldPropName, out var oldPropValue) && oldPropValue != null)
+                                            if (!string.IsNullOrEmpty(oldPropName) && itemObj.TryGetValue(oldPropName, out var oldPropValue))
                                             {
                                                 hasAnyField = true;
-                                                newObj[newPropName] = oldPropValue.DeepClone();
+                                                newObj[newPropName] = oldPropValue;
                                                 itemObj.Remove(oldPropName);
-                                                var existingKey = itemObj.Select(p => p.Key).FirstOrDefault(k => string.Equals(k, oldPropName, StringComparison.OrdinalIgnoreCase));
-                                                if (existingKey != null) itemObj.Remove(existingKey);
                                             }
                                         }
 
@@ -159,36 +179,36 @@ namespace updater.cfgver
                                 }
                                 else if (tfType == "SplitRecycleBin")
                                 {
-                                    string itemsKey = tfObj["ItemsKey"]?.GetValue<string>() ?? "items";
-                                    string recycleKey = tfObj["RecycleKey"]?.GetValue<string>() ?? "recycleBinItems";
-                                    string statusField = tfObj["StatusField"]?.GetValue<string>() ?? "Status";
-                                    int normalValue = tfObj["NormalValue"]?.GetValue<int>() ?? 0;
+                                    string itemsKey = GetString(tfObj, "ItemsKey", "items");
+                                    string recycleKey = GetString(tfObj, "RecycleKey", "recycleBinItems");
+                                    string statusField = GetString(tfObj, "StatusField", "Status");
+                                    int normalValue = GetInt(tfObj, "NormalValue", 0);
 
-                                    if (configRoot.TryGetPropertyValue(itemsKey, out var itemsRoot) && itemsRoot is JsonArray itemsArray)
+                                    if (TryGetList(configRoot, itemsKey, out var itemsArray))
                                     {
-                                        JsonArray recycleArray;
-                                        if (configRoot.TryGetPropertyValue(recycleKey, out var recycleRoot) && recycleRoot is JsonArray existingRecycle)
+                                        List<object> recycleArray;
+                                        if (TryGetList(configRoot, recycleKey, out var existingRecycle))
                                         {
                                             recycleArray = existingRecycle;
                                         }
                                         else
                                         {
-                                            recycleArray = new JsonArray();
+                                            recycleArray = new List<object>();
                                             configRoot[recycleKey] = recycleArray;
                                         }
 
                                         for (int i = itemsArray.Count - 1; i >= 0; i--)
                                         {
-                                            if (itemsArray[i] is not JsonObject obj) continue;
+                                            if (itemsArray[i] is not Dictionary<string, object> obj) continue;
                                             int statusValue = normalValue;
-                                            if (obj.TryGetPropertyValue(statusField, out var statusNode) && statusNode != null)
+                                            if (obj.TryGetValue(statusField, out var statusNode))
                                             {
-                                                try { statusValue = statusNode.GetValue<int>(); } catch (Exception ex) { Log($"ParseStatusFailed {ex}"); statusValue = normalValue; }
+                                                statusValue = GetInt(statusNode, normalValue);
                                             }
 
                                             if (statusValue != normalValue)
                                             {
-                                                recycleArray.Add(obj.DeepClone());
+                                                recycleArray.Add(obj);
                                                 itemsArray.RemoveAt(i);
                                             }
                                         }
@@ -215,12 +235,206 @@ namespace updater.cfgver
 
             try
             {
-                var options = new JsonSerializerOptions { WriteIndented = true };
-                string newJson = configRoot.ToJsonString(options);
-                File.WriteAllText(inputPath, newJson);
+                var serializer = new SerializerBuilder().Build();
+                string newYaml = serializer.Serialize(configRoot);
+                File.WriteAllText(inputPath, newYaml);
             }
             catch (Exception ex) { Log($"WriteFailed info={ex}"); }
             Log($"End duration={sw.ElapsedMilliseconds}ms modified={(migratedAny ? "yes" : "no")}");
+        }
+
+        private static bool TryHandleCommandMode(string[] args)
+        {
+            if (args.Length == 0) return false;
+            if (args[0].Equals("--run-bat", StringComparison.OrdinalIgnoreCase))
+            {
+                string? path = args.Length > 1 ? args[1] : null;
+                string batArgs = GetArgValue(args, "--args");
+                string workDir = GetArgValue(args, "--workdir");
+                bool wait = args.Any(a => a.Equals("--wait", StringComparison.OrdinalIgnoreCase));
+                return RunBatch(path, batArgs, workDir, wait);
+            }
+            if (args[0].Equals("--run-cmd", StringComparison.OrdinalIgnoreCase))
+            {
+                string? command = args.Length > 1 ? args[1] : null;
+                string workDir = GetArgValue(args, "--workdir");
+                bool wait = args.Any(a => a.Equals("--wait", StringComparison.OrdinalIgnoreCase));
+                return RunCommand(command, workDir, wait);
+            }
+            return false;
+        }
+
+        private static string GetArgValue(string[] args, string name)
+        {
+            for (int i = 0; i < args.Length - 1; i++)
+            {
+                if (args[i].Equals(name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return args[i + 1];
+                }
+            }
+            return "";
+        }
+
+        private static bool RunBatch(string? path, string batArgs, string workDir, bool wait)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                Log("RunBatch invalid path");
+                return true;
+            }
+            string args = $"/c \"\"{path}\" {batArgs}\"";
+            return StartProcess("cmd.exe", args, workDir, wait, "RunBatch");
+        }
+
+        private static bool RunCommand(string? command, string workDir, bool wait)
+        {
+            if (string.IsNullOrWhiteSpace(command))
+            {
+                Log("RunCommand empty command");
+                return true;
+            }
+            string args = $"/c {command}";
+            return StartProcess("cmd.exe", args, workDir, wait, "RunCommand");
+        }
+
+        private static bool StartProcess(string fileName, string arguments, string workDir, bool wait, string tag)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = fileName,
+                    Arguments = arguments,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WorkingDirectory = string.IsNullOrWhiteSpace(workDir) ? Environment.CurrentDirectory : workDir
+                };
+                Log($"{tag} start file={fileName} args={arguments} workDir={psi.WorkingDirectory}");
+                var proc = Process.Start(psi);
+                if (proc == null) return true;
+                if (wait)
+                {
+                    proc.WaitForExit();
+                    Log($"{tag} exit code={proc.ExitCode}");
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log($"{tag} failed {ex}");
+                return true;
+            }
+        }
+
+        private static object? NormalizeYamlObject(object? obj)
+        {
+            if (obj is Dictionary<object, object> dict)
+            {
+                var res = new Dictionary<string, object>();
+                foreach (var kvp in dict)
+                {
+                    var key = kvp.Key?.ToString() ?? "";
+                    if (string.IsNullOrEmpty(key)) continue;
+                    res[key] = NormalizeYamlObject(kvp.Value) ?? "";
+                }
+                return res;
+            }
+
+            if (obj is List<object> list)
+            {
+                var res = new List<object>();
+                foreach (var item in list)
+                {
+                    res.Add(NormalizeYamlObject(item) ?? "");
+                }
+                return res;
+            }
+
+            return obj;
+        }
+
+        private static bool TryGetList(Dictionary<string, object> dict, string key, out List<object> list)
+        {
+            list = new List<object>();
+            if (!dict.TryGetValue(key, out var obj)) return false;
+            if (obj is List<object> l)
+            {
+                list = l;
+                return true;
+            }
+            return false;
+        }
+
+        private static bool TryGetDict(Dictionary<string, object> dict, string key, out Dictionary<string, object> map)
+        {
+            map = new Dictionary<string, object>();
+            if (!dict.TryGetValue(key, out var obj)) return false;
+            if (obj is Dictionary<string, object> m)
+            {
+                map = m;
+                return true;
+            }
+            return false;
+        }
+
+        private static bool TryGetInt(Dictionary<string, object> dict, string key, out int value)
+        {
+            value = 0;
+            if (!dict.TryGetValue(key, out var obj)) return false;
+            value = GetInt(obj, 0);
+            return true;
+        }
+
+        private static int GetInt(Dictionary<string, object> dict, string key, int defaultValue)
+        {
+            if (!dict.TryGetValue(key, out var obj)) return defaultValue;
+            return GetInt(obj, defaultValue);
+        }
+
+        private static int GetInt(object? obj, int defaultValue)
+        {
+            if (obj == null) return defaultValue;
+            if (obj is int i) return i;
+            if (obj is long l) return (int)l;
+            if (obj is double d) return (int)d;
+            if (int.TryParse(obj.ToString(), out var parsed)) return parsed;
+            return defaultValue;
+        }
+
+        private static string GetString(Dictionary<string, object> dict, string key, string defaultValue = "")
+        {
+            if (!dict.TryGetValue(key, out var obj)) return defaultValue;
+            var text = obj?.ToString() ?? "";
+            return string.IsNullOrEmpty(text) ? defaultValue : text;
+        }
+
+        private static void ExecuteCommandDict(Dictionary<string, object> cmd)
+        {
+            string type = GetString(cmd, "Type").ToLowerInvariant();
+            string workDir = GetString(cmd, "WorkDir");
+            bool wait = GetBool(cmd, "Wait");
+            if (type == "bat")
+            {
+                string path = GetString(cmd, "Path");
+                string args = GetString(cmd, "Args");
+                RunBatch(path, args, workDir, wait);
+                return;
+            }
+            if (type == "cmd")
+            {
+                string command = GetString(cmd, "Command");
+                RunCommand(command, workDir, wait);
+                return;
+            }
+        }
+
+        private static bool GetBool(Dictionary<string, object> dict, string key)
+        {
+            if (!dict.TryGetValue(key, out var obj)) return false;
+            if (obj is bool b) return b;
+            if (bool.TryParse(obj?.ToString(), out var parsed)) return parsed;
+            return false;
         }
     }
 

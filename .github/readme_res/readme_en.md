@@ -90,8 +90,8 @@ For developers, Eric Game Launcher demonstrates how to build modern Windows desk
 
 *   **Cutting-Edge Stack**: Built on the latest **Windows App SDK (1.6+)** and **.NET 10**, showcasing the great potential of WinUI 3 in desktop applications.
 *   **Native Performance**:
-    *   Utilizes `P/Invoke` (User32.dll) for efficient system-level icon extraction.
-    *   Uses `System.Text.Json` for high-performance, low-memory data serialization.
+  *   Utilizes `P/Invoke` (User32.dll) for efficient system-level icon extraction.
+  *   Uses `YamlDotNet` for high-performance, low-memory data serialization.
 *   **Clean Architecture**:
     *   **Efficient Data Binding**: Smooth UI interactions achieved through `ObservableCollection` and XAML binding, with clear and intuitive code logic.
     *   **Static Service Design**: Core modules like `ConfigService` and `I18n` use static classes for zero-overhead calls, remaining minimalist and efficient.

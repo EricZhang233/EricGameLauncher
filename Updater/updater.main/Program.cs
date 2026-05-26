@@ -10,6 +10,9 @@ using System.Threading.Channels;
 using System.Threading.Tasks;
 using System.Linq;
 using System.Security.Principal;
+using System.Collections.Generic;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
 using System.Runtime.Versioning;
 
@@ -49,9 +52,18 @@ namespace updater.main
             Console.WriteLine("========================================");
             Console.WriteLine();
 
+            if (TryRunTaskFile())
+            {
+                Log("TaskFileExecuted");
+                return;
+            }
+
             if (args.Length < 2)
             {
+                if (TryHandleCommandMode(args)) return;
                 Console.WriteLine("Usage: updater.main.exe <install_dir> <download_url>");
+                Console.WriteLine("       updater.main.exe --run-bat <path> [--args <args>] [--workdir <dir>] [--wait]");
+                Console.WriteLine("       updater.main.exe --run-cmd <command> [--workdir <dir>] [--wait]");
                 Log("InvalidArgs");
                 await Task.Delay(3000);
                 return;
@@ -306,6 +318,176 @@ namespace updater.main
                 return true;
             }
             catch { return false; }
+        }
+
+        private static bool TryHandleCommandMode(string[] args)
+        {
+            if (args.Length == 0) return false;
+            if (args[0].Equals("--run-bat", StringComparison.OrdinalIgnoreCase))
+            {
+                string? path = args.Length > 1 ? args[1] : null;
+                string batArgs = GetArgValue(args, "--args");
+                string workDir = GetArgValue(args, "--workdir");
+                bool wait = args.Any(a => a.Equals("--wait", StringComparison.OrdinalIgnoreCase));
+                return RunBatch(path, batArgs, workDir, wait);
+            }
+            if (args[0].Equals("--run-cmd", StringComparison.OrdinalIgnoreCase))
+            {
+                string? command = args.Length > 1 ? args[1] : null;
+                string workDir = GetArgValue(args, "--workdir");
+                bool wait = args.Any(a => a.Equals("--wait", StringComparison.OrdinalIgnoreCase));
+                return RunCommand(command, workDir, wait);
+            }
+            return false;
+        }
+
+        private static bool TryRunTaskFile()
+        {
+            try
+            {
+                string taskPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "updater.main.tasks.yaml");
+                if (!File.Exists(taskPath)) return false;
+                string yamlText = File.ReadAllText(taskPath);
+                var deserializer = new DeserializerBuilder()
+                    .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                    .Build();
+                var yamlObj = deserializer.Deserialize<object>(yamlText);
+                var normalized = NormalizeYamlObject(yamlObj) as List<object>;
+                if (normalized == null) return false;
+                foreach (var item in normalized)
+                {
+                    if (item is not Dictionary<string, object> cmd) continue;
+                    ExecuteCommandDict(cmd);
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log($"TaskFileFailed {ex}");
+                return true;
+            }
+        }
+
+        private static void ExecuteCommandDict(Dictionary<string, object> cmd)
+        {
+            string type = GetString(cmd, "Type").ToLowerInvariant();
+            string workDir = GetString(cmd, "WorkDir");
+            bool wait = GetBool(cmd, "Wait");
+            if (type == "bat")
+            {
+                string path = GetString(cmd, "Path");
+                string args = GetString(cmd, "Args");
+                RunBatch(path, args, workDir, wait);
+                return;
+            }
+            if (type == "cmd")
+            {
+                string command = GetString(cmd, "Command");
+                RunCommand(command, workDir, wait);
+                return;
+            }
+        }
+
+        private static object? NormalizeYamlObject(object? obj)
+        {
+            if (obj is Dictionary<object, object> dict)
+            {
+                var res = new Dictionary<string, object>();
+                foreach (var kvp in dict)
+                {
+                    var key = kvp.Key?.ToString() ?? "";
+                    if (string.IsNullOrEmpty(key)) continue;
+                    res[key] = NormalizeYamlObject(kvp.Value) ?? "";
+                }
+                return res;
+            }
+            if (obj is List<object> list)
+            {
+                var res = new List<object>();
+                foreach (var item in list)
+                {
+                    res.Add(NormalizeYamlObject(item) ?? "");
+                }
+                return res;
+            }
+            return obj;
+        }
+
+        private static bool GetBool(Dictionary<string, object> dict, string key)
+        {
+            if (!dict.TryGetValue(key, out var obj)) return false;
+            if (obj is bool b) return b;
+            if (bool.TryParse(obj?.ToString(), out var parsed)) return parsed;
+            return false;
+        }
+
+        private static string GetString(Dictionary<string, object> dict, string key)
+        {
+            if (!dict.TryGetValue(key, out var obj)) return "";
+            return obj?.ToString() ?? "";
+        }
+
+        private static string GetArgValue(string[] args, string name)
+        {
+            for (int i = 0; i < args.Length - 1; i++)
+            {
+                if (args[i].Equals(name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return args[i + 1];
+                }
+            }
+            return "";
+        }
+
+        private static bool RunBatch(string? path, string batArgs, string workDir, bool wait)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                Log("RunBatch invalid path");
+                return true;
+            }
+            string args = $"/c \"\"{path}\" {batArgs}\"";
+            return StartProcess("cmd.exe", args, workDir, wait, "RunBatch");
+        }
+
+        private static bool RunCommand(string? command, string workDir, bool wait)
+        {
+            if (string.IsNullOrWhiteSpace(command))
+            {
+                Log("RunCommand empty command");
+                return true;
+            }
+            string args = $"/c {command}";
+            return StartProcess("cmd.exe", args, workDir, wait, "RunCommand");
+        }
+
+        private static bool StartProcess(string fileName, string arguments, string workDir, bool wait, string tag)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = fileName,
+                    Arguments = arguments,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WorkingDirectory = string.IsNullOrWhiteSpace(workDir) ? Environment.CurrentDirectory : workDir
+                };
+                Log($"{tag} start file={fileName} args={arguments} workDir={psi.WorkingDirectory}");
+                var proc = Process.Start(psi);
+                if (proc == null) return true;
+                if (wait)
+                {
+                    proc.WaitForExit();
+                    Log($"{tag} exit code={proc.ExitCode}");
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log($"{tag} failed {ex}");
+                return true;
+            }
         }
 
         [SupportedOSPlatform("windows")]

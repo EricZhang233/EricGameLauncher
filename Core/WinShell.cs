@@ -2,8 +2,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -540,26 +538,6 @@ public sealed class SizeToCornerRadiusConverter : IValueConverter
         try { LogService.Write("Shortcut", "SizeToCornerRadiusConverter.ConvertBack called"); } catch { }
         throw new NotImplementedException();
     }
-}
-
-public class IntArrayJsonConverter : JsonConverter<int[]>
-{
-    public override int[]? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-    {
-        if (reader.TokenType != JsonTokenType.StartArray)
-            return null;
-
-        var list = new List<int>();
-        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
-        {
-            if (reader.TokenType == JsonTokenType.Number)
-                list.Add(reader.GetInt32());
-        }
-        return list.ToArray();
-    }
-
-    public override void Write(Utf8JsonWriter writer, int[] value, JsonSerializerOptions options)
-        => writer.WriteRawValue($"[{string.Join(", ", value)}]");
 }
 
 public static class Win32FileDialog
