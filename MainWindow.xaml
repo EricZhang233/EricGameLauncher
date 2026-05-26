@@ -66,6 +66,7 @@
                             <Flyout.FlyoutPresenterStyle>
                                 <Style TargetType="FlyoutPresenter">
                                     <Setter Property="Padding" Value="0"/>
+                                    <Setter Property="CornerRadius" Value="8"/>
                                 </Style>
                             </Flyout.FlyoutPresenterStyle>
                             <StackPanel Width="380" Spacing="8" Padding="12">
@@ -138,10 +139,12 @@
                                                                  Visibility="{Binding IsUnread, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                     </Grid>
                                                 </Grid>
-                                                <TextBlock Text="{Binding Body}"
-                                                           TextWrapping="Wrap"
-                                                           Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                                <RichTextBlock x:Name="BodyRichText"
+                                                               TextWrapping="Wrap"
+                                                               Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                                               IsTextSelectionEnabled="True"
+                                                               Loaded="BodyRichText_Loaded"/>
                                             </StackPanel>
                                         </DataTemplate>
                                     </ListView.ItemTemplate>

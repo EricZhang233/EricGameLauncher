@@ -3246,6 +3246,45 @@ namespace EricGameLauncher
             }
             catch (Exception ex) { LogService.Write("Announcement", "RefreshAnnouncementList failed", ex); }
         }
+        private void BodyRichText_Loaded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+            if (sender is not Microsoft.UI.Xaml.Controls.RichTextBlock rich) return;
+                rich.Blocks.Clear();
+                if (rich.DataContext is not AnnouncementListItem item) return;
+
+                string text = item.Body ?? string.Empty;
+                var regex = new System.Text.RegularExpressions.Regex(@"(https?://[\w\-\./?%&=#]+)", System.Text.RegularExpressions.RegexOptions.Compiled);
+                int lastIndex = 0;
+                var paragraph = new Microsoft.UI.Xaml.Documents.Paragraph();
+
+                foreach (System.Text.RegularExpressions.Match m in regex.Matches(text))
+                {
+                    if (m.Index > lastIndex)
+                    {
+                        paragraph.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = text.Substring(lastIndex, m.Index - lastIndex) });
+                    }
+
+                    string url = m.Value;
+                    var link = new Microsoft.UI.Xaml.Documents.Hyperlink();
+                    link.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = url });
+                    string capturedUrl = url;
+                    link.Click += async (s, ev) =>
+                    {
+                        try { await Windows.System.Launcher.LaunchUriAsync(new System.Uri(capturedUrl)); } catch { }
+                    };
+                    paragraph.Inlines.Add(link);
+                    lastIndex = m.Index + m.Length;
+                }
+
+                if (lastIndex < text.Length)
+                    paragraph.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = text.Substring(lastIndex) });
+
+                rich.Blocks.Add(paragraph);
+            }
+            catch (Exception ex) { LogService.Write("Announcement", "BodyRichText_Loaded failed", ex); }
+        }
 
         private void UpdateAnnouncementButtonIndicator(int unreadCount)
         {
