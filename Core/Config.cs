@@ -1,61 +1,76 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
 namespace EricGameLauncher;
 
 public class AppSettings
 {
-    [JsonPropertyName("launchMode")]
+    [YamlMember(Alias = "launchMode")]
     public string LaunchMode { get; set; } = "single";
 
-    [JsonPropertyName("closeAfterLaunch")]
+    [YamlMember(Alias = "closeAfterLaunch")]
     public bool CloseAfterLaunch { get; set; } = false;
 
-    [JsonPropertyName("iconSize")]
+    [YamlMember(Alias = "iconSize")]
     public double IconSize { get; set; } = 118;
 
-    [JsonPropertyName("language")]
+    [YamlMember(Alias = "language")]
     public string Language { get; set; } = "";
 
-    [JsonPropertyName("updateChannel")]
+    [YamlMember(Alias = "updateChannel")]
     public string UpdateChannel { get; set; } = "stable";
 
-    [JsonPropertyName("windowBounds")]
-    [JsonConverter(typeof(IntArrayJsonConverter))]
-    public int[] WindowBounds { get; set; } = [-1, -1, 950, 650];
+    [YamlMember(Alias = "window")]
+    public WindowBoundsInfo Window { get; set; } = new();
+}
+
+public class WindowBoundsInfo
+{
+    [YamlMember(Alias = "x")]
+    public int X { get; set; } = -1;
+    [YamlMember(Alias = "y")]
+    public int Y { get; set; } = -1;
+    [YamlMember(Alias = "width")]
+    public int Width { get; set; } = 950;
+    [YamlMember(Alias = "height")]
+    public int Height { get; set; } = 650;
 }
 
 public class ConfigData
 {
-    [JsonPropertyName("Version")]
+    [YamlMember(Alias = "version")]
     public int Version { get; set; } = ConfigService.CurrentConfigVersion;
 
-    [JsonPropertyName("settings")]
+    [YamlMember(Alias = "settings")]
     public AppSettings Settings { get; set; } = new();
 
-    [JsonPropertyName("items")]
+    [YamlMember(Alias = "items")]
     public List<AppItemDto> Items { get; set; } = [];
 
-    [JsonPropertyName("recycleBinItems")]
+    [YamlMember(Alias = "recycleBin")]
     public List<AppItemDto> RecycleBinItems { get; set; } = [];
 }
 
 public class ServerConfigInfo
 {
-    [JsonPropertyName("forceUpdate")]
+    [YamlMember(Alias = "forceUpdate")]
     public ForceUpdateInfo? ForceUpdate { get; set; }
+
+    [YamlMember(Alias = "announcements")]
+    public List<Announcement>? Announcements { get; set; }
 }
 
 public class ForceUpdateInfo
 {
-    [JsonPropertyName("minVersion")]
+    [YamlMember(Alias = "minVersion")]
     public string MinVersion { get; set; } = "";
 }
 
@@ -63,6 +78,56 @@ public static class ServerConfigManager
 {
     private static readonly HttpClient client = new HttpClient();
     public static ServerConfigInfo? CurrentConfig { get; private set; }
+    public static event Action? AnnouncementsUpdated;
+    private static readonly string ReadIdsFileName = "announcements.read";
+    private static HashSet<string> _readIds = new(StringComparer.OrdinalIgnoreCase);
+
+    public static void LoadReadIds()
+    {
+        try
+        {
+            string cacheDir = ConfigService.SystemCachePath;
+            if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
+            string path = Path.Combine(cacheDir, ReadIdsFileName);
+            if (File.Exists(path))
+            {
+                var lines = File.ReadAllLines(path);
+                _readIds = new HashSet<string>(lines.Where(l => !string.IsNullOrWhiteSpace(l)).Select(l => l.Trim()), StringComparer.OrdinalIgnoreCase);
+            }
+            else
+            {
+                _readIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            }
+        }
+        catch { _readIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase); }
+    }
+
+    public static void SaveReadIds()
+    {
+        try
+        {
+            string cacheDir = ConfigService.SystemCachePath;
+            if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
+            string path = Path.Combine(cacheDir, ReadIdsFileName);
+            File.WriteAllLines(path, _readIds);
+        }
+        catch { }
+    }
+
+    public static bool IsRead(string id) => !string.IsNullOrEmpty(id) && _readIds.Contains(id);
+
+    public static void MarkAsRead(string id, bool notify = true)
+    {
+        if (string.IsNullOrEmpty(id)) return;
+        if (_readIds.Add(id))
+        {
+            SaveReadIds();
+            if (notify)
+            {
+                try { AnnouncementsUpdated?.Invoke(); } catch { }
+            }
+        }
+    }
 
     public static async Task FetchConfigAsync()
     {
@@ -73,26 +138,83 @@ public static class ServerConfigManager
             {
                 LogService.Write("Network", "ServerConfig Fetch Start");
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("EricGameLauncher");
-                var json = await client.GetStringAsync("https://raw.githubusercontent.com/EricZhang233/EricGameLauncher/master/ServerCfg.json");
-                CurrentConfig = JsonSerializer.Deserialize<ServerConfigInfo>(json);
-                LogService.Write("Network", $"ServerConfig Fetch End Duration={sw.ElapsedMilliseconds}ms Size={json?.Length ?? 0}");
+                var content = await client.GetStringAsync("https://raw.githubusercontent.com/EricZhang233/EricGameLauncher/master/ServerCfg.yaml");
+
+                var deserializer = new DeserializerBuilder()
+                    .IgnoreUnmatchedProperties()
+                    .Build();
+
+                CurrentConfig = deserializer.Deserialize<ServerConfigInfo>(content);
+                if (CurrentConfig?.Announcements != null)
+                {
+                    foreach (var a in CurrentConfig.Announcements)
+                    {
+                        a.Position = (a.Position ?? "").Trim().ToLowerInvariant();
+                        a.TitleCn = NormalizeSingleLine(a.TitleCn);
+                        a.TitleZh = NormalizeSingleLine(a.TitleZh);
+                        a.TitleEn = NormalizeSingleLine(a.TitleEn);
+                        a.BodyCn = NormalizeMultiline(a.BodyCn).Trim();
+                        a.BodyZh = NormalizeMultiline(a.BodyZh).Trim();
+                        a.BodyEn = NormalizeMultiline(a.BodyEn).Trim();
+                    }
+
+                    var first = CurrentConfig.Announcements.FirstOrDefault();
+                    if (first != null)
+                    {
+                        LogService.Write("Announcement", $"Parsed announcements count={CurrentConfig.Announcements.Count} firstId={first.Id} titleCnLen={first.TitleCn.Length} titleZhLen={first.TitleZh.Length} titleEnLen={first.TitleEn.Length} bodyCnLen={first.BodyCn.Length} bodyZhLen={first.BodyZh.Length} bodyEnLen={first.BodyEn.Length}");
+                    }
+                }
+                LogService.Write("Network", $"ServerConfig Fetch End (YAML) Duration={sw.ElapsedMilliseconds}ms Size={content?.Length ?? 0}");
             }
             catch (Exception ex)
             {
                 CurrentConfig = null;
                 LogService.Write("Network", $"ServerConfig Fetch Failed Duration={sw.ElapsedMilliseconds}ms", ex);
             }
+                finally
+                {
+                    try { AnnouncementsUpdated?.Invoke(); } catch { }
+                }
         }
+    }
+
+    private static string NormalizeSingleLine(string? s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        var normalized = s.Replace("\r\n", "\n").Replace("\r", "\n");
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, "\n+", " ");
+        return normalized.Trim();
+    }
+
+    private static string NormalizeMultiline(string? s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        var normalized = s.Replace("\r\n", "\n").Replace("\r", "\n");
+        var lines = normalized.Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+            lines[i] = lines[i].TrimEnd();
+        return string.Join("\n", lines);
+    }
+
+    public static List<Announcement> GetActiveAnnouncements()
+    {
+        var now = DateTime.UtcNow;
+        var anns = CurrentConfig?.Announcements ?? new List<Announcement>();
+        return anns
+            .Where(a => a.Visible && (a.GetTimeValue() == null || a.GetTimeValue()!.Value.UtcDateTime <= now))
+            .OrderBy(a => a.GetPositionPriority())
+            .ThenByDescending(a => a.GetTimeValue() ?? DateTimeOffset.MinValue)
+            .ToList();
     }
 }
 
 public static class ConfigService
 {
     private const string AppFolderName = "EricGameLauncher";
-    private const string DataFileName = "config.json";
+    private const string DataFileName = "config.yaml";
     private const string IconFolderName = "ico";
 
-    public const int CurrentConfigVersion = 3;
+    public const int CurrentConfigVersion = 1;
 
     public static bool RequiresMigration { get; private set; } = false;
     private static bool _blockSaving = false;
@@ -122,12 +244,12 @@ public static class ConfigService
         LogService.Write("Config", "Initialize Start");
         if (!Directory.Exists(SystemBasePath)) Directory.CreateDirectory(SystemBasePath);
 
-        string portableConfigPath = Path.Combine(PortableBasePath, DataFileName);
-        string systemConfigPath = Path.Combine(SystemBasePath, DataFileName);
+        string portableYamlPath = Path.Combine(PortableBasePath, DataFileName);
+        string systemYamlPath = Path.Combine(SystemBasePath, DataFileName);
 
-        if (File.Exists(portableConfigPath))
+        if (File.Exists(portableYamlPath))
             CurrentDataPath = PortableBasePath;
-        else if (File.Exists(systemConfigPath))
+        else if (File.Exists(systemYamlPath))
             CurrentDataPath = SystemBasePath;
         else
             CurrentDataPath = SystemBasePath;
@@ -180,6 +302,7 @@ public static class ConfigService
 
     public static Task SwitchStorageModeAsync(bool useSystemPath) => Task.Run(() => SwitchStorageMode(useSystemPath));
 
+
     public static void SaveItems(List<AppItem> items, List<AppItem> recycleItems, bool triggerEvent = true)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -204,14 +327,24 @@ public static class ConfigService
     {
         var dtos = _configData?.Items ?? [];
         LogService.Write("Config", $"LoadItems count={dtos.Count}");
-        return dtos.Select(dto => dto.ToViewModel(FixedCachePath)).ToList();
+        var items = dtos.Select(dto => dto.ToViewModel(FixedCachePath)).ToList();
+        for (int i = 0; i < items.Count; i++)
+        {
+            items[i].SortOrder = i;
+        }
+        return items;
     }
 
     public static List<AppItem> LoadRecycleBinItems()
     {
         var dtos = _configData?.RecycleBinItems ?? [];
         LogService.Write("Config", $"LoadRecycleBinItems count={dtos.Count}");
-        return dtos.Select(dto => dto.ToViewModel(FixedCachePath)).ToList();
+        var items = dtos.Select(dto => dto.ToViewModel(FixedCachePath)).ToList();
+        for (int i = 0; i < items.Count; i++)
+        {
+            items[i].SortOrder = i;
+        }
+        return items;
     }
 
     private static void LoadConfigData()
@@ -220,30 +353,25 @@ public static class ConfigService
         {
             LogService.Write("Config", "LoadConfigData Start");
             if (string.IsNullOrEmpty(CurrentDataPath)) { _configData = new ConfigData(); return; }
-            string jsonPath = Path.Combine(CurrentDataPath, DataFileName);
-            if (!File.Exists(jsonPath)) { _configData = new ConfigData(); return; }
+            string yamlPath = Path.Combine(CurrentDataPath, DataFileName);
+            if (!File.Exists(yamlPath)) { _configData = new ConfigData(); return; }
 
-            string jsonString = File.ReadAllText(jsonPath);
+            string yamlText = File.ReadAllText(yamlPath);
+            var deserializer = new DeserializerBuilder()
+                .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                .IgnoreUnmatchedProperties()
+                .Build();
 
-            using (var doc = JsonDocument.Parse(jsonString))
+            _configData = deserializer.Deserialize<ConfigData>(yamlText) ?? new ConfigData();
+            if (_configData.Version < CurrentConfigVersion)
             {
-                int version = 1;
-                if (doc.RootElement.TryGetProperty("Version", out var versionElement))
-                {
-                    version = versionElement.TryGetInt32(out int v) ? v : 1;
-                }
-
-                if (version < CurrentConfigVersion)
-                {
-                    RequiresMigration = true;
-                    _blockSaving = true;
-                    _configData = new ConfigData();
-                    return;
-                }
+                RequiresMigration = true;
+                _blockSaving = true;
+                _configData = new ConfigData();
+                return;
             }
 
-            _configData = JsonSerializer.Deserialize<ConfigData>(jsonString) ?? new ConfigData();
-            LogService.Write("Config", $"LoadConfigData deserialized jsonSize={jsonString.Length} items={_configData.Items?.Count ?? 0} recycle={_configData.RecycleBinItems?.Count ?? 0}");
+            LogService.Write("Config", $"LoadConfigData deserialized items={_configData.Items?.Count ?? 0} recycle={_configData.RecycleBinItems?.Count ?? 0}");
             _configData.Settings ??= new AppSettings();
             _configData.Items ??= [];
             _configData.RecycleBinItems ??= [];
@@ -303,20 +431,17 @@ public static class ConfigService
             try
             {
                 if (string.IsNullOrEmpty(CurrentDataPath) || _configData == null) return;
-                string jsonPath = Path.Combine(CurrentDataPath, DataFileName);
+                string yamlPath = Path.Combine(CurrentDataPath, DataFileName);
 
-                string jsonString;
+                string yamlString;
                 lock (_configData)
                 {
-                    jsonString = JsonSerializer.Serialize(_configData, new JsonSerializerOptions
-                    {
-                        WriteIndented = true,
-                        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-                    });
+                    var serializer = new SerializerBuilder().Build();
+                    yamlString = serializer.Serialize(_configData);
                 }
 
                 if (!Directory.Exists(CurrentDataPath)) Directory.CreateDirectory(CurrentDataPath);
-                await File.WriteAllTextAsync(jsonPath, jsonString);
+                await File.WriteAllTextAsync(yamlPath, yamlString);
             }
             catch (Exception ex) { LogService.Write("Config", $"SaveConfigData failed", ex); }
             finally
@@ -382,7 +507,7 @@ public static class ConfigService
             {
                 bool itemChanged = false;
 
-                string? exePath = item.MainAction?.Path;
+                string? exePath = item.Actions?.Main?.Path;
                 if (string.IsNullOrEmpty(item.Platform) && !string.IsNullOrEmpty(exePath))
                 {
                     try
@@ -522,11 +647,11 @@ public static class ConfigService
     public static (int X, int Y, int Width, int Height) GetWindowBounds()
     {
         try { LogService.Write("Config", "GetWindowBounds called"); } catch { }
-        var bounds = _configData?.Settings?.WindowBounds;
-        if (bounds != null && bounds.Length == 4)
+        var bounds = _configData?.Settings?.Window;
+        if (bounds != null)
         {
-            try { LogService.Write("Config", $"GetWindowBounds returning x={bounds[0]} y={bounds[1]} w={bounds[2]} h={bounds[3]}"); } catch { }
-            return (bounds[0], bounds[1], bounds[2], bounds[3]);
+            try { LogService.Write("Config", $"GetWindowBounds returning x={bounds.X} y={bounds.Y} w={bounds.Width} h={bounds.Height}"); } catch { }
+            return (bounds.X, bounds.Y, bounds.Width, bounds.Height);
         }
         try { LogService.Write("Config", "GetWindowBounds returning default"); } catch { }
         return (-1, -1, 950, 650);
@@ -537,8 +662,113 @@ public static class ConfigService
         try { LogService.Write("Config", $"SetWindowBounds called x={x} y={y} w={width} h={height}"); } catch { }
         if (_configData?.Settings != null)
         {
-            _configData.Settings.WindowBounds = new int[] { x, y, width, height };
+            _configData.Settings.Window = new WindowBoundsInfo { X = x, Y = y, Width = width, Height = height };
             try { LogService.Write("Config", "SetWindowBounds applied"); } catch { }
         }
+    }
+}
+
+public class Announcement
+{
+    [YamlMember(Alias = "id")]
+    public string Id { get; set; } = "";
+
+    [YamlMember(Alias = "title_cn")]
+    public string TitleCn { get; set; } = "";
+
+    [YamlMember(Alias = "title_zh")]
+    public string TitleZh { get; set; } = "";
+
+    [YamlMember(Alias = "title_en")]
+    public string TitleEn { get; set; } = "";
+
+    [YamlMember(Alias = "body_cn")]
+    public string BodyCn { get; set; } = "";
+
+    [YamlMember(Alias = "body_zh")]
+    public string BodyZh { get; set; } = "";
+
+    [YamlMember(Alias = "body_en")]
+    public string BodyEn { get; set; } = "";
+
+    [YamlMember(Alias = "time")]
+    public string Time { get; set; } = "";
+
+    [YamlMember(Alias = "position")]
+    public string Position { get; set; } = "";
+
+    [YamlMember(Alias = "visible")]
+    public bool Visible { get; set; } = true;
+
+    public string GetDisplayTitle()
+    {
+        var lang = ConfigService.Language ?? "";
+        bool isZhCn = string.Equals(lang, "Zh-CN", StringComparison.OrdinalIgnoreCase) || string.Equals(lang, "zh-cn", StringComparison.OrdinalIgnoreCase);
+        string zhText = FirstNonWhiteSpace(TitleCn, TitleZh);
+        if (isZhCn)
+        {
+            return FirstNonWhiteSpace(zhText, TitleEn);
+        }
+        else
+        {
+            return FirstNonWhiteSpace(TitleEn, zhText);
+        }
+    }
+
+    public string GetDisplayBody()
+    {
+        var lang = ConfigService.Language ?? "";
+        bool isZhCn = string.Equals(lang, "Zh-CN", StringComparison.OrdinalIgnoreCase) || string.Equals(lang, "zh-cn", StringComparison.OrdinalIgnoreCase);
+        string zhText = FirstNonWhiteSpace(BodyCn, BodyZh);
+        if (isZhCn)
+        {
+            return FirstNonWhiteSpace(zhText, BodyEn);
+        }
+        else
+        {
+            return FirstNonWhiteSpace(BodyEn, zhText);
+        }
+    }
+
+    public string GetPosition()
+    {
+        string value = (Position ?? "").Trim().ToLowerInvariant();
+        if (value == "top" || value == "bottom" || value == "normal")
+        {
+            return value;
+        }
+
+        return "normal";
+    }
+
+    public int GetPositionPriority()
+    {
+        string value = GetPosition();
+        if (value == "top") return 0;
+        if (value == "bottom") return 2;
+        return 1;
+    }
+
+    public DateTimeOffset? GetTimeValue()
+    {
+        if (DateTimeOffset.TryParse(Time, out var parsed))
+        {
+            return parsed.ToUniversalTime();
+        }
+
+        return null;
+    }
+
+    private static string FirstNonWhiteSpace(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+        }
+
+        return "";
     }
 }

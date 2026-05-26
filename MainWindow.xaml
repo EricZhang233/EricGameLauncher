@@ -52,6 +52,104 @@
                         Spacing="8"
                         VerticalAlignment="Center"
                         Margin="0,0,140,0">
+
+                <Button x:Name="AnnouncementButton"
+                        ToolTipService.ToolTip=""
+                    CornerRadius="4">
+                    <Grid>
+                        <FontIcon x:Name="AnnouncementButtonIcon" Glyph="&#xE7F4;"/>
+                    </Grid>
+                    <Button.Flyout>
+                        <Flyout x:Name="AnnouncementFlyout"
+                                Placement="BottomEdgeAlignedRight"
+                                Opened="AnnouncementFlyout_Opened">
+                            <Flyout.FlyoutPresenterStyle>
+                                <Style TargetType="FlyoutPresenter">
+                                    <Setter Property="Padding" Value="0"/>
+                                </Style>
+                            </Flyout.FlyoutPresenterStyle>
+                            <StackPanel Width="380" Spacing="8" Padding="12">
+                                <TextBlock x:Name="AnnouncementsTitleText"
+                                           Text=""
+                                           FontSize="18"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock x:Name="AnnouncementsEmptyText"
+                                           Text=""
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           TextWrapping="Wrap"
+                                           Visibility="Collapsed"/>
+                                <ListView x:Name="AnnouncementsListView"
+                                          MaxHeight="420"
+                                          SelectionMode="None"
+                                          IsItemClickEnabled="True"
+                                          ItemClick="AnnouncementsListView_ItemClick"
+                                          ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                    <ListView.ItemContainerStyle>
+                                        <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                            <Setter Property="Margin" Value="0,0,0,4"/>
+                                            <Setter Property="Padding" Value="0"/>
+                                            <Setter Property="CornerRadius" Value="6"/>
+                                            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}"/>
+                                        </Style>
+                                    </ListView.ItemContainerStyle>
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="models:AnnouncementListItem">
+                                            <StackPanel Padding="10" Spacing="6">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0" Spacing="2">
+                                                        <TextBlock Text="{Binding Title}"
+                                                                   FontWeight="{Binding TitleWeight}"
+                                                                   MaxLines="2"
+                                                                   TextTrimming="CharacterEllipsis"/>
+                                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                                            <TextBlock Text="{Binding TimeText}"
+                                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                       Style="{ThemeResource CaptionTextBlockStyle}"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                    <Grid Grid.Column="1"
+                                                          VerticalAlignment="Top"
+                                                          HorizontalAlignment="Right"
+                                                          Margin="8,2,0,0"
+                                                          Width="12">
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="12"/>
+                                                            <RowDefinition Height="11"/>
+                                                        </Grid.RowDefinitions>
+                                                        <FontIcon Grid.Row="0"
+                                                                  Glyph="{Binding MarkerGlyph}"
+                                                                  FontSize="12"
+                                                                  Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                                                  HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Top"
+                                                                  Visibility="{Binding HasMarker, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                        <Ellipse Grid.Row="1"
+                                                                 Width="7"
+                                                                 Height="7"
+                                                                 Fill="Red"
+                                                                 HorizontalAlignment="Center"
+                                                                 VerticalAlignment="Top"
+                                                                 Visibility="{Binding IsUnread, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                    </Grid>
+                                                </Grid>
+                                                <TextBlock Text="{Binding Body}"
+                                                           TextWrapping="Wrap"
+                                                           Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
                 
                 <Button x:Name="SearchButton" 
                         ToolTipService.ToolTip=""

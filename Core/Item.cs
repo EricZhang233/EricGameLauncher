@@ -6,7 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json.Serialization;
+using YamlDotNet.Serialization;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -23,8 +23,11 @@ public enum AppItemStatus
 
 public class CustomMenuItem
 {
+    [YamlMember(Alias = "title")]
     public string? Title { get; set; }
+    [YamlMember(Alias = "command")]
     public string? Command { get; set; }
+    [YamlMember(Alias = "admin")]
     public bool IsAdmin { get; set; }
 }
 
@@ -94,7 +97,7 @@ public class AppItem : INotifyPropertyChanged
     private string? _titlePinyin;
     private string? _titlePinyinInitial;
     private string? _titleEnglishInitial;
-    private string? _customMenu;
+    private List<CustomMenuItem>? _customMenuItems;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -105,7 +108,6 @@ public class AppItem : INotifyPropertyChanged
         {
             if (SetProperty(ref _status, value))
             {
-                OnPropertyChanged(nameof(Status));
                 OnPropertyChanged(nameof(TitleTextDecorations));
                 OnPropertyChanged(nameof(TimeRemainingText));
                 OnPropertyChanged(nameof(TimeBadgeVisibility));
@@ -120,15 +122,12 @@ public class AppItem : INotifyPropertyChanged
         {
             if (SetProperty(ref _deletedAt, value))
             {
-                OnPropertyChanged(nameof(DeletedAt));
                 OnPropertyChanged(nameof(TimeRemainingText));
-                OnPropertyChanged(nameof(TimeBadgeVisibility));
             }
         }
     }
 
     public Windows.UI.Text.TextDecorations TitleTextDecorations => Status == (int)AppItemStatus.PendingDeletion ? Windows.UI.Text.TextDecorations.Strikethrough : Windows.UI.Text.TextDecorations.None;
-
     public Visibility TimeBadgeVisibility => Status == (int)AppItemStatus.PendingDeletion ? Visibility.Visible : Visibility.Collapsed;
 
     public string TimeRemainingText
@@ -173,13 +172,7 @@ public class AppItem : INotifyPropertyChanged
     public int SortOrder
     {
         get => _sortOrder;
-        set
-        {
-            if (SetProperty(ref _sortOrder, value))
-            {
-                OnPropertyChanged(nameof(SortOrder));
-            }
-        }
+        set => SetProperty(ref _sortOrder, value);
     }
 
     public AlternativeRunAction? AltAction
@@ -210,7 +203,7 @@ public class AppItem : INotifyPropertyChanged
         }
     }
 
-    [JsonIgnore]
+    [YamlIgnore]
     public string? ExePath
     {
         get => _mainAction?.Path;
@@ -228,7 +221,7 @@ public class AppItem : INotifyPropertyChanged
         }
     }
 
-    [JsonIgnore]
+    [YamlIgnore]
     public bool IsAdmin
     {
         get => _mainAction?.IsAdmin ?? false;
@@ -244,7 +237,7 @@ public class AppItem : INotifyPropertyChanged
         }
     }
 
-    [JsonIgnore]
+    [YamlIgnore]
     public string? MgrPath
     {
         get => _managerAction?.Path;
@@ -259,7 +252,7 @@ public class AppItem : INotifyPropertyChanged
         }
     }
 
-    [JsonIgnore]
+    [YamlIgnore]
     public bool IsMgrAdmin
     {
         get => _managerAction?.IsAdmin ?? false;
@@ -275,7 +268,7 @@ public class AppItem : INotifyPropertyChanged
         }
     }
 
-    [JsonIgnore]
+    [YamlIgnore]
     public bool UseAlternativeLaunch
     {
         get => _altAction?.Enabled ?? false;
@@ -290,7 +283,7 @@ public class AppItem : INotifyPropertyChanged
         }
     }
 
-    [JsonIgnore]
+    [YamlIgnore]
     public string? AlternativeLaunchCommand
     {
         get => _altAction?.Path;
@@ -305,7 +298,7 @@ public class AppItem : INotifyPropertyChanged
         }
     }
 
-    [JsonIgnore]
+    [YamlIgnore]
     public bool IsAltAdmin
     {
         get => _altAction?.IsAdmin ?? false;
@@ -321,7 +314,7 @@ public class AppItem : INotifyPropertyChanged
         }
     }
 
-    [JsonIgnore]
+    [YamlIgnore]
     public bool RunAlongside
     {
         get => _alongsideAction?.Enabled ?? false;
@@ -336,7 +329,7 @@ public class AppItem : INotifyPropertyChanged
         }
     }
 
-    [JsonIgnore]
+    [YamlIgnore]
     public string? AlongsideCommand
     {
         get => _alongsideAction?.Path;
@@ -351,7 +344,7 @@ public class AppItem : INotifyPropertyChanged
         }
     }
 
-    [JsonIgnore]
+    [YamlIgnore]
     public bool IsAlongsideAdmin
     {
         get => _alongsideAction?.IsAdmin ?? false;
@@ -387,7 +380,7 @@ public class AppItem : INotifyPropertyChanged
         }
     }
 
-    [JsonIgnore]
+    [YamlIgnore]
     public string TitlePinyin
     {
         get
@@ -402,7 +395,7 @@ public class AppItem : INotifyPropertyChanged
         }
     }
 
-    [JsonIgnore]
+    [YamlIgnore]
     public string TitlePinyinInitial
     {
         get
@@ -432,7 +425,7 @@ public class AppItem : INotifyPropertyChanged
         }
     }
 
-    [JsonIgnore]
+    [YamlIgnore]
     public string TitleEnglishInitial
     {
         get
@@ -484,69 +477,29 @@ public class AppItem : INotifyPropertyChanged
         set => SetProperty(ref _iconPath, value);
     }
 
-    public string? CustomMenu
+    public List<CustomMenuItem> CustomMenuItems
     {
-        get => _customMenu;
-        set => SetProperty(ref _customMenu, value);
+        get => _customMenuItems ??= [];
+        set => SetProperty(ref _customMenuItems, value ?? []);
     }
 
     public List<CustomMenuItem> GetCustomMenuItems()
     {
-        var result = new List<CustomMenuItem>();
-        if (string.IsNullOrEmpty(CustomMenu)) return result;
-
-        try
-        {
-            var pairs = CustomMenu.Split(':', StringSplitOptions.RemoveEmptyEntries);
-            foreach (var pair in pairs)
-            {
-                var parts = pair.Split('|');
-                if (parts.Length >= 2)
-                {
-                    result.Add(new CustomMenuItem
-                    {
-                        Title = Uri.UnescapeDataString(parts[0]),
-                        Command = Uri.UnescapeDataString(parts[1]),
-                        IsAdmin = parts.Length > 2 && bool.TryParse(parts[2], out bool isAdmin) && isAdmin
-                    });
-                }
-            }
-        }
-        catch (Exception ex) { LogService.Write("App", "GetCustomMenuItems parse failed", ex); }
-        return result;
+        return CustomMenuItems;
     }
 
     public void SetCustomMenuItems(List<CustomMenuItem> items)
     {
-        if (items == null || items.Count == 0)
-        {
-            CustomMenu = null;
-            return;
-        }
-
-        var builder = new StringBuilder();
-        foreach (var item in items)
-        {
-            if (string.IsNullOrEmpty(item.Command)) continue;
-            if (builder.Length > 0) builder.Append(':');
-            builder.Append(Uri.EscapeDataString(item.Title ?? ""));
-            builder.Append('|');
-            string encodedCmd = Uri.EscapeDataString(item.Command ?? "");
-            if (encodedCmd.Contains(':')) encodedCmd = encodedCmd.Replace(":", "%3A");
-            builder.Append(encodedCmd);
-            builder.Append('|');
-            builder.Append(item.IsAdmin.ToString());
-        }
-        CustomMenu = builder.Length > 0 ? builder.ToString() : null;
+        CustomMenuItems = items ?? [];
     }
 
-    [JsonIgnore]
+    [YamlIgnore]
     public bool HasManager => !string.IsNullOrEmpty(MgrPath);
 
-    [JsonIgnore]
+    [YamlIgnore]
     public string? RuntimeManagerPath => GamePlatformHelper.GetRuntimeManagerPath(MgrPath, ExePath);
 
-    [JsonIgnore]
+    [YamlIgnore]
     public bool IsPlatformUrl => !string.IsNullOrEmpty(ExePath) && GamePlatformHelper.IsSupportedPlatformUrl(ExePath);
 
     public string? Platform
@@ -555,13 +508,13 @@ public class AppItem : INotifyPropertyChanged
         set => SetProperty(ref _platform, value);
     }
 
-    [JsonIgnore]
+    [YamlIgnore]
     public string? PlatformName => !string.IsNullOrEmpty(Platform) ? Platform : (!string.IsNullOrEmpty(ExePath) ? GamePlatformHelper.GetPlatformDisplayName(ExePath) : null);
 
-    [JsonIgnore]
+    [YamlIgnore]
     public bool HasManagerOrDefault => !string.IsNullOrEmpty(RuntimeManagerPath);
 
-    [JsonIgnore]
+    [YamlIgnore]
     public BitmapImage? DisplayIcon { get; set; }
 
     public virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
@@ -585,38 +538,29 @@ public class AppItem : INotifyPropertyChanged
 
 public class AppItemDto
 {
+    [YamlMember(Alias = "id")]
     public string Id { get; set; } = string.Empty;
 
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    [YamlMember(Alias = "status")]
     public int Status { get; set; } = 0;
 
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [YamlMember(Alias = "deletedAt")]
     public DateTimeOffset? DeletedAt { get; set; }
 
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [YamlMember(Alias = "title")]
     public string? Title { get; set; }
 
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? IconPath { get; set; }
+    [YamlMember(Alias = "icon")]
+    public string? Icon { get; set; }
 
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? CustomMenu { get; set; }
+    [YamlMember(Alias = "customMenu")]
+    public List<CustomMenuItem>? CustomMenu { get; set; }
 
-    [JsonPropertyName("platform")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [YamlMember(Alias = "platform")]
     public string? Platform { get; set; }
 
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public ActionDto? MainAction { get; set; }
-
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public ActionDto? ManagerAction { get; set; }
-
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public AltActionDto? AltAction { get; set; }
-
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public AlongActionDto? AlongsideAction { get; set; }
+    [YamlMember(Alias = "actions")]
+    public ActionsDto? Actions { get; set; }
 
     public static AppItemDto FromViewModel(AppItem vm)
     {
@@ -628,18 +572,20 @@ public class AppItemDto
             Status = vm.Status,
             DeletedAt = vm.DeletedAt,
             Title = vm.Title,
-            IconPath = !string.IsNullOrEmpty(vm.IconPath) ? Path.GetFileName(vm.IconPath!) : null,
-            CustomMenu = vm.CustomMenu,
+            Icon = !string.IsNullOrEmpty(vm.IconPath) ? Path.GetFileName(vm.IconPath!) : null,
+            CustomMenu = vm.CustomMenuItems.Count > 0 ? vm.CustomMenuItems.ToList() : null,
             Platform = vm.Platform,
-            MainAction = new ActionDto { Path = vm.ExePath, IsAdmin = vm.IsAdmin },
-            ManagerAction = string.IsNullOrEmpty(vm.MgrPath) ? null
-                : new ActionDto { Path = vm.MgrPath, IsAdmin = vm.IsMgrAdmin },
-            AltAction = (vm.UseAlternativeLaunch || !string.IsNullOrEmpty(vm.AlternativeLaunchCommand))
-                ? new AltActionDto { Enabled = vm.UseAlternativeLaunch, Path = vm.AlternativeLaunchCommand, IsAdmin = vm.IsAltAdmin }
-                : null,
-            AlongsideAction = (vm.RunAlongside || !string.IsNullOrEmpty(vm.AlongsideCommand))
-                ? new AlongActionDto { Enabled = vm.RunAlongside, Path = vm.AlongsideCommand, IsAdmin = vm.IsAlongsideAdmin }
-                : null,
+            Actions = new ActionsDto
+            {
+                Main = new ActionDto { Path = vm.ExePath, IsAdmin = vm.IsAdmin },
+                Manager = string.IsNullOrEmpty(vm.MgrPath) ? null : new ActionDto { Path = vm.MgrPath, IsAdmin = vm.IsMgrAdmin },
+                Alt = (vm.UseAlternativeLaunch || !string.IsNullOrEmpty(vm.AlternativeLaunchCommand))
+                    ? new AltActionDto { Enabled = vm.UseAlternativeLaunch, Command = vm.AlternativeLaunchCommand, IsAdmin = vm.IsAltAdmin }
+                    : null,
+                Alongside = (vm.RunAlongside || !string.IsNullOrEmpty(vm.AlongsideCommand))
+                    ? new AlongActionDto { Enabled = vm.RunAlongside, Command = vm.AlongsideCommand, IsAdmin = vm.IsAlongsideAdmin }
+                    : null
+            }
         };
     }
 
@@ -648,52 +594,69 @@ public class AppItemDto
         try { LogService.Write("App", $"AppItem.ToViewModel called id={Id} title={Title}"); } catch { }
         return new AppItem
         {
-            ExePath = MainAction?.Path,
-            IsAdmin = MainAction?.IsAdmin ?? false,
-            Id = string.IsNullOrEmpty(Id) ? PathHashHelper.GetPathHash(MainAction?.Path ?? "") : Id,
+            ExePath = Actions?.Main?.Path,
+            IsAdmin = Actions?.Main?.IsAdmin ?? false,
+            Id = string.IsNullOrEmpty(Id) ? PathHashHelper.GetPathHash(Actions?.Main?.Path ?? "") : Id,
             Status = Status,
             DeletedAt = DeletedAt,
             Title = Title,
-            IconPath = (string.IsNullOrEmpty(IconPath) || Path.IsPathRooted(IconPath))
-                            ? IconPath
-                            : (IconPath.StartsWith("ico\\", StringComparison.OrdinalIgnoreCase) || IconPath.StartsWith("ico/", StringComparison.OrdinalIgnoreCase))
-                               ? Path.Combine(iconCachePath, Path.GetFileName(IconPath))
-                               : (!IconPath.Contains(Path.DirectorySeparatorChar) && !IconPath.Contains(Path.AltDirectorySeparatorChar))
-                                  ? Path.Combine(iconCachePath, IconPath)
-                                  : IconPath,
-            CustomMenu = CustomMenu,
+            IconPath = (string.IsNullOrEmpty(Icon) || Path.IsPathRooted(Icon))
+                            ? Icon
+                            : (Icon.StartsWith("ico\\", StringComparison.OrdinalIgnoreCase) || Icon.StartsWith("ico/", StringComparison.OrdinalIgnoreCase))
+                               ? Path.Combine(iconCachePath, Path.GetFileName(Icon))
+                               : (!Icon.Contains(Path.DirectorySeparatorChar) && !Icon.Contains(Path.AltDirectorySeparatorChar))
+                                  ? Path.Combine(iconCachePath, Icon)
+                                  : Icon,
+            CustomMenuItems = CustomMenu ?? [],
             Platform = Platform,
-            MgrPath = ManagerAction?.Path,
-            IsMgrAdmin = ManagerAction?.IsAdmin ?? false,
-            UseAlternativeLaunch = AltAction?.Enabled ?? false,
-            AlternativeLaunchCommand = AltAction?.Path,
-            IsAltAdmin = AltAction?.IsAdmin ?? false,
-            RunAlongside = AlongsideAction?.Enabled ?? false,
-            AlongsideCommand = AlongsideAction?.Path,
-            IsAlongsideAdmin = AlongsideAction?.IsAdmin ?? false,
+            MgrPath = Actions?.Manager?.Path,
+            IsMgrAdmin = Actions?.Manager?.IsAdmin ?? false,
+            UseAlternativeLaunch = Actions?.Alt?.Enabled ?? false,
+            AlternativeLaunchCommand = Actions?.Alt?.Command,
+            IsAltAdmin = Actions?.Alt?.IsAdmin ?? false,
+            RunAlongside = Actions?.Alongside?.Enabled ?? false,
+            AlongsideCommand = Actions?.Alongside?.Command,
+            IsAlongsideAdmin = Actions?.Alongside?.IsAdmin ?? false,
         };
+    }
+
+    public class ActionsDto
+    {
+        [YamlMember(Alias = "main")]
+        public ActionDto? Main { get; set; }
+        [YamlMember(Alias = "manager")]
+        public ActionDto? Manager { get; set; }
+        [YamlMember(Alias = "alt")]
+        public AltActionDto? Alt { get; set; }
+        [YamlMember(Alias = "alongside")]
+        public AlongActionDto? Alongside { get; set; }
     }
 
     public class ActionDto
     {
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        [YamlMember(Alias = "path")]
         public string? Path { get; set; }
+        [YamlMember(Alias = "admin")]
         public bool IsAdmin { get; set; }
     }
 
     public class AltActionDto
     {
+        [YamlMember(Alias = "enabled")]
         public bool Enabled { get; set; }
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public string? Path { get; set; }
+        [YamlMember(Alias = "command")]
+        public string? Command { get; set; }
+        [YamlMember(Alias = "admin")]
         public bool IsAdmin { get; set; }
     }
 
     public class AlongActionDto
     {
+        [YamlMember(Alias = "enabled")]
         public bool Enabled { get; set; }
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public string? Path { get; set; }
+        [YamlMember(Alias = "command")]
+        public string? Command { get; set; }
+        [YamlMember(Alias = "admin")]
         public bool IsAdmin { get; set; }
     }
 }

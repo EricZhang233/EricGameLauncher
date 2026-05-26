@@ -1,7 +1,8 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Text.Json;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
 namespace EricGameLauncher;
 
@@ -28,12 +29,15 @@ public static class I18n
             try
             {
                 var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-                using var stream = assembly.GetManifestResourceStream("EricGameLauncher.i18n.json");
+                using var stream = assembly.GetManifestResourceStream("EricGameLauncher.i18n.yaml");
                 if (stream == null) return;
 
                 using var reader = new StreamReader(stream);
-                string json = reader.ReadToEnd();
-                _allTranslations = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(json);
+                string yaml = reader.ReadToEnd();
+                var deserializer = new YamlDotNet.Serialization.DeserializerBuilder()
+                    .WithNamingConvention(YamlDotNet.Serialization.NamingConventions.CamelCaseNamingConvention.Instance)
+                    .Build();
+                _allTranslations = deserializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(yaml);
             }
             catch (Exception ex) { LogService.Write("App", $"I18n Load failed for lang={langCode}", ex); }
         }
