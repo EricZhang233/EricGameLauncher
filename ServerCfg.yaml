@@ -14,7 +14,7 @@ announcements:
       这是一个示例公告，仅用于说明配置格式。
     body_en: | # multiline string
       This is a sample announcement for format demonstration.
-    time: "2026-05-20T12:00:00Z" # ISO8601, e.g. 2026-05-20T12:00:00Z
+    time: "2026-05-20T00:00:00Z" # ISO8601, e.g. 2026-05-20T12:00:00Z
     position: normal # enum: normal | top | bottom
     visible: false # bool (true | false)
   # 示例公告结束
@@ -27,7 +27,7 @@ announcements:
       这是一条置顶测试公告，用来验证顶部优先级、固定标识和列表排序。
     body_en: |
       This test announcement verifies top priority, marker display, and list ordering.
-    time: "2026-05-26T08:00:00Z"
+    time: "2026-05-20T00:00:00Z"
     position: top
     visible: true
 
@@ -42,7 +42,7 @@ announcements:
     body_en: |
       This test announcement includes quotes, colons, #, and a URL: https://example.com
       It verifies how scalars behave with special characters.
-    time: "2026-05-26T09:00:00Z"
+    time: "2026-05-20T00:00:00Z"
     position: normal
     visible: true
 
@@ -55,7 +55,7 @@ announcements:
       这条公告设置在未来时间发布，客户端在到达发布时间前不应显示。
     body_en: |
       This announcement is scheduled for a future time and should not be visible before release.
-    time: "2026-06-01T00:00:00Z"
+    time: "2026-05-20T00:00:00Z"
     position: normal
     visible: true
 
@@ -68,6 +68,6 @@ announcements:
       这是一条置底测试公告，用来验证底部排序和向下标识。
     body_en: |
       This test announcement verifies bottom ordering and the down marker.
-    time: "2026-05-26T10:00:00Z"
+    time: "2026-05-20T00:00:00Z"
     position: bottom
     visible: true
