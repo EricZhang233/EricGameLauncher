@@ -429,6 +429,7 @@ public sealed class ImagePathConverter : IValueConverter
                 return cached;
 
             var bitmap = new BitmapImage();
+            bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
             bitmap.DecodePixelWidth = 256;
             bitmap.DecodePixelHeight = 256;
 
