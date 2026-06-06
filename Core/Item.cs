@@ -677,6 +677,7 @@ public static class IconHelper
         using (LogService.StartOperation("Item", "GetIconPathAsync"))
         {
             if (string.IsNullOrEmpty(exePath)) return null;
+            if (!exePath.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase) && !File.Exists(exePath)) return null;
             string iconPath = Path.Combine(CachePath, $"{itemId}.png");
             if (forceExtract && File.Exists(iconPath))
             {
@@ -696,6 +697,7 @@ public static class IconHelper
                 LogService.Write("Item", $"ExtractAndSaveIconAsync Start source={sourcePath} itemId={itemId} extractFromLnk={extractFromLnk}");
                 if (string.IsNullOrEmpty(sourcePath)) return null;
                 bool isStoreApp = sourcePath.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase);
+                if (!isStoreApp && !File.Exists(sourcePath)) return null;
 
                 string targetPath = sourcePath;
                 int iconIndex = 0;
@@ -789,6 +791,8 @@ public static class IconHelper
         }
     }
 
+    private static readonly int[] StoreIconSizes = [512, 256, 150, 128, 96, 72, 64, 48, 44, 32];
+
     private static bool ExtractStoreAppIcon(string shellPath, string savePath)
     {
         try
@@ -798,29 +802,30 @@ public static class IconHelper
 
             if (hr == 0 && factory != null)
             {
-                hr = factory.GetImage(new SIZE { cx = 512, cy = 512 }, 0x104, out IntPtr hBitmap);
-
-                if (hr != 0)
+                foreach (int sz in StoreIconSizes)
                 {
-                    hr = factory.GetImage(new SIZE { cx = 512, cy = 512 }, 0x108, out hBitmap);
-                }
+                    hr = factory.GetImage(new SIZE { cx = sz, cy = sz }, 0x4, out IntPtr hBitmap);
+                    if (hr != 0)
+                        hr = factory.GetImage(new SIZE { cx = sz, cy = sz }, 0x8, out hBitmap);
 
-                if (hr == 0 && hBitmap != IntPtr.Zero)
-                {
-                    try
+                    if (hr == 0 && hBitmap != IntPtr.Zero)
                     {
-                        using var bmp = CreateBitmapFromHBitmap(hBitmap, true);
-                        if (bmp != null)
+                        try
                         {
-                            bmp.Save(savePath, ImageFormat.Png);
-                            return true;
+                            using var bmp = CreateBitmapFromHBitmap(hBitmap, true);
+                            if (bmp != null)
+                            {
+                                bmp.Save(savePath, ImageFormat.Png);
+                                LogService.Write("Item", $"ExtractStoreAppIcon IShellItemImageFactory success size={sz}");
+                                return true;
+                            }
                         }
+                        catch (Exception ex)
+                        {
+                            LogService.Write("Item", "ExtractStoreAppIcon: save bitmap failed", ex);
+                        }
+                        finally { DeleteObject(hBitmap); }
                     }
-                    catch (Exception ex)
-                    {
-                        LogService.Write("Item", "ExtractStoreAppIcon: save bitmap failed", ex);
-                    }
-                    finally { DeleteObject(hBitmap); }
                 }
             }
 
