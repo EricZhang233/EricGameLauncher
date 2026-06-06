@@ -147,6 +147,8 @@ namespace EricGameLauncher
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             LogService.Write("Startup", $"Ctor Start [Version: {AppVersion.DisplayVersion}]");
+            // Apply debug path overrides early if started with -debug
+            try { DebugPaths.ApplyIfDebug(); } catch { }
             this.InitializeComponent();
 
             _customSections = new StackPanel[] { PropCustomSection1, PropCustomSection2, PropCustomSection3, PropCustomSection4, PropCustomSection5, PropCustomSection6, PropCustomSection7, PropCustomSection8, PropCustomSection9, PropCustomSection10 };
@@ -384,6 +386,11 @@ namespace EricGameLauncher
         {
             try
             {
+                if (DebugPaths.IsDebug())
+                {
+                    LogService.Write("Update", "QuietCheck skipped because Debug mode is active");
+                    return;
+                }
                 using (LogService.StartOperation("Update", "QuietCheck"))
                 {
                     LogService.Write("Update", $"QuietCheck Start skipDelay={skipDelay}");
@@ -437,49 +444,55 @@ namespace EricGameLauncher
             using (LogService.StartOperation("Update", "ManualCheck"))
             {
                 LogService.Write("Update", "ManualCheck Start");
-
-            var release = await UpdateService.GetReleaseAsync(ConfigService.UpdateChannel);
-            if (release != null)
-            {
-                bool hasUpdate = false;
-                Version latestVersion = new Version(0, 0, 0, 0);
-                var match = System.Text.RegularExpressions.Regex.Match(release.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
-                if (match.Success)
+                var release = await UpdateService.GetReleaseAsync(ConfigService.UpdateChannel);
+                if (release != null)
                 {
-                    latestVersion = UpdateService.NormalizeVersion(match.Value);
-                    Version currentVersion = UpdateService.NormalizeVersion(AppVersion.Version);
-                    hasUpdate = latestVersion > currentVersion;
-                }
-
-                if (hasUpdate)
-                {
-                    _pendingUpdate = release;
-                    bool isForced = UpdateService.CheckForceUpdateAsync(latestVersion);
-
-                    DispatcherQueue.TryEnqueue(() =>
+                    bool hasUpdate = false;
+                    Version latestVersion = new Version(0, 0, 0, 0);
+                    var match = System.Text.RegularExpressions.Regex.Match(release.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
+                    if (match.Success)
                     {
-                        HasUpdate = true;
-                    });
+                        latestVersion = UpdateService.NormalizeVersion(match.Value);
+                        Version currentVersion = UpdateService.NormalizeVersion(AppVersion.Version);
+                        hasUpdate = latestVersion > currentVersion;
+                    }
 
-                    await StartUpdateFlowAsync(release, isForced);
+                    if (hasUpdate)
+                    {
+                        _pendingUpdate = release;
+                        bool isForced = DebugPaths.IsDebug() ? false : UpdateService.CheckForceUpdateAsync(latestVersion);
+
+                        DispatcherQueue.TryEnqueue(() =>
+                        {
+                            HasUpdate = true;
+                        });
+
+                        if (isForced)
+                        {
+                            await StartUpdateFlowAsync(release, true);
+                        }
+                        else
+                        {
+                            await ShowReleaseDialogAsync(release, hasUpdate: true);
+                        }
+                    }
+                    else
+                    {
+                        await ShowReleaseDialogAsync(release, hasUpdate: false);
+                    }
                 }
                 else
                 {
-                    await ShowReleaseDialogAsync(release, hasUpdate: false);
+                    ContentDialog noUpdateDialog = new ContentDialog
+                    {
+                        Title = I18n.T("Update_NoUpdateTitle"),
+                        Content = I18n.T("Update_NoUpdateContent"),
+                        CloseButtonText = I18n.T("Update_OK"),
+                        DefaultButton = ContentDialogButton.Close,
+                        XamlRoot = this.Content.XamlRoot
+                    };
+                    await noUpdateDialog.ShowAsync();
                 }
-            }
-            else
-            {
-                ContentDialog noUpdateDialog = new ContentDialog
-                {
-                    Title = I18n.T("Update_NoUpdateTitle"),
-                    Content = I18n.T("Update_NoUpdateContent"),
-                    CloseButtonText = I18n.T("Update_OK"),
-                    DefaultButton = ContentDialogButton.Close,
-                    XamlRoot = this.Content.XamlRoot
-                };
-                await noUpdateDialog.ShowAsync();
-            }
                 LogService.Write("Update", "ManualCheck End");
             }
         }
@@ -3715,6 +3728,11 @@ namespace EricGameLauncher
 
         private async void BtnSwitchStorageMode_Click(object sender, RoutedEventArgs e)
         {
+            if (DebugPaths.IsDebug())
+            {
+                try { LogService.Write("Config", "BtnSwitchStorageMode_Click ignored in Debug mode"); } catch { }
+                return;
+            }
             using (LogService.StartOperation("Config", "BtnSwitchStorageMode_Click"))
             {
                 try
@@ -3736,18 +3754,31 @@ namespace EricGameLauncher
 
         private void UpdateStorageModeUI()
         {
+            string baseModeText;
             if (ConfigService.IsSystemMode)
             {
-                StorageModeText.Text = I18n.T("Settings_SystemMode");
+                baseModeText = I18n.T("Settings_SystemMode");
                 ToolTipService.SetToolTip(BtnSwitchStorageMode, I18n.T("Settings_SwitchToPortable"));
             }
             else
             {
-                StorageModeText.Text = I18n.T("Settings_PortableMode");
+                baseModeText = I18n.T("Settings_PortableMode");
                 ToolTipService.SetToolTip(BtnSwitchStorageMode, I18n.T("Settings_SwitchToSystem"));
             }
+            var displayText = baseModeText ?? "";
+            if (DebugPaths.IsDebug())
+            {
+                displayText = string.IsNullOrEmpty(displayText) ? "DebugMode" : displayText + " DebugMode";
+                try { LogService.Write("Config", "UpdateStorageModeUI: Debug mode active"); } catch { }
+                if (BtnSwitchStorageMode != null) BtnSwitchStorageMode.Visibility = Visibility.Collapsed;
+                ToolTipService.SetToolTip(BtnSwitchStorageMode, "Debug mode: storage switching disabled");
+            }
+            else
+            {
+                if (BtnSwitchStorageMode != null) BtnSwitchStorageMode.Visibility = Visibility.Visible;
+            }
 
-
+            StorageModeText.Text = displayText;
             ToolTipService.SetToolTip(StorageModeText, ConfigService.CurrentDataPath);
         }
 
@@ -3879,12 +3910,7 @@ namespace EricGameLauncher
                 if (SettingsUpdateChannelDesc != null)
                     SettingsUpdateChannelDesc.Text = I18n.T("Settings_UpdateChannel_Desc");
                 SettingsDataLocationLabel.Text = I18n.T("Settings_DataLocation");
-                StorageModeText.Text = ConfigService.IsSystemMode
-                    ? I18n.T("Settings_SystemMode")
-                    : I18n.T("Settings_PortableMode");
-                ToolTipService.SetToolTip(BtnSwitchStorageMode, ConfigService.IsSystemMode
-                    ? I18n.T("Settings_SwitchToPortable")
-                    : I18n.T("Settings_SwitchToSystem"));
+                UpdateStorageModeUI();
                 SettingsMigrateNote.Text = I18n.T("Settings_MigrateNote");
                 var languages = I18n.GetAvailableLanguages();
                 LanguageComboBox.SelectionChanged -= LanguageComboBox_SelectionChanged;
