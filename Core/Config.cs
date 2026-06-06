@@ -222,7 +222,10 @@ public static class ConfigService
     private static string SystemBasePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "eric", AppFolderName);
     private static string PortableBasePath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data");
 
-    public static string SystemCachePath => Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher");
+    private static string? _overrideSystemCachePath;
+    public static string SystemCachePath => _overrideSystemCachePath ?? Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher");
+
+    private static bool _debugModeApplied = false;
 
     public static string ConfigFilePath => Path.Combine(CurrentDataPath, DataFileName);
     public static string FixedCachePath => Path.Combine(CurrentDataPath, IconFolderName);
@@ -242,6 +245,17 @@ public static class ConfigService
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         LogService.Write("Config", "Initialize Start");
+        if (_debugModeApplied)
+        {
+            try { LogService.Write("Config", "Initialize detected debug mode, skipping normal path selection"); } catch { }
+            if (!Directory.Exists(CurrentDataPath)) Directory.CreateDirectory(CurrentDataPath);
+            if (!Directory.Exists(FixedCachePath)) Directory.CreateDirectory(FixedCachePath);
+            if (!Directory.Exists(SystemCachePath)) Directory.CreateDirectory(SystemCachePath);
+            LoadConfigData();
+            LogService.Write("Config", $"Initialize End path={CurrentDataPath} mode=Debug duration={sw.ElapsedMilliseconds}ms");
+            return;
+        }
+
         if (!Directory.Exists(SystemBasePath)) Directory.CreateDirectory(SystemBasePath);
 
         string portableYamlPath = Path.Combine(PortableBasePath, DataFileName);
@@ -259,6 +273,24 @@ public static class ConfigService
 
         LoadConfigData();
         LogService.Write("Config", $"Initialize End path={CurrentDataPath} mode={(CurrentDataPath == SystemBasePath ? "System" : "Portable")} duration={sw.ElapsedMilliseconds}ms");
+    }
+
+    public static void ApplyDebugMode(string baseDir)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(baseDir)) return;
+            string dataPath = Path.Combine(baseDir, "Data");
+            string cachePath = Path.Combine(baseDir, "Cache");
+            CurrentDataPath = dataPath;
+            _overrideSystemCachePath = cachePath;
+            _debugModeApplied = true;
+            if (!Directory.Exists(CurrentDataPath)) Directory.CreateDirectory(CurrentDataPath);
+            if (!Directory.Exists(FixedCachePath)) Directory.CreateDirectory(FixedCachePath);
+            if (!Directory.Exists(SystemCachePath)) Directory.CreateDirectory(SystemCachePath);
+            LogService.Write("Config", $"ApplyDebugMode applied baseDir={baseDir} data={CurrentDataPath} cache={SystemCachePath}");
+        }
+        catch (Exception ex) { LogService.Write("Config", "ApplyDebugMode failed", ex); }
     }
 
     public static void SwitchStorageMode(bool useSystemPath)

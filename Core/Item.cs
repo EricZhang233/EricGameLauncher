@@ -798,11 +798,11 @@ public static class IconHelper
 
             if (hr == 0 && factory != null)
             {
-                hr = factory.GetImage(new SIZE { cx = 256, cy = 256 }, 0x104, out IntPtr hBitmap);
+                hr = factory.GetImage(new SIZE { cx = 512, cy = 512 }, 0x104, out IntPtr hBitmap);
 
                 if (hr != 0)
                 {
-                    hr = factory.GetImage(new SIZE { cx = 256, cy = 256 }, 0x108, out hBitmap);
+                    hr = factory.GetImage(new SIZE { cx = 512, cy = 512 }, 0x108, out hBitmap);
                 }
 
                 if (hr == 0 && hBitmap != IntPtr.Zero)

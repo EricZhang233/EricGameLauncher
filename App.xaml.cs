@@ -8,6 +8,7 @@ namespace EricGameLauncher
     {
         public App()
         {
+                try { DebugPaths.ApplyIfDebug(); } catch { }
             this.InitializeComponent();
             this.UnhandledException += App_UnhandledException;
             TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
