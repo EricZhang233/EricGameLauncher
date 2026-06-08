@@ -2,8 +2,114 @@ using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Windows.UI.Text;
+using YamlDotNet.Serialization;
 
 namespace EricGameLauncher;
+
+public class Announcement
+{
+    [YamlMember(Alias = "id")]
+    public string Id { get; set; } = "";
+
+    [YamlMember(Alias = "title_cn")]
+    public string TitleCn { get; set; } = "";
+
+    [YamlMember(Alias = "title_zh")]
+    public string TitleZh { get; set; } = "";
+
+    [YamlMember(Alias = "title_en")]
+    public string TitleEn { get; set; } = "";
+
+    [YamlMember(Alias = "body_cn")]
+    public string BodyCn { get; set; } = "";
+
+    [YamlMember(Alias = "body_zh")]
+    public string BodyZh { get; set; } = "";
+
+    [YamlMember(Alias = "body_en")]
+    public string BodyEn { get; set; } = "";
+
+    [YamlMember(Alias = "time")]
+    public string Time { get; set; } = "";
+
+    [YamlMember(Alias = "position")]
+    public string Position { get; set; } = "";
+
+    [YamlMember(Alias = "visible")]
+    public bool Visible { get; set; } = true;
+
+    public string GetDisplayTitle()
+    {
+        var lang = ConfigService.Language ?? "";
+        bool isZhCn = string.Equals(lang, "Zh-CN", StringComparison.OrdinalIgnoreCase) || string.Equals(lang, "zh-cn", StringComparison.OrdinalIgnoreCase);
+        string zhText = FirstNonWhiteSpace(TitleCn, TitleZh);
+        if (isZhCn)
+        {
+            return FirstNonWhiteSpace(zhText, TitleEn);
+        }
+        else
+        {
+            return FirstNonWhiteSpace(TitleEn, zhText);
+        }
+    }
+
+    public string GetDisplayBody()
+    {
+        var lang = ConfigService.Language ?? "";
+        bool isZhCn = string.Equals(lang, "Zh-CN", StringComparison.OrdinalIgnoreCase) || string.Equals(lang, "zh-cn", StringComparison.OrdinalIgnoreCase);
+        string zhText = FirstNonWhiteSpace(BodyCn, BodyZh);
+        if (isZhCn)
+        {
+            return FirstNonWhiteSpace(zhText, BodyEn);
+        }
+        else
+        {
+            return FirstNonWhiteSpace(BodyEn, zhText);
+        }
+    }
+
+    public string GetPosition()
+    {
+        string value = (Position ?? "").Trim().ToLowerInvariant();
+        if (value == "top" || value == "bottom" || value == "normal")
+        {
+            return value;
+        }
+
+        return "normal";
+    }
+
+    public int GetPositionPriority()
+    {
+        string value = GetPosition();
+        if (value == "top") return 0;
+        if (value == "bottom") return 2;
+        return 1;
+    }
+
+    public DateTimeOffset? GetTimeValue()
+    {
+        if (DateTimeOffset.TryParse(Time, out var parsed))
+        {
+            return parsed.ToUniversalTime();
+        }
+
+        return null;
+    }
+
+    private static string FirstNonWhiteSpace(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+        }
+
+        return "";
+    }
+}
 
 public sealed class AnnouncementListItem : INotifyPropertyChanged
 {

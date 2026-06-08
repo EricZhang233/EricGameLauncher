@@ -80,29 +80,9 @@ public static class I18n
         {
             LogService.Write("App", "DetectSystemLanguage called");
             var culture = System.Globalization.CultureInfo.CurrentUICulture;
-            string name = culture.Name.ToLowerInvariant();
-            string lang = culture.TwoLetterISOLanguageName.ToLowerInvariant();
-
-            if (lang == "zh")
-            {
-                bool isTraditional = name.Contains("tw") || name.Contains("hk") ||
-                                        name.Contains("mo") || name.Contains("hant");
-                var res = isTraditional ? "Zh-TW" : "Zh-CN";
-                LogService.Write("App", $"DetectSystemLanguage result={res}");
-                return res;
-            }
-
-            var map = lang switch
-            {
-                "ja" => "JA",
-                "ko" => "KO",
-                "fr" => "FR",
-                "de" => "DE",
-                "es" => "ES",
-                _ => "EN",
-            };
-            LogService.Write("App", $"DetectSystemLanguage result={map}");
-            return map;
+            var res = culture.Name.Equals("zh-CN", StringComparison.OrdinalIgnoreCase) ? "Zh-CN" : "EN";
+            LogService.Write("App", $"DetectSystemLanguage result={res}");
+            return res;
         }
         catch { return "EN"; }
     }

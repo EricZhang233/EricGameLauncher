@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using YamlDotNet.Serialization;
@@ -471,6 +472,7 @@ public static class ConfigService
                     var serializer = new SerializerBuilder().Build();
                     yamlString = serializer.Serialize(_configData);
                 }
+                yamlString = YamlQuoteHelper.ToSingleQuoted(yamlString);
 
                 if (!Directory.Exists(CurrentDataPath)) Directory.CreateDirectory(CurrentDataPath);
                 await File.WriteAllTextAsync(yamlPath, yamlString);
@@ -700,107 +702,44 @@ public static class ConfigService
     }
 }
 
-public class Announcement
+internal static class YamlQuoteHelper
 {
-    [YamlMember(Alias = "id")]
-    public string Id { get; set; } = "";
-
-    [YamlMember(Alias = "title_cn")]
-    public string TitleCn { get; set; } = "";
-
-    [YamlMember(Alias = "title_zh")]
-    public string TitleZh { get; set; } = "";
-
-    [YamlMember(Alias = "title_en")]
-    public string TitleEn { get; set; } = "";
-
-    [YamlMember(Alias = "body_cn")]
-    public string BodyCn { get; set; } = "";
-
-    [YamlMember(Alias = "body_zh")]
-    public string BodyZh { get; set; } = "";
-
-    [YamlMember(Alias = "body_en")]
-    public string BodyEn { get; set; } = "";
-
-    [YamlMember(Alias = "time")]
-    public string Time { get; set; } = "";
-
-    [YamlMember(Alias = "position")]
-    public string Position { get; set; } = "";
-
-    [YamlMember(Alias = "visible")]
-    public bool Visible { get; set; } = true;
-
-    public string GetDisplayTitle()
+    public static string ToSingleQuoted(string yaml)
     {
-        var lang = ConfigService.Language ?? "";
-        bool isZhCn = string.Equals(lang, "Zh-CN", StringComparison.OrdinalIgnoreCase) || string.Equals(lang, "zh-cn", StringComparison.OrdinalIgnoreCase);
-        string zhText = FirstNonWhiteSpace(TitleCn, TitleZh);
-        if (isZhCn)
+        return Regex.Replace(yaml, @": ""((?:[^""\\]|\\.)*)""", match =>
         {
-            return FirstNonWhiteSpace(zhText, TitleEn);
-        }
-        else
-        {
-            return FirstNonWhiteSpace(TitleEn, zhText);
-        }
+            string escaped = match.Groups[1].Value;
+            string unescaped = UnescapeDoubleQuotedYaml(escaped);
+            return ": '" + unescaped.Replace("'", "''") + "'";
+        });
     }
 
-    public string GetDisplayBody()
+    private static string UnescapeDoubleQuotedYaml(string s)
     {
-        var lang = ConfigService.Language ?? "";
-        bool isZhCn = string.Equals(lang, "Zh-CN", StringComparison.OrdinalIgnoreCase) || string.Equals(lang, "zh-cn", StringComparison.OrdinalIgnoreCase);
-        string zhText = FirstNonWhiteSpace(BodyCn, BodyZh);
-        if (isZhCn)
+        return Regex.Replace(s, @"\\x[0-9a-fA-F]{2}|\\u[0-9a-fA-F]{4}|\\U[0-9a-fA-F]{8}|\\(.)", m =>
         {
-            return FirstNonWhiteSpace(zhText, BodyEn);
-        }
-        else
-        {
-            return FirstNonWhiteSpace(BodyEn, zhText);
-        }
-    }
-
-    public string GetPosition()
-    {
-        string value = (Position ?? "").Trim().ToLowerInvariant();
-        if (value == "top" || value == "bottom" || value == "normal")
-        {
-            return value;
-        }
-
-        return "normal";
-    }
-
-    public int GetPositionPriority()
-    {
-        string value = GetPosition();
-        if (value == "top") return 0;
-        if (value == "bottom") return 2;
-        return 1;
-    }
-
-    public DateTimeOffset? GetTimeValue()
-    {
-        if (DateTimeOffset.TryParse(Time, out var parsed))
-        {
-            return parsed.ToUniversalTime();
-        }
-
-        return null;
-    }
-
-    private static string FirstNonWhiteSpace(params string?[] values)
-    {
-        foreach (var value in values)
-        {
-            if (!string.IsNullOrWhiteSpace(value))
+            if (m.Value.StartsWith("\\x"))
+                return ((char)Convert.ToInt32(m.Value.Substring(2), 16)).ToString();
+            if (m.Value.StartsWith("\\u"))
+                return ((char)Convert.ToInt32(m.Value.Substring(2), 16)).ToString();
+            if (m.Value.StartsWith("\\U"))
+                return char.ConvertFromUtf32(Convert.ToInt32(m.Value.Substring(2), 16));
+            return m.Groups[1].Value switch
             {
-                return value.Trim();
-            }
-        }
-
-        return "";
+                "\\" => "\\",
+                "\"" => "\"",
+                "0" => "\0",
+                "a" => "\a",
+                "b" => "\b",
+                "t" => "\t",
+                "n" => "\n",
+                "v" => "\v",
+                "f" => "\f",
+                "r" => "\r",
+                "e" => "\u001b",
+                "/" => "/",
+                _ => m.Groups[1].Value
+            };
+        });
     }
 }

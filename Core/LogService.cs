@@ -15,10 +15,10 @@ internal static class LogService
 {
     private static readonly object _lock = new();
     private static int _startupRefCount = 0;
-    private const long MaxLogFileBytes = 5 * 1024 * 1024;
+    private static readonly string _sessionTimestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
 
     private static string LogDir => Path.Combine(ConfigService.SystemCachePath, "log");
-    private static string LogFilePath => Path.Combine(LogDir, "app.log");
+    private static string LogFilePath => Path.Combine(LogDir, $"app-{_sessionTimestamp}.log");
 
     internal static void StartupEnter()
     {
@@ -157,8 +157,7 @@ internal static class LogService
             {
                 if (writer == null)
                 {
-                    RotateIfNeeded(LogFilePath);
-                    writer = new StreamWriter(LogFilePath, append: true) { AutoFlush = false };
+                    writer = new StreamWriter(LogFilePath, append: false) { AutoFlush = false };
                 }
 
                 var sb = new StringBuilder(512);
@@ -199,7 +198,6 @@ internal static class LogService
                     }
 
                     await writer.WriteLineAsync(sb.ToString());
-                    // return pooled entry
                     try { ReturnEntry(entry); } catch { }
                 }
 
@@ -214,19 +212,6 @@ internal static class LogService
                 try { await writer.DisposeAsync(); } catch { }
             }
         }
-    }
-
-    private static void RotateIfNeeded(string path)
-    {
-        try
-        {
-            if (!File.Exists(path)) return;
-            var fi = new FileInfo(path);
-            if (fi.Length <= MaxLogFileBytes) return;
-            string archive = path + "." + DateTime.UtcNow.ToString("yyyyMMddHHmmss");
-            File.Move(path, archive);
-        }
-        catch { }
     }
 
     internal static void FlushAndStop()

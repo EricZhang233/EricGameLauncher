@@ -126,18 +126,14 @@
   <ItemGroup>
     <None Remove="payload\updater.main\**" />
     <Content Remove="payload\updater.main\**" />
-    <EmbeddedResource Include="payload\updater.main\updater.main.exe" LogicalName="EricGameLauncher.updater.main.exe" />
-    <EmbeddedResource Include="payload\updater.main\updater.main.dll" LogicalName="EricGameLauncher.updater.main.dll" />
-    <EmbeddedResource Include="payload\updater.main\updater.main.runtimeconfig.json" LogicalName="EricGameLauncher.updater.main.runtimeconfig.json" />
+    <EmbeddedResource Include="payload\updater.main\*.*" LogicalName="EricGameLauncher.updater.main.%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- CfgUpdater 影子分发配置 (非单文件) -->
   <ItemGroup>
     <None Remove="payload\updater.cfgver\**" />
     <Content Remove="payload\updater.cfgver\**" />
-    <EmbeddedResource Include="payload\updater.cfgver\updater.cfgver.exe" LogicalName="EricGameLauncher.updater.cfgver.exe" />
-    <EmbeddedResource Include="payload\updater.cfgver\updater.cfgver.dll" LogicalName="EricGameLauncher.updater.cfgver.dll" />
-    <EmbeddedResource Include="payload\updater.cfgver\updater.cfgver.runtimeconfig.json" LogicalName="EricGameLauncher.updater.cfgver.runtimeconfig.json" />
+    <EmbeddedResource Include="payload\updater.cfgver\*.*" LogicalName="EricGameLauncher.updater.cfgver.%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

@@ -10,9 +10,7 @@
             </ResourceDictionary.MergedDictionaries>
             <local:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
             <local:ImagePathConverter x:Key="ImagePathConverter" />
-            <local:StringNotEmptyToVisibilityConverter x:Key="StringNotEmptyToVisibilityConverter" />
             <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
-            <local:BoolToOpacityConverter x:Key="BoolToOpacityConverter" />
             <local:SizeToCornerRadiusConverter x:Key="SizeToCornerRadiusBg" Ratio="0.2" MarginOffset="0" />
             <local:SizeToCornerRadiusConverter x:Key="SizeToCornerRadiusIcon" Ratio="0.2" MarginOffset="12" />
         </ResourceDictionary>
