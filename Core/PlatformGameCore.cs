@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -520,9 +521,31 @@ public static class StoreHelper
             string aumid = path.Substring(LauncherConstants.UwpAppsFolderPrefix.Length);
             string pfn = aumid.Contains("!") ? aumid.Split('!')[0] : aumid;
             var package = _packageManager.FindPackageForUser("", pfn);
-            return package != null;
+            if (package != null) return true;
+
+            int hr = SHCreateItemFromParsingName(path, IntPtr.Zero, typeof(IShellItem).GUID, out var shellItem);
+            if (hr == 0 && shellItem != null)
+            {
+                Marshal.ReleaseComObject(shellItem);
+                return true;
+            }
+            return false;
         }
         catch { return false; }
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
+    private static extern int SHCreateItemFromParsingName(
+        [In, MarshalAs(UnmanagedType.LPWStr)] string pszPath,
+        [In] IntPtr pbc,
+        [In, MarshalAs(UnmanagedType.LPStruct)] Guid riid,
+        [Out, MarshalAs(UnmanagedType.Interface)] out IShellItem ppv);
+
+    [ComImport]
+    [Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellItem
+    {
     }
 
     public static async Task<bool> IsGameAsync(string path)

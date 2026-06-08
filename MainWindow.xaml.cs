@@ -115,6 +115,7 @@ namespace EricGameLauncher
                 if (AppGrid != null && AppGrid.ActualWidth > 0)
                 {
                     AppGrid.Visibility = Visibility.Visible;
+                    AppGrid.Focus(FocusState.Programmatic);
                     _isRootLoaded = true;
                     LogService.Write("Startup", $"UI revealed early at {sw.ElapsedMilliseconds}ms");
                     
@@ -132,6 +133,7 @@ namespace EricGameLauncher
             if (AppGrid != null)
             {
                 AppGrid.Visibility = Visibility.Visible;
+                AppGrid.Focus(FocusState.Programmatic);
                 LogService.Write("Startup", $"UI revealed after timeout at {sw.ElapsedMilliseconds}ms");
             }
             _isRootLoaded = true;
@@ -147,8 +149,7 @@ namespace EricGameLauncher
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             LogService.Write("Startup", $"Ctor Start [Version: {AppVersion.DisplayVersion}]");
-            // Apply debug path overrides early if started with -debug
-            try { DebugPaths.ApplyIfDebug(); } catch { }
+            try { StartupArgs.Parse(); DebugPaths.ApplyIfDebug(); } catch { }
             this.InitializeComponent();
 
             _customSections = new StackPanel[] { PropCustomSection1, PropCustomSection2, PropCustomSection3, PropCustomSection4, PropCustomSection5, PropCustomSection6, PropCustomSection7, PropCustomSection8, PropCustomSection9, PropCustomSection10 };
@@ -230,6 +231,8 @@ namespace EricGameLauncher
             this.SetTitleBar(TitleBarGrid);
 
             ConfigService.Initialize();
+            StartupArgs.LoadDebugConfig();
+            StartupArgs.LogEnvironment();
             ServerConfigManager.LoadReadIds();
 
             I18n.Load(ConfigService.Language);
@@ -500,22 +503,27 @@ namespace EricGameLauncher
         private async void MenuPrivacyItem_Click(object sender, RoutedEventArgs e)
         {
             LogService.Write("UI", "MenuPrivacyItem_Click Start");
+            var scrollViewer = new Microsoft.UI.Xaml.Controls.ScrollViewer
+            {
+                VerticalScrollBarVisibility = Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Auto,
+                VerticalScrollMode = Microsoft.UI.Xaml.Controls.ScrollMode.Enabled,
+                MaxHeight = 400,
+                Content = new Microsoft.UI.Xaml.Controls.TextBlock
+                {
+                    Text = I18n.T("Privacy_DialogContent"),
+                    TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
+                    IsTextSelectionEnabled = true,
+                    Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 16, 0)
+                }
+            };
             ContentDialog privacyDialog = new ContentDialog
             {
                 Title = I18n.T("Privacy_DialogTitle"),
-                Content = new Microsoft.UI.Xaml.Controls.ScrollViewer
-                {
-                    VerticalScrollBarVisibility = Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Auto,
-                    Content = new Microsoft.UI.Xaml.Controls.TextBlock
-                    {
-                        Text = I18n.T("Privacy_DialogContent"),
-                        TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
-                        Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 16, 0)
-                    }
-                },
+                Content = scrollViewer,
                 CloseButtonText = I18n.T("Privacy_DialogClose"),
                 DefaultButton = ContentDialogButton.Close,
-                XamlRoot = this.Content.XamlRoot
+                XamlRoot = this.Content.XamlRoot,
+                FullSizeDesired = false
             };
             await privacyDialog.ShowAsync();
             LogService.Write("UI", "MenuPrivacyItem_Click End");
@@ -826,13 +834,34 @@ namespace EricGameLauncher
                 return true;
             }
 
-            var oldIds = new HashSet<string>(_allItems.Select(x => x.Id));
-            var newIds = new HashSet<string>(newItems.Select(x => x.Id));
-            
-            if (!oldIds.SetEquals(newIds))
+            var oldById = _allItems.ToDictionary(x => x.Id);
+            foreach (var newItem in newItems)
             {
-                LogService.Write("App", $"CheckForDataChanges ItemsChanged");
-                return true;
+                if (!oldById.TryGetValue(newItem.Id, out var oldItem))
+                {
+                    LogService.Write("App", $"CheckForDataChanges ItemAdded id={newItem.Id}");
+                    return true;
+                }
+                if (oldItem.GetContentFingerprint() != newItem.GetContentFingerprint())
+                {
+                    LogService.Write("App", $"CheckForDataChanges ItemChanged id={newItem.Id}");
+                    return true;
+                }
+            }
+
+            var oldRecycleById = _recycleItems.ToDictionary(x => x.Id);
+            foreach (var newItem in newRecycle)
+            {
+                if (!oldRecycleById.TryGetValue(newItem.Id, out var oldItem))
+                {
+                    LogService.Write("App", $"CheckForDataChanges RecycleItemAdded id={newItem.Id}");
+                    return true;
+                }
+                if (oldItem.GetContentFingerprint() != newItem.GetContentFingerprint())
+                {
+                    LogService.Write("App", $"CheckForDataChanges RecycleItemChanged id={newItem.Id}");
+                    return true;
+                }
             }
             
             LogService.Write("App", $"CheckForDataChanges NoChanges");
@@ -880,11 +909,12 @@ namespace EricGameLauncher
                         string cfgUpdaterPath = System.IO.Path.Combine(tempDir, "updater.cfgver.exe");
 
                         var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-                        string[] resources = { "updater.cfgver.exe", "updater.cfgver.dll", "updater.cfgver.runtimeconfig.json" };
-                        foreach (var res in resources)
+                        string cfgPrefix = "EricGameLauncher.updater.cfgver.";
+                        foreach (var resName in assembly.GetManifestResourceNames())
                         {
-                            string resName = $"EricGameLauncher.{res}";
-                            string outputPath = System.IO.Path.Combine(tempDir, res);
+                            if (!resName.StartsWith(cfgPrefix)) continue;
+                            string fileName = resName.Substring(cfgPrefix.Length);
+                            string outputPath = System.IO.Path.Combine(tempDir, fileName);
                             using (var stream = assembly.GetManifestResourceStream(resName))
                             {
                                 if (stream == null) continue;
@@ -1007,7 +1037,6 @@ namespace EricGameLauncher
                 }
                 else
                 {
-                    // Window still foreground: cancel and do not retry
                     LogService.Write("App", "CloseAfterLaunchTimer_Tick cancelling because window is foreground");
                     CancelCloseAfterLaunch();
                 }
@@ -2301,32 +2330,11 @@ namespace EricGameLauncher
                     };
 
                     newAppItems.Add(newItem);
-                    _allItems!.Add(newItem);
-
-                    if (!string.IsNullOrEmpty(newItem.ExePath) &&
-                        newItem.ExePath.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase))
-                    {
-                        _ = Task.Run(async () =>
-                        {
-                            try
-                            {
-                                string? icon = await IconHelper.GetIconPathAsync(newItem.ExePath, newItem.Id);
-                                if (!string.IsNullOrEmpty(icon) && File.Exists(icon))
-                                {
-                                    DispatcherQueue.TryEnqueue(() =>
-                                    {
-                                        newItem.IconPath = icon;
-                                        RefreshView();
-                                    });
-                                }
-                            }
-                            catch (Exception ex) { LogService.Write("App", "ImportScannedGames icon task failed", ex); }
-                        });
-                    }
                 }
 
-                    ConfigService.SaveItems(_allItems!.ToList(), _recycleItems!.ToList());
-                    LogService.Write("Scan", $"ImportScannedGames completed newAdded={newAppItems.Count} totalItems={_allItems!.Count}");
+                    var mergedItems = _allItems!.Concat(newAppItems).ToList();
+                    ConfigService.SaveItems(mergedItems, _recycleItems!.ToList());
+                    LogService.Write("Scan", $"ImportScannedGames completed newAdded={newAppItems.Count} totalItems={mergedItems.Count}");
 
                     _ = ConfigService.RefreshGlobalAsync();
                 }
@@ -3416,7 +3424,6 @@ namespace EricGameLauncher
                 {
                     var newOrder = _tempOrderCollection.ToList();
                     ConfigService.SaveItems(newOrder, _recycleItems.ToList());
-                    RefreshView();
                     _tempOrderCollection = null;
                 }
             }
@@ -3736,14 +3743,17 @@ namespace EricGameLauncher
             using (LogService.StartOperation("Config", "BtnSwitchStorageMode_Click"))
             {
                 try
+                {
+                    bool switchToSystemMode = !ConfigService.IsSystemMode;
+                    if (ToggleCloseAfterLaunch != null && ConfigService.CloseAfterLaunch != ToggleCloseAfterLaunch.IsOn)
                     {
-                        bool switchToSystemMode = !ConfigService.IsSystemMode;
-                        if (ToggleCloseAfterLaunch != null && ConfigService.CloseAfterLaunch != ToggleCloseAfterLaunch.IsOn)
-                        {
-                            ConfigService.CloseAfterLaunch = ToggleCloseAfterLaunch.IsOn;
-                            LogService.Write("Config", $"ToggleCloseAfterLaunch changed to={ToggleCloseAfterLaunch.IsOn}");
-                            ConfigService.SaveConfig();
-                        }
+                        ConfigService.CloseAfterLaunch = ToggleCloseAfterLaunch.IsOn;
+                        LogService.Write("Config", $"ToggleCloseAfterLaunch changed to={ToggleCloseAfterLaunch.IsOn}");
+                        ConfigService.SaveConfig();
+                    }
+                    await ConfigService.SwitchStorageModeAsync(switchToSystemMode);
+                    UpdateStorageModeUI();
+                    LogService.Write("Config", $"SwitchStorageMode completed target={(switchToSystemMode ? "System" : "Portable")}");
                 }
                 catch (Exception ex) { LogService.Write("Config", "BtnSwitchStorageMode_Click failed", ex); }
             }
@@ -3921,7 +3931,6 @@ namespace EricGameLauncher
                     LanguageComboBox.Items.Add(I18n.GetDisplayName(languages[i]));
                 }
                 LanguageComboBox.Tag = languages;
-                // try to select the current language, fallback to first
                 int idx = languages.IndexOf(I18n.CurrentLanguage);
                 if (idx >= 0) selectedIndex = idx;
                 LanguageComboBox.SelectedIndex = selectedIndex;
@@ -4121,10 +4130,48 @@ namespace EricGameLauncher
             dialog.Resources["ContentDialogMaxWidth"] = dlgW;
             dialog.Resources["ContentDialogMaxHeight"] = dlgH;
 
-            var result = await dialog.ShowAsync();
-            if (result == ContentDialogResult.Primary && !string.IsNullOrEmpty(downloadUrl))
+            var tcs = new TaskCompletionSource<bool>();
+            var isUpdating = false;
+
+            dialog.PrimaryButtonClick += async (s, e) =>
             {
-                UpdateService.StartUpdater(downloadUrl);
+                e.Cancel = true;
+                isUpdating = true;
+                dialog.IsPrimaryButtonEnabled = false;
+                dialog.CloseButtonText = "";
+                dialog.PrimaryButtonText = string.Format(I18n.T("Update_DownloadProgress"), 0);
+
+                try
+                {
+                    await UpdateService.StartUpdaterAndWaitAsync(downloadUrl, msg =>
+                    {
+                        DispatcherQueue.TryEnqueue(() =>
+                        {
+                            if (msg.StartsWith("DOWNLOAD "))
+                            {
+                                var pct = msg.Split(' ')[1];
+                                dialog.PrimaryButtonText = string.Format(I18n.T("Update_DownloadProgress"), pct);
+                            }
+                        });
+                    });
+                }
+                finally
+                {
+                    isUpdating = false;
+                }
+
+                tcs.SetResult(true);
+                dialog.Hide();
+            };
+
+            dialog.Closing += (s, e) =>
+            {
+                if (isUpdating) e.Cancel = true;
+            };
+
+            var result = await dialog.ShowAsync();
+            if (tcs.Task.IsCompleted)
+            {
                 LogService.Write("App", "Exit requested (update start)");
                 try { Application.Current.Exit(); } catch (Exception ex) { LogService.Write("App", "Exit failed (update start)", ex); }
             }

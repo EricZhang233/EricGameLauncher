@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Pipes;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -11,7 +12,21 @@ namespace EricGameLauncher;
 
 public class UpdateService
 {
-    private static readonly HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+    private static readonly HttpClient client;
+
+    static UpdateService()
+    {
+        client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        client.DefaultRequestHeaders.Add("User-Agent", "EricGameLauncher-Updater");
+        client.DefaultRequestHeaders.Add("Accept", "application/vnd.github.v3.html+json");
+    }
+
+    private static void ApplyGitHubToken()
+    {
+        if (!string.IsNullOrEmpty(StartupArgs.GitHubToken) &&
+            !client.DefaultRequestHeaders.Contains("Authorization"))
+            client.DefaultRequestHeaders.Add("Authorization", $"Bearer {StartupArgs.GitHubToken}");
+    }
     private const string AllReleasesApiUrl = "https://api.github.com/repos/EricZhang233/EricGameLauncher/releases?per_page=100";
     private const string MirrorPrefix = "https://ghproxy.com/";
 
@@ -39,10 +54,7 @@ public class UpdateService
         {
             try
             {
-                if (!client.DefaultRequestHeaders.Contains("User-Agent"))
-                    client.DefaultRequestHeaders.Add("User-Agent", "EricGameLauncher-Updater");
-                if (!client.DefaultRequestHeaders.Contains("Accept"))
-                    client.DefaultRequestHeaders.Add("Accept", "application/vnd.github.v3.html+json");
+                ApplyGitHubToken();
 
                 var releases = await client.GetFromJsonAsync<List<ReleaseInfo>>(AllReleasesApiUrl);
                 LogService.Write("Update", $"GetLatestReleaseAsync fetched releasesCount={(releases?.Count ?? 0)}");
@@ -69,10 +81,7 @@ public class UpdateService
         {
             try
             {
-                if (!client.DefaultRequestHeaders.Contains("User-Agent"))
-                    client.DefaultRequestHeaders.Add("User-Agent", "EricGameLauncher-Updater");
-                if (!client.DefaultRequestHeaders.Contains("Accept"))
-                    client.DefaultRequestHeaders.Add("Accept", "application/vnd.github.v3.html+json");
+                ApplyGitHubToken();
 
                 var releases = await client.GetFromJsonAsync<List<ReleaseInfo>>(AllReleasesApiUrl);
                 LogService.Write("Update", $"GetLatestStableReleaseAsync fetched releasesCount={(releases?.Count ?? 0)}");
@@ -206,7 +215,7 @@ public class UpdateService
         }
     }
 
-    public static void StartUpdater(string downloadUrl)
+    public static async Task StartUpdaterAndWaitAsync(string downloadUrl, Action<string>? onProgress = null)
     {
         var sw = Stopwatch.StartNew();
         try
@@ -218,11 +227,12 @@ public class UpdateService
             string mainUpdaterPath = Path.Combine(tempDir, "updater.main.exe");
 
             var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-            string[] resources = { "updater.main.exe", "updater.main.dll", "updater.main.runtimeconfig.json" };
-            foreach (var res in resources)
+            string prefix = "EricGameLauncher.updater.main.";
+            foreach (var resName in assembly.GetManifestResourceNames())
             {
-                string resName = $"EricGameLauncher.{res}";
-                string outputPath = Path.Combine(tempDir, res);
+                if (!resName.StartsWith(prefix)) continue;
+                string fileName = resName.Substring(prefix.Length);
+                string outputPath = Path.Combine(tempDir, fileName);
                 using (var stream = assembly.GetManifestResourceStream(resName))
                 {
                     if (stream == null) continue;
@@ -233,9 +243,12 @@ public class UpdateService
                 }
             }
 
+            string pipeName = $"EricGameLauncher_UpdatePipe_{System.Diagnostics.Process.GetCurrentProcess().Id}";
+            using var pipeServer = new NamedPipeServerStream(pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+
             string installDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
-            string args = string.Join(" ", new[] { installDir, downloadUrl }
-                .Select(a => "\"" + a.Replace("\"", "\\\"") + "\""));
+            string args = $"\"{installDir.Replace("\"", "\\\"")}\" \"{downloadUrl.Replace("\"", "\\\"")}\" --pipe-name \"{pipeName}\" --main-pid {System.Diagnostics.Process.GetCurrentProcess().Id}";
 
             ProcessStartInfo psi = new ProcessStartInfo
             {
@@ -247,6 +260,18 @@ public class UpdateService
 
             Process.Start(psi);
             LogService.Write("Update", $"StartUpdater Launched: duration={sw.ElapsedMilliseconds}ms args={psi.Arguments}");
+
+            await pipeServer.WaitForConnectionAsync(cts.Token);
+            LogService.Write("Update", $"PipeConnected: duration={sw.ElapsedMilliseconds}ms");
+
+            using var reader = new StreamReader(pipeServer);
+            string? line;
+            while ((line = await reader.ReadLineAsync()) != null)
+            {
+                LogService.Write("Update", $"PipeReceived: {line}");
+                onProgress?.Invoke(line);
+                if (line == "READY") break;
+            }
         }
         catch (Exception ex)
         {

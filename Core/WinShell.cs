@@ -2,9 +2,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Data;
-using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace EricGameLauncher;
 
@@ -407,150 +404,14 @@ public static class ShortcutScanner
     }
 }
 
-public sealed class ImagePathConverter : IValueConverter
-{
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, WeakReference<BitmapImage>> _bitmapCache = new();
-
-    public object? Convert(object value, Type targetType, object parameter, string language)
-    {
-        try { LogService.Write("Shortcut", $"ImagePathConverter.Convert called valueType={(value==null?"null":value.GetType().Name)} parameter={parameter}"); } catch { }
-        if (value is not string path || string.IsNullOrEmpty(path))
-            return null;
-
-        try
-        {
-            if (!File.Exists(path))
-                return null;
-
-            long cacheKey = new FileInfo(path).LastWriteTime.Ticks;
-            string cacheEntry = $"{path}@{cacheKey}";
-
-            if (_bitmapCache.TryGetValue(cacheEntry, out var weakRef) && weakRef.TryGetTarget(out var cached))
-                return cached;
-
-            var bitmap = new BitmapImage();
-            bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-            bitmap.DecodePixelWidth = 256;
-            bitmap.DecodePixelHeight = 256;
-
-            string fileUri = $"file:///{path.Replace("\\", "/")}?t={cacheKey}";
-            try
-            {
-                bitmap.UriSource = new Uri(fileUri, UriKind.Absolute);
-            }
-            catch
-            {
-                bitmap.UriSource = new Uri(path, UriKind.Absolute);
-            }
-
-            _bitmapCache[cacheEntry] = new WeakReference<BitmapImage>(bitmap);
-            return bitmap;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    public object ConvertBack(object value, Type targetType, object parameter, string language)
-    {
-        try { LogService.Write("Shortcut", "ImagePathConverter.ConvertBack called"); } catch { }
-        throw new NotImplementedException();
-    }
-}
-
-public sealed class NullToVisibilityConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, string language)
-    {
-        try { LogService.Write("Shortcut", $"NullToVisibilityConverter.Convert called value={(value==null?"null":value.ToString())}"); } catch { }
-        return value == null ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    public object ConvertBack(object value, Type targetType, object parameter, string language)
-    {
-        try { LogService.Write("Shortcut", "NullToVisibilityConverter.ConvertBack called"); } catch { }
-        throw new NotImplementedException();
-    }
-}
-
-public sealed class StringNotEmptyToVisibilityConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, string language)
-    {
-        try { LogService.Write("Shortcut", $"StringNotEmptyToVisibilityConverter.Convert called value={(value==null?"null":value.ToString())}"); } catch { }
-        return !string.IsNullOrWhiteSpace(value as string) ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    public object ConvertBack(object value, Type targetType, object parameter, string language)
-    {
-        try { LogService.Write("Shortcut", "StringNotEmptyToVisibilityConverter.ConvertBack called"); } catch { }
-        throw new NotImplementedException();
-    }
-}
-
-public sealed class BoolToVisibilityConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, string language)
-    {
-        try { LogService.Write("Shortcut", $"BoolToVisibilityConverter.Convert called value={(value==null?"null":value.ToString())}"); } catch { }
-        return value is bool boolValue && boolValue ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    public object ConvertBack(object value, Type targetType, object parameter, string language)
-    {
-        try { LogService.Write("Shortcut", $"BoolToVisibilityConverter.ConvertBack called value={(value==null?"null":value.ToString())}"); } catch { }
-        return value is Visibility visibility && visibility == Visibility.Visible;
-    }
-}
-
-public sealed class BoolToOpacityConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, string language)
-    {
-        try { LogService.Write("Shortcut", $"BoolToOpacityConverter.Convert called value={(value==null?"null":value.ToString())}"); } catch { }
-        return value is bool boolValue && boolValue ? 1.0 : 0.0;
-    }
-
-    public object ConvertBack(object value, Type targetType, object parameter, string language)
-    {
-        try { LogService.Write("Shortcut", $"BoolToOpacityConverter.ConvertBack called value={(value==null?"null":value.ToString())}"); } catch { }
-        return value is double opacity && opacity > 0;
-    }
-}
-
-public sealed class SizeToCornerRadiusConverter : IValueConverter
-{
-    public double Ratio { get; set; } = 0.2;
-    public double MarginOffset { get; set; } = 0;
-
-    public object Convert(object value, Type targetType, object parameter, string language)
-    {
-        if (value is double size && size > 0)
-        {
-            double actualSize = size - MarginOffset;
-            if (actualSize <= 0) actualSize = size;
-            return new CornerRadius(actualSize * Ratio);
-        }
-        return new CornerRadius(0);
-    }
-    public object ConvertBack(object value, Type targetType, object parameter, string language)
-    {
-        try { LogService.Write("Shortcut", "SizeToCornerRadiusConverter.ConvertBack called"); } catch { }
-        throw new NotImplementedException();
-    }
-}
-
 public static class Win32FileDialog
 {
     public static string FilterExecutables => I18n.T("FileDialog_FilterExecutables") + "\0*.exe;*.com;*.bat;*.cmd;*.lnk;*.url\0";
     public static string FilterImages => I18n.T("FileDialog_FilterImages") + "\0*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.ico;*.tif;*.tiff;*.webp;*.svg\0";
     public static string FilterAll => I18n.T("FileDialog_FilterAll") + "\0*.*\0";
 
-    // Combined filter that groups executables and images into a single selectable category
     public static string FilterExecutablesAndImages => I18n.T("FileDialog_FilterExecutablesAndImages") + "\0*.exe;*.com;*.bat;*.cmd;*.lnk;*.url;*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.ico;*.tif;*.tiff;*.webp;*.svg\0";
 
-    // Keep DefaultFilter unchanged (shows Executables, Images, All) for other callers
     public static string DefaultFilter => BuildFilter(FilterExecutables, FilterImages, FilterAll);
 
     [DllImport("comdlg32.dll", SetLastError = true, CharSet = CharSet.Unicode)]

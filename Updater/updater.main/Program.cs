@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.IO.Pipes;
 using System.Net.Http;
 using System.Text;
 using System.Runtime.CompilerServices;
@@ -21,24 +22,19 @@ namespace updater.main
     class Program
     {
         private static readonly object _logLock = new();
+        private static readonly string _logFile = Path.Combine(
+            Path.GetTempPath(), "eric", "ericgamelauncher", "log",
+            $"updater.main.{DateTime.Now:yyyyMMdd-HHmmss}.log");
 
         private static void Log(string message)
         {
             try
             {
-                LogService.Write("Update", message);
+                Directory.CreateDirectory(Path.GetDirectoryName(_logFile)!);
+                var line = $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}Z Updater/INFO] | {message}";
+                lock (_logLock) { File.AppendAllText(_logFile, line + Environment.NewLine + message + Environment.NewLine); }
             }
-            catch (Exception ex)
-            {
-                try
-                {
-                    string fbdir = Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher", "log");
-                    Directory.CreateDirectory(fbdir);
-                    string fb = Path.Combine(fbdir, "updater.main.fallback.log");
-                    File.AppendAllText(fb, ex.ToString() + Environment.NewLine);
-                }
-                catch { }
-            }
+            catch { }
         }
 
         [SupportedOSPlatform("windows")]
@@ -61,7 +57,7 @@ namespace updater.main
             if (args.Length < 2)
             {
                 if (TryHandleCommandMode(args)) return;
-                Console.WriteLine("Usage: updater.main.exe <install_dir> <download_url>");
+                Console.WriteLine("Usage: updater.main.exe <install_dir> <download_url> [--ready-event <name>] [--main-pid <pid>]");
                 Console.WriteLine("       updater.main.exe --run-bat <path> [--args <args>] [--workdir <dir>] [--wait]");
                 Console.WriteLine("       updater.main.exe --run-cmd <command> [--workdir <dir>] [--wait]");
                 Log("InvalidArgs");
@@ -72,6 +68,7 @@ namespace updater.main
             string installDir = args[0];
             string downloadUrl = args[1];
             Log($"Args installDir={installDir}");
+            Log($"Args downloadUrl={downloadUrl}");
             Log($"InstallDir exists={Directory.Exists(installDir)}");
             string cacheDir = Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher");
             if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
@@ -113,11 +110,34 @@ namespace updater.main
                 }
             }
 
+            string pipeName = GetArgValue(args, "--pipe-name");
+            int mainPid = int.TryParse(GetArgValue(args, "--main-pid"), out var pid) ? pid : 0;
+
+            NamedPipeClientStream? pipeClient = null;
+            StreamWriter? pipeWriter = null;
+            if (!string.IsNullOrEmpty(pipeName))
+            {
+                try
+                {
+                    pipeClient = new NamedPipeClientStream(".", pipeName, PipeDirection.Out);
+                    pipeClient.Connect(5000);
+                    pipeWriter = new StreamWriter(pipeClient) { AutoFlush = true };
+                    Log("PipeConnected");
+                }
+                catch (Exception ex) { Log($"PipeConnectFailed {ex}"); pipeClient?.Dispose(); pipeClient = null; pipeWriter = null; }
+            }
+
+            void SendProgress(string msg)
+            {
+                try { pipeWriter?.WriteLine(msg); } catch { }
+            }
+
             try
             {
                 var downloadTaskSw = System.Diagnostics.Stopwatch.StartNew();
                 Console.WriteLine($"[1/4] Downloading update package...");
                 Log($"Download Start url={downloadUrl}");
+                SendProgress("DOWNLOAD 0");
                 using (var client = new HttpClient { Timeout = TimeSpan.FromMinutes(30) })
                 {
                     client.DefaultRequestHeaders.Add("User-Agent", "EricGameLauncher-Updater");
@@ -151,6 +171,11 @@ namespace updater.main
                                     lastReportTime = now;
                                     double speed = (totalRead / 1024.0 / 1024.0) / (now - startTime).TotalSeconds;
 
+                                    if (canReportProgress)
+                                    {
+                                        double percent = (double)totalRead / totalBytes * 100;
+                                        SendProgress($"DOWNLOAD {percent:F1}");
+                                    }
                                     string progressText;
                                     if (canReportProgress)
                                     {
@@ -169,6 +194,21 @@ namespace updater.main
                 }
                 Console.WriteLine("\n      Download completed.");
                 Log($"Download Complete duration={downloadTaskSw.ElapsedMilliseconds}ms size={new FileInfo(tempZip).Length}");
+
+                SendProgress("READY");
+                try { pipeWriter?.Dispose(); pipeClient?.Dispose(); } catch { }
+
+                if (mainPid > 0)
+                {
+                    try
+                    {
+                        var proc = Process.GetProcessById(mainPid);
+                        Log($"WaitingForMainProcess pid={mainPid}");
+                        proc.WaitForExit();
+                        Log($"MainProcessExited pid={mainPid}");
+                    }
+                    catch (Exception ex) { Log($"WaitMainProcessFailed {ex}"); }
+                }
 
                 Console.WriteLine($"[2/4] Closing Eric Game Launcher...");
                 Log("CloseLauncher Start");
