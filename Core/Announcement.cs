@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using Microsoft.UI.Xaml;
 using Windows.UI.Text;
 using YamlDotNet.Serialization;
 
@@ -151,9 +152,14 @@ public sealed class AnnouncementListItem : INotifyPropertyChanged
             {
                 _isExpanded = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(TitleMaxLines));
+                OnPropertyChanged(nameof(TitleTextTrimming));
             }
         }
     }
+
+    public int TitleMaxLines => IsExpanded ? int.MaxValue : 1;
+    public TextTrimming TitleTextTrimming => IsExpanded ? TextTrimming.None : TextTrimming.CharacterEllipsis;
 
     public string ReadStatusText => IsRead ? I18n.T("Announcements_Read") : I18n.T("Announcements_Unread");
     public FontWeight TitleWeight => Microsoft.UI.Text.FontWeights.Normal;

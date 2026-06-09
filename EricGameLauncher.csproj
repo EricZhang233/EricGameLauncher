@@ -122,18 +122,27 @@
     <EmbeddedResource Remove="readme_res\**" />
   </ItemGroup>
 
-  <!-- MainUpdater 影子分发配置 (非单文件) -->
+  <!-- 防止 SDK 自动通配将 payload 纳入 Content/None (求值时 payload 可能不存在，但保留声明以覆盖自动发现) -->
   <ItemGroup>
     <None Remove="payload\updater.main\**" />
     <Content Remove="payload\updater.main\**" />
-    <EmbeddedResource Include="payload\updater.main\*.*" LogicalName="EricGameLauncher.updater.main.%(Filename)%(Extension)" />
   </ItemGroup>
-
-  <!-- CfgUpdater 影子分发配置 (非单文件) -->
   <ItemGroup>
     <None Remove="payload\updater.cfgver\**" />
     <Content Remove="payload\updater.cfgver\**" />
-    <EmbeddedResource Include="payload\updater.cfgver\*.*" LogicalName="EricGameLauncher.updater.cfgver.%(Filename)%(Extension)" />
   </ItemGroup>
+
+  <!-- 动态嵌入 payload 资源：BuildMainUpdater(BeforeTargets=BeforeBuild) 早于 AssignTargetPaths -->
+  <Target Name="EmbedPayloadResources" BeforeTargets="AssignTargetPaths">
+    <ItemGroup>
+      <_PayloadMain Include="payload\updater.main\*.*" />
+      <_PayloadCfg Include="payload\updater.cfgver\*.*" />
+    </ItemGroup>
+    <ItemGroup>
+      <EmbeddedResource Include="@(_PayloadMain)" LogicalName="EricGameLauncher.updater.main.%(Filename)%(Extension)" />
+      <EmbeddedResource Include="@(_PayloadCfg)" LogicalName="EricGameLauncher.updater.cfgver.%(Filename)%(Extension)" />
+    </ItemGroup>
+    <Message Importance="High" Text="Dynamically embedded @(EmbeddedResource->Count()) payload resources for MainUpdater/CfgUpdater." />
+  </Target>
 
 </Project>
