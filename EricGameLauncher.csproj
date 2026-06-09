@@ -24,7 +24,7 @@
 
     <!-- 彻底排除源码与中间产物，防止递归扫描 -->
     <DefaultItemExcludes>
-      $(DefaultItemExcludes);Updater\updater.main\**;output\**;Updater\updater.cfgver\**;payload\**</DefaultItemExcludes>
+      $(DefaultItemExcludes);Updater\updater.main\**;output\**;Updater\updater.cfgver\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <!-- 2. 自动化版本计算 (Version Calculus) -->
