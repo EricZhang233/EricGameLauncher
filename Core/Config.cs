@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using YamlDotNet.Serialization;
@@ -22,9 +21,6 @@ public class AppSettings
 
     [YamlMember(Alias = "iconSize")]
     public double IconSize { get; set; } = 118;
-
-    [YamlMember(Alias = "language")]
-    public string Language { get; set; } = "";
 
     [YamlMember(Alias = "updateChannel")]
     public string UpdateChannel { get; set; } = "stable";
@@ -45,13 +41,10 @@ public class WindowBoundsInfo
     public int Height { get; set; } = 650;
 }
 
-public class ConfigData
+public class ItemsData
 {
     [YamlMember(Alias = "version")]
     public int Version { get; set; } = ConfigService.CurrentConfigVersion;
-
-    [YamlMember(Alias = "settings")]
-    public AppSettings Settings { get; set; } = new();
 
     [YamlMember(Alias = "items")]
     public List<AppItemDto> Items { get; set; } = [];
@@ -212,7 +205,8 @@ public static class ServerConfigManager
 public static class ConfigService
 {
     private const string AppFolderName = "EricGameLauncher";
-    private const string DataFileName = "config.yaml";
+    private const string SettingsFileName = "settings.yaml";
+    private const string ItemsFileName = "items.yaml";
     private const string IconFolderName = "ico";
 
     public const int CurrentConfigVersion = 1;
@@ -228,18 +222,19 @@ public static class ConfigService
 
     private static bool _debugModeApplied = false;
 
-    public static string ConfigFilePath => Path.Combine(CurrentDataPath, DataFileName);
+    public static string SettingsFilePath => Path.Combine(CurrentDataPath, SettingsFileName);
+    public static string ItemsFilePath => Path.Combine(CurrentDataPath, ItemsFileName);
     public static string FixedCachePath => Path.Combine(CurrentDataPath, IconFolderName);
     public static string CurrentDataPath { get; private set; } = "";
-    private static ConfigData? _configData;
+    private static AppSettings? _settings;
+    private static ItemsData? _itemsData;
 
     public static string LaunchMode
     {
-        get => _configData?.Settings?.LaunchMode ?? "single";
-        set { if (_configData?.Settings != null) _configData.Settings.LaunchMode = value; }
+        get => _settings?.LaunchMode ?? "single";
+        set { if (_settings != null) _settings.LaunchMode = value; }
     }
 
-    private static readonly SemaphoreSlim _saveSemaphore = new(1, 1);
     public static event Action? DataChanged;
 
     public static void Initialize()
@@ -259,12 +254,14 @@ public static class ConfigService
 
         if (!Directory.Exists(SystemBasePath)) Directory.CreateDirectory(SystemBasePath);
 
-        string portableYamlPath = Path.Combine(PortableBasePath, DataFileName);
-        string systemYamlPath = Path.Combine(SystemBasePath, DataFileName);
+        string portableSettingsPath = Path.Combine(PortableBasePath, SettingsFileName);
+        string portableItemsPath = Path.Combine(PortableBasePath, ItemsFileName);
+        string systemSettingsPath = Path.Combine(SystemBasePath, SettingsFileName);
+        string systemItemsPath = Path.Combine(SystemBasePath, ItemsFileName);
 
-        if (File.Exists(portableYamlPath))
+        if (File.Exists(portableSettingsPath) || File.Exists(portableItemsPath))
             CurrentDataPath = PortableBasePath;
-        else if (File.Exists(systemYamlPath))
+        else if (File.Exists(systemSettingsPath) || File.Exists(systemItemsPath))
             CurrentDataPath = SystemBasePath;
         else
             CurrentDataPath = SystemBasePath;
@@ -301,22 +298,26 @@ public static class ConfigService
             string newPath = useSystemPath ? SystemBasePath : PortableBasePath;
             if (CurrentDataPath == newPath) return;
 
-            string oldConfigPath = Path.Combine(CurrentDataPath, DataFileName);
-            string newConfigPath = Path.Combine(newPath, DataFileName);
-            string oldIconPath = Path.Combine(CurrentDataPath, IconFolderName);
-            string newIconPath = Path.Combine(newPath, IconFolderName);
+            SaveAll();
 
-            if (!Directory.Exists(newPath)) Directory.CreateDirectory(newPath);
-            if (!Directory.Exists(newIconPath)) Directory.CreateDirectory(newIconPath);
-
-            if (File.Exists(oldConfigPath))
+            string[] fileNames = { SettingsFileName, ItemsFileName };
+            foreach (var fn in fileNames)
             {
-                File.Copy(oldConfigPath, newConfigPath, true);
-                File.Delete(oldConfigPath);
+                string oldPath = Path.Combine(CurrentDataPath, fn);
+                string newFilePath = Path.Combine(newPath, fn);
+                if (File.Exists(oldPath))
+                {
+                    if (!Directory.Exists(newPath)) Directory.CreateDirectory(newPath);
+                    File.Copy(oldPath, newFilePath, true);
+                    File.Delete(oldPath);
+                }
             }
 
+            string oldIconPath = Path.Combine(CurrentDataPath, IconFolderName);
+            string newIconPath = Path.Combine(newPath, IconFolderName);
             if (Directory.Exists(oldIconPath))
             {
+                if (!Directory.Exists(newIconPath)) Directory.CreateDirectory(newIconPath);
                 foreach (var iconFile in Directory.GetFiles(oldIconPath))
                 {
                     string fileName = Path.GetFileName(iconFile);
@@ -335,30 +336,28 @@ public static class ConfigService
 
     public static Task SwitchStorageModeAsync(bool useSystemPath) => Task.Run(() => SwitchStorageMode(useSystemPath));
 
-
     public static void SaveItems(List<AppItem> items, List<AppItem> recycleItems, bool triggerEvent = true)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        if (_configData == null) return;
+        if (_itemsData == null) return;
         LogService.Write("Config", $"SaveItems Start items={items.Count} recycle={recycleItems.Count}");
-        lock (_configData)
+        lock (_itemsData)
         {
             foreach (var item in items)
             {
                 item.Status = (int)AppItemStatus.Normal;
                 item.DeletedAt = null;
             }
-            _configData.Items = items.Select(AppItemDto.FromViewModel).ToList();
-            _configData.RecycleBinItems = recycleItems.Select(AppItemDto.FromViewModel).ToList();
+            _itemsData.Items = items.Select(AppItemDto.FromViewModel).ToList();
+            _itemsData.RecycleBinItems = recycleItems.Select(AppItemDto.FromViewModel).ToList();
         }
-        SaveConfig();
         if (triggerEvent) DataChanged?.Invoke();
         LogService.Write("Config", $"SaveItems End duration={sw.ElapsedMilliseconds}ms");
     }
 
     public static List<AppItem> LoadItems()
     {
-        var dtos = _configData?.Items ?? [];
+        var dtos = _itemsData?.Items ?? [];
         LogService.Write("Config", $"LoadItems count={dtos.Count}");
         var items = dtos.Select(dto => dto.ToViewModel(FixedCachePath)).ToList();
         for (int i = 0; i < items.Count; i++)
@@ -370,7 +369,7 @@ public static class ConfigService
 
     public static List<AppItem> LoadRecycleBinItems()
     {
-        var dtos = _configData?.RecycleBinItems ?? [];
+        var dtos = _itemsData?.RecycleBinItems ?? [];
         LogService.Write("Config", $"LoadRecycleBinItems count={dtos.Count}");
         var items = dtos.Select(dto => dto.ToViewModel(FixedCachePath)).ToList();
         for (int i = 0; i < items.Count; i++)
@@ -385,52 +384,84 @@ public static class ConfigService
         try
         {
             LogService.Write("Config", "LoadConfigData Start");
-            if (string.IsNullOrEmpty(CurrentDataPath)) { _configData = new ConfigData(); return; }
-            string yamlPath = Path.Combine(CurrentDataPath, DataFileName);
-            if (!File.Exists(yamlPath)) { _configData = new ConfigData(); return; }
+            if (string.IsNullOrEmpty(CurrentDataPath)) { _settings = new AppSettings(); _itemsData = new ItemsData(); return; }
 
-            string yamlText = File.ReadAllText(yamlPath);
-            var deserializer = new DeserializerBuilder()
-                .WithNamingConvention(CamelCaseNamingConvention.Instance)
-                .IgnoreUnmatchedProperties()
-                .Build();
+            string settingsPath = Path.Combine(CurrentDataPath, SettingsFileName);
+            string itemsPath = Path.Combine(CurrentDataPath, ItemsFileName);
 
-            _configData = deserializer.Deserialize<ConfigData>(yamlText) ?? new ConfigData();
-            if (_configData.Version < CurrentConfigVersion)
+            if (File.Exists(settingsPath))
+            {
+                try
+                {
+                    string settingsYaml = File.ReadAllText(settingsPath);
+                    var deserializer = new DeserializerBuilder()
+                        .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                        .IgnoreUnmatchedProperties()
+                        .Build();
+                    _settings = deserializer.Deserialize<AppSettings>(settingsYaml) ?? new AppSettings();
+                }
+                catch (Exception ex) { LogService.Write("Config", "LoadConfigData settings load failed", ex); _settings = new AppSettings(); }
+            }
+            else
+            {
+                _settings = new AppSettings();
+            }
+
+            if (File.Exists(itemsPath))
+            {
+                try
+                {
+                    string itemsYaml = File.ReadAllText(itemsPath);
+                    var deserializer = new DeserializerBuilder()
+                        .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                        .IgnoreUnmatchedProperties()
+                        .Build();
+                    _itemsData = deserializer.Deserialize<ItemsData>(itemsYaml) ?? new ItemsData();
+                }
+                catch (Exception ex) { LogService.Write("Config", "LoadConfigData items load failed", ex); _itemsData = new ItemsData(); }
+            }
+            else
+            {
+                _itemsData = new ItemsData();
+            }
+
+            if (_itemsData.Version < CurrentConfigVersion)
             {
                 RequiresMigration = true;
                 _blockSaving = true;
-                _configData = new ConfigData();
+                _itemsData = new ItemsData();
+                LogService.Write("Config", "LoadConfigData version mismatch, migration required");
                 return;
             }
 
-            LogService.Write("Config", $"LoadConfigData deserialized items={_configData.Items?.Count ?? 0} recycle={_configData.RecycleBinItems?.Count ?? 0}");
-            _configData.Settings ??= new AppSettings();
-            _configData.Items ??= [];
-            _configData.RecycleBinItems ??= [];
-            if (_configData.RecycleBinItems.Count == 0 && _configData.Items.Any(x => x.Status != (int)AppItemStatus.Normal))
+            _settings ??= new AppSettings();
+            _itemsData ??= new ItemsData();
+            _itemsData.Items ??= [];
+            _itemsData.RecycleBinItems ??= [];
+
+            if (_itemsData.RecycleBinItems.Count == 0 && _itemsData.Items.Any(x => x.Status != (int)AppItemStatus.Normal))
             {
-                var normalItems = _configData.Items.Where(x => x.Status == (int)AppItemStatus.Normal).ToList();
-                var recycleItems = _configData.Items.Where(x => x.Status != (int)AppItemStatus.Normal).ToList();
-                _configData.Items = normalItems;
-                _configData.RecycleBinItems = recycleItems;
+                var normalItems = _itemsData.Items.Where(x => x.Status == (int)AppItemStatus.Normal).ToList();
+                var recycleItems = _itemsData.Items.Where(x => x.Status != (int)AppItemStatus.Normal).ToList();
+                _itemsData.Items = normalItems;
+                _itemsData.RecycleBinItems = recycleItems;
             }
             bool normalized = false;
-            if (_configData.Items.Any(x => x.Status != (int)AppItemStatus.Normal))
+            if (_itemsData.Items.Any(x => x.Status != (int)AppItemStatus.Normal))
             {
-                var recycleIds = new HashSet<string>(_configData.RecycleBinItems.Select(x => x.Id));
-                var moveItems = _configData.Items.Where(x => x.Status != (int)AppItemStatus.Normal).ToList();
-                _configData.Items = _configData.Items.Where(x => x.Status == (int)AppItemStatus.Normal).ToList();
+                var recycleIds = new HashSet<string>(_itemsData.RecycleBinItems.Select(x => x.Id));
+                var moveItems = _itemsData.Items.Where(x => x.Status != (int)AppItemStatus.Normal).ToList();
+                _itemsData.Items = _itemsData.Items.Where(x => x.Status == (int)AppItemStatus.Normal).ToList();
                 foreach (var item in moveItems)
                 {
                     if (recycleIds.Add(item.Id))
                     {
-                        _configData.RecycleBinItems.Add(item);
+                        _itemsData.RecycleBinItems.Add(item);
                     }
                 }
                 normalized = true;
             }
-            foreach (var item in _configData.RecycleBinItems)
+            foreach (var item in _itemsData.RecycleBinItems)
             {
                 if (item.Status == (int)AppItemStatus.Normal)
                 {
@@ -441,86 +472,79 @@ public static class ConfigService
             }
             if (normalized)
             {
-                SaveConfigData();
+                SaveItemsData();
             }
             LogService.Write("Config", "LoadConfigData End");
         }
         catch (Exception ex)
         {
             LogService.Write("Config", $"LoadConfigData failed", ex);
-            if (_configData == null) _configData = new ConfigData();
+            _settings ??= new AppSettings();
+            _itemsData ??= new ItemsData();
         }
     }
 
-    private static void SaveConfigData()
+    public static void SaveAll()
     {
-        if (_blockSaving) return;
-
-        LogService.Write("Config", "SaveConfigData Start");
-
-        _ = Task.Run(async () =>
+        if (_blockSaving)
         {
-            await _saveSemaphore.WaitAsync();
-            try
-            {
-                if (string.IsNullOrEmpty(CurrentDataPath) || _configData == null) return;
-                string yamlPath = Path.Combine(CurrentDataPath, DataFileName);
+            LogService.Write("Config", "SaveAll blocked (migration pending)");
+            return;
+        }
+        LogService.Write("Config", "SaveAll Start");
+        SaveSettingsData();
+        SaveItemsData();
+        LogService.Write("Config", "SaveAll End");
+    }
 
-                string yamlString;
-                lock (_configData)
-                {
-                    var serializer = new SerializerBuilder().Build();
-                    yamlString = serializer.Serialize(_configData);
-                }
-                yamlString = YamlQuoteHelper.ToSingleQuoted(yamlString);
+    private static void SaveSettingsData()
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(CurrentDataPath) || _settings == null) return;
+            string path = Path.Combine(CurrentDataPath, SettingsFileName);
+            var serializer = new SerializerBuilder().Build();
+            string yaml = serializer.Serialize(_settings);
+            if (!Directory.Exists(CurrentDataPath)) Directory.CreateDirectory(CurrentDataPath);
+            File.WriteAllText(path, yaml);
+            LogService.Write("Config", "SaveSettingsData written");
+        }
+        catch (Exception ex) { LogService.Write("Config", "SaveSettingsData failed", ex); }
+    }
 
-                if (!Directory.Exists(CurrentDataPath)) Directory.CreateDirectory(CurrentDataPath);
-                await File.WriteAllTextAsync(yamlPath, yamlString);
-            }
-            catch (Exception ex) { LogService.Write("Config", $"SaveConfigData failed", ex); }
-            finally
-            {
-                _saveSemaphore.Release();
-                LogService.Write("Config", "SaveConfigData End");
-            }
-        });
+    private static void SaveItemsData()
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(CurrentDataPath) || _itemsData == null) return;
+            string path = Path.Combine(CurrentDataPath, ItemsFileName);
+            var serializer = new SerializerBuilder().Build();
+            string yaml = serializer.Serialize(_itemsData);
+            if (!Directory.Exists(CurrentDataPath)) Directory.CreateDirectory(CurrentDataPath);
+            File.WriteAllText(path, yaml);
+            LogService.Write("Config", "SaveItemsData written");
+        }
+        catch (Exception ex) { LogService.Write("Config", "SaveItemsData failed", ex); }
     }
 
     public static bool CloseAfterLaunch
     {
-        get => _configData?.Settings?.CloseAfterLaunch ?? false;
-        set { if (_configData?.Settings != null) { LogService.Write("Config", $"CloseAfterLaunch changed to={value}"); _configData.Settings.CloseAfterLaunch = value; } }
+        get => _settings?.CloseAfterLaunch ?? false;
+        set { if (_settings != null) { LogService.Write("Config", $"CloseAfterLaunch changed to={value}"); _settings.CloseAfterLaunch = value; } }
     }
 
     public static double IconSize
     {
-        get => _configData?.Settings?.IconSize ?? 118;
-        set { if (_configData?.Settings != null) { LogService.Write("Config", $"IconSize changed to={value}"); _configData.Settings.IconSize = value; } }
+        get => _settings?.IconSize ?? 118;
+        set { if (_settings != null) { LogService.Write("Config", $"IconSize changed to={value}"); _settings.IconSize = value; } }
     }
 
-    public static string Language
-    {
-        get
-        {
-            var lang = _configData?.Settings?.Language;
-            if (string.IsNullOrEmpty(lang))
-            {
-                lang = I18n.DetectSystemLanguage();
-                if (_configData?.Settings != null)
-                {
-                    _configData.Settings.Language = lang;
-                    SaveConfig();
-                }
-            }
-            return lang;
-        }
-        set { if (_configData?.Settings != null) { LogService.Write("Config", $"Language set to={value}"); _configData.Settings.Language = value; } }
-    }
+    public static string Language => I18n.DetectSystemLanguage();
 
     public static string UpdateChannel
     {
-        get => _configData?.Settings?.UpdateChannel ?? "stable";
-        set { if (_configData?.Settings != null) { LogService.Write("Config", $"UpdateChannel set to={value}"); _configData.Settings.UpdateChannel = value; } }
+        get => _settings?.UpdateChannel ?? "stable";
+        set { if (_settings != null) { LogService.Write("Config", $"UpdateChannel set to={value}"); _settings.UpdateChannel = value; } }
     }
 
     public static bool IsSystemMode => CurrentDataPath == SystemBasePath;
@@ -529,10 +553,10 @@ public static class ConfigService
     {
         using (LogService.StartOperation("Config", "ReconstructMissingConfigAsync"))
         {
-            if (_configData == null) return false;
+            if (_itemsData == null) return false;
 
-            var items = _configData.Items ?? [];
-            var recycleItems = _configData.RecycleBinItems ?? [];
+            var items = _itemsData.Items ?? [];
+            var recycleItems = _itemsData.RecycleBinItems ?? [];
             if (items.Count == 0 && recycleItems.Count == 0) return false;
 
             bool modified = false;
@@ -565,14 +589,12 @@ public static class ConfigService
 
             if (modified)
             {
-                SaveConfigData();
+                SaveItemsData();
             }
             LogService.Write("Config", "Reconstruct End");
             return modified;
         }
     }
-
-    public static void SaveConfig() => SaveConfigData();
 
     public static async Task RefreshGlobalAsync()
     {
@@ -681,7 +703,7 @@ public static class ConfigService
     public static (int X, int Y, int Width, int Height) GetWindowBounds()
     {
         try { LogService.Write("Config", "GetWindowBounds called"); } catch { }
-        var bounds = _configData?.Settings?.Window;
+        var bounds = _settings?.Window;
         if (bounds != null)
         {
             try { LogService.Write("Config", $"GetWindowBounds returning x={bounds.X} y={bounds.Y} w={bounds.Width} h={bounds.Height}"); } catch { }
@@ -694,52 +716,10 @@ public static class ConfigService
     public static void SetWindowBounds(int x, int y, int width, int height)
     {
         try { LogService.Write("Config", $"SetWindowBounds called x={x} y={y} w={width} h={height}"); } catch { }
-        if (_configData?.Settings != null)
+        if (_settings != null)
         {
-            _configData.Settings.Window = new WindowBoundsInfo { X = x, Y = y, Width = width, Height = height };
+            _settings.Window = new WindowBoundsInfo { X = x, Y = y, Width = width, Height = height };
             try { LogService.Write("Config", "SetWindowBounds applied"); } catch { }
         }
-    }
-}
-
-internal static class YamlQuoteHelper
-{
-    public static string ToSingleQuoted(string yaml)
-    {
-        return Regex.Replace(yaml, @": ""((?:[^""\\]|\\.)*)""", match =>
-        {
-            string escaped = match.Groups[1].Value;
-            string unescaped = UnescapeDoubleQuotedYaml(escaped);
-            return ": '" + unescaped.Replace("'", "''") + "'";
-        });
-    }
-
-    private static string UnescapeDoubleQuotedYaml(string s)
-    {
-        return Regex.Replace(s, @"\\x[0-9a-fA-F]{2}|\\u[0-9a-fA-F]{4}|\\U[0-9a-fA-F]{8}|\\(.)", m =>
-        {
-            if (m.Value.StartsWith("\\x"))
-                return ((char)Convert.ToInt32(m.Value.Substring(2), 16)).ToString();
-            if (m.Value.StartsWith("\\u"))
-                return ((char)Convert.ToInt32(m.Value.Substring(2), 16)).ToString();
-            if (m.Value.StartsWith("\\U"))
-                return char.ConvertFromUtf32(Convert.ToInt32(m.Value.Substring(2), 16));
-            return m.Groups[1].Value switch
-            {
-                "\\" => "\\",
-                "\"" => "\"",
-                "0" => "\0",
-                "a" => "\a",
-                "b" => "\b",
-                "t" => "\t",
-                "n" => "\n",
-                "v" => "\v",
-                "f" => "\f",
-                "r" => "\r",
-                "e" => "\u001b",
-                "/" => "/",
-                _ => m.Groups[1].Value
-            };
-        });
     }
 }

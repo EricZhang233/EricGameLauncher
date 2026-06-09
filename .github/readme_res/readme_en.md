@@ -41,7 +41,7 @@
 
 **Eric Game Launcher** is a next-generation game launcher built for minimalists. It discards the bloat of traditional platforms, leveraging the power of **WinUI 3** and **.NET 10** to provide millisecond-level startup experiences and native Windows 11 visual enjoyment.
 
-Whether your games are from Steam, Epic, or independent exe files, this is their unified home.
+Whether your games are from Steam, Epic Games, or independent exe files, this is their unified home.
 
 ## Features
 
@@ -53,8 +53,8 @@ Whether your games are from Steam, Epic, or independent exe files, this is their
         *   **Native EXE/LNK**: Supports long paths with spaces, featuring a built-in smart argument splitting engine.
         *   **URL Protocol**: Perfectly matches `steam://`, `epic://`, `starward://`, etc., for platform-level interaction.
         *   **Windows Store Apps**: Supports launching apps via `shell:AppsFolder\` with optional elevation.
-        *   **Environment Variables**: All paths support automatic expansion of variables like `%AppData%`.
-*   **One-Click Scan**: Supports one-click scan and import of Steam, Epic, and Xbox games, making game management easier!
+        *   **Environment Variables**: All paths support automatic expansion of standard variables like `%AppData%`, `%LocalAppData%`.
+*   **One-Click Scan**: Supports one-click scan and import of Steam, Epic Games, and Xbox games, making game management easier!
 *   **Three-Step Deletion Protection**: Deleting in the main list moves items to Recycle Bin; deleting in Recycle Bin starts a 72-hour countdown; expired items are purged on next launch, with restore available anytime.
 *   **Ultra-Lightweight**: Start as needed, leave when done. No background services, zero ads, and system resource usage is nearly zero.
 *   **Efficient Search**: Supports full Pinyin, Pinyin initials, English initials, space-separated initials, CamelCase, and uppercase letter matching search.  
@@ -71,18 +71,24 @@ Whether your games are from Steam, Epic, or independent exe files, this is their
         *   **Smart Shifting**: Subsequent items automatically shift up when an intermediate item is deleted to keep the list compact.
     *   **Icon Size**: From compact lists to immersive large grids, customize as you wish.
 *   **Intelligent Scan & Import**:
-    -   **Automated Scanning**: Native support for automatic recognition, path extraction, and icon fetching for games installed on Steam, Epic Games, and Xbox (UWP).
-    -   **One-Click Import All**: Supports batch importing all recognized local games with a single click after scanning, eliminating tedious manual additions.
-    -   **Xbox/UWP Full Recognition**: Deeply supports high-precision recognition and icon extraction of Xbox/Microsoft Store game packages, achieving 100% coverage accuracy.
-*   **Automatic Update Support**：
-    *   **Built-in Update Check**: Automatically checks GitHub Releases on startup to ensure you are always using the latest version.  
-    *   **Silent Notification**: When an update is available, the version number in the top-right corner turns red and displays an update icon — no intrusive pop-up alerts.  
-    *   **One-Click Download**: New version detected? Download and install with a single click, no manual steps required.  
+    *   **Automated Scanning**: Native support for automatic recognition, path extraction, and icon fetching for games installed on Steam, Epic Games, and Xbox (UWP).
+    *   **One-Click Import All**: Supports batch importing all recognized local games with a single click after scanning, eliminating tedious manual additions.
+    *   **Invalid Games Detection**: Automatically identifies uninstalled or broken-path items with support for batch cleanup.
+    *   **Xbox/UWP Full Recognition**: Deeply supports high-precision recognition and icon extraction of Xbox/Microsoft Store game packages.
+*   **Automatic Update Support**:
+    *   **Built-in Update Check**: Automatically checks GitHub Releases on startup to ensure you are always using the latest version.
+    *   **Update Channel**: Switch between "Stable" and "Latest" channels — choose stability or early access at will.
+    *   **Silent Notification**: When an update is available, the version number in the top-right corner turns red and displays an update icon — no intrusive pop-up alerts.
+    *   **One-Click Download**: New version detected? Download and install with a single click, no manual steps required.
+*   **Announcement Center**:
+    *   **Cloud Announcements**: Automatically fetches announcements from the cloud on startup, keeping you informed of project updates and important notices.
+    *   **Read State Management**: Read state is persisted locally, preserving your reading record across sessions.
+    *   **Bilingual Content**: Announcements support bilingual Chinese/English display.
 
- ### Designed for Geeks
+### Designed for Geeks
 *   **Fully Portable Mode**: Supports storing all data (configurations, cached icons) in the program directory. Put it on a USB drive, carry your game library with you, and run it on any computer.
 *   **Seamless Data Migration**: Want to switch from system installation mode to portable mode? One-click migration automatically moves all configurations and icons without reconfiguration.
-*   **Smart Icon Extraction**: Automatically parses `.exe`, `.lnk`, and even Steam/Epic URL protocols to extract and cache high-definition icons.
+*   **Smart Icon Extraction**: Automatically parses `.exe`, `.lnk`, and even Steam/Epic Games URL protocols to extract and cache high-definition icons.
 
 ## Technical Highlights
 
@@ -91,19 +97,19 @@ For developers, Eric Game Launcher demonstrates how to build modern Windows desk
 *   **Cutting-Edge Stack**: Built on the latest **Windows App SDK (1.6+)** and **.NET 10**, showcasing the great potential of WinUI 3 in desktop applications.
 *   **Native Performance**:
   *   Utilizes `P/Invoke` (User32.dll) for efficient system-level icon extraction.
-  *   Uses `YamlDotNet` for high-performance, low-memory data serialization.
+  *   Adopts YAML (`YamlDotNet`) configuration format, readable by both humans and machines; config files split into `settings.yaml` and `items.yaml` for zero IO overhead on frequent changes.
 *   **Clean Architecture**:
     *   **Efficient Data Binding**: Smooth UI interactions achieved through `ObservableCollection` and XAML binding, with clear and intuitive code logic.
     *   **Static Service Design**: Core modules like `ConfigService` and `I18n` use static classes for zero-overhead calls, remaining minimalist and efficient.
 *   **Modern Build**:
-    *   **Unpackaged Deployment**: Skips the tedious MSIX packaging and certificate importation, directly generating a green and pure `.exe` executable.
+    *   **Unpackaged Deployment**: Skips the tedious MSIX packaging and certificate importation, directly generating a clean, portable `.exe` executable.
 
 ## Quick Start
 
 ### Users
 1.  Go to the [GitHub Releases](https://github.com/EricZhang233/EricGameLauncher/releases) page and download the latest version.
-2.  Extract and run `EricGameLauncher.exe`.
-3.  Click **"More" -> "Scan"** in the top right corner to automatically search and import local games, or use **"Add"** to manually select a game shortcut or executable.
+2.  Extract and run `EricGameLauncher.exe` (no installation required, fully portable).
+3.  Click **"More" → "Scan"** in the top right corner to automatically search local games. Check the items you want in the scan results and import them in one click; or use **"Add"** to manually select a game shortcut or executable.
 
 ## Contribution & Support
 
@@ -112,7 +118,7 @@ We welcome any form of contribution! Whether it's submitting bugs, improving doc
 If you find this project helpful, please give it a heart-felt ⭐️ **Star**!
 
 ## Special Thanks / Links
-*   [**Starward**](https://github.com/Scighost/Starward): A powerful Mihoyo game launcher. Our initial vision for this project was just a collection launcher for local games, with no plans to support distribution platforms. The reason we initially supported URL-scheme protocols was to support Starward's protocol for recording playtime in Mihoyo games. Later, we thought if we already support URL-schemes, why not support protocols from platforms like Steam/Epic? Thus, the current feature of supporting distribution platform launchers was born. Starward's innovation and contribution in the field of Mihoyo game launchers are indelible. We hope to pay tribute by supporting its protocol and provide players with more choices. With this opportunity, our launcher should support the vast majority of launcher URL-scheme protocols and parameterised execution.
+*   [**Starward**](https://github.com/Scighost/Starward): A powerful Mihoyo game launcher. Our initial vision for this project was just a collection launcher for local games, with no plans to support distribution platforms. The reason we initially supported URL-scheme protocols was to support Starward's protocol for recording playtime in Mihoyo games. Later, we thought if we already support URL-schemes, why not support protocols from platforms like Steam/Epic Games? Thus, the current feature of supporting distribution platform launchers was born. Starward's innovation and contribution in the field of Mihoyo game launchers are indelible. We hope to pay tribute by supporting its protocol and provide players with more choices. With this opportunity, our launcher should support the vast majority of launcher URL-scheme protocols and parameterised execution.
 *   [**Snap Hutao**](https://github.com/DGP-Studio/Snap.Hutao): Thanks to its team for their past outstanding contributions. It was the most powerful Genshin Impact toolbox I ever used. Although its curtain has closed, its open-source spirit will be passed on, inspiring those who follow. [**R.I.P**](https://hut.ao/)
 *   [**Snap Hutao Remastered**](https://github.com/SnapHutaoRemasteringProject/Snap.Hutao.Remastered): A remaster of Snap Hutao. Dedicated to continuing the original features and revitalising them on a modern tech stack. Respect! This is also the toolbox I currently use when playing Genshin Impact.
 
