@@ -231,7 +231,6 @@ namespace EricGameLauncher
             this.SetTitleBar(TitleBarGrid);
 
             ConfigService.Initialize();
-            StartupArgs.LoadDebugConfig();
             StartupArgs.LogEnvironment();
             ServerConfigManager.LoadReadIds();
 
@@ -3556,6 +3555,10 @@ namespace EricGameLauncher
                 SizeSlider.Value = ConfigService.IconSize;
             }
 
+            UpdateGitHubTokenStatus();
+            if (GitHubTokenEditRow != null) GitHubTokenEditRow.Visibility = Visibility.Collapsed;
+            if (GitHubTokenViewRow != null) GitHubTokenViewRow.Visibility = Visibility.Visible;
+
             SettingsFlyout.ShowAt(BtnMore);
             LogService.Write("UI", "MenuSettings_Click showed SettingsFlyout");
         }
@@ -3634,6 +3637,46 @@ namespace EricGameLauncher
             {
                 ConfigService.LaunchMode = val; AppGrid.IsItemClickEnabled = ConfigService.LaunchMode != "double";
             }
+        }
+
+        private void GitHubTokenEditBtn_Click(object sender, RoutedEventArgs e)
+        {
+            GitHubTokenViewRow.Visibility = Visibility.Collapsed;
+            GitHubTokenEditRow.Visibility = Visibility.Visible;
+            GitHubTokenBox.Password = ConfigService.GitHubToken;
+            GitHubTokenBox.Focus(FocusState.Programmatic);
+            LogService.Write("UI", "GitHubTokenEditBtn: entering edit mode");
+        }
+
+        private void GitHubTokenSaveBtn_Click(object sender, RoutedEventArgs e)
+        {
+            string newValue = GitHubTokenBox.Password ?? "";
+            if (ConfigService.GitHubToken != newValue)
+            {
+                ConfigService.GitHubToken = newValue;
+                ConfigService.SaveAll();
+                LogService.Write("UI", "GitHubTokenSaveBtn: token updated");
+            }
+            SwitchToTokenView();
+        }
+
+        private void GitHubTokenCancelBtn_Click(object sender, RoutedEventArgs e)
+        {
+            SwitchToTokenView();
+        }
+
+        private void SwitchToTokenView()
+        {
+            GitHubTokenEditRow.Visibility = Visibility.Collapsed;
+            GitHubTokenViewRow.Visibility = Visibility.Visible;
+            UpdateGitHubTokenStatus();
+            LogService.Write("UI", "GitHubToken: switched to view mode");
+        }
+
+        private void UpdateGitHubTokenStatus()
+        {
+            bool hasToken = !string.IsNullOrEmpty(ConfigService.GitHubToken);
+            GitHubTokenStatusText.Text = hasToken ? I18n.T("Settings_GitHubTokenConfigured") : I18n.T("Settings_GitHubTokenNotConfigured");
         }
 
         private void ComboUpdateChannel_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -3915,6 +3958,30 @@ namespace EricGameLauncher
                 ComboUpdateChannel.SelectionChanged += ComboUpdateChannel_SelectionChanged;
                 if (SettingsUpdateChannelDesc != null)
                     SettingsUpdateChannelDesc.Text = I18n.T("Settings_UpdateChannel_Desc");
+                if (SettingsGitHubTokenLabel != null)
+                    SettingsGitHubTokenLabel.Text = I18n.T("Settings_GitHubTokenLabel");
+                if (GitHubTokenBox != null)
+                    GitHubTokenBox.PlaceholderText = I18n.T("Settings_GitHubTokenPlaceholder");
+                if (SettingsGitHubTokenDesc != null)
+                    SettingsGitHubTokenDesc.Text = I18n.T("Settings_GitHubTokenDesc");
+                if (SettingsGitHubTokenLink != null)
+                    SettingsGitHubTokenLink.Content = I18n.T("Settings_GitHubTokenLink");
+                if (GitHubTokenEditBtn != null)
+                {
+                    GitHubTokenEditBtn.Content = I18n.T("Settings_GitHubTokenEdit");
+                    ToolTipService.SetToolTip(GitHubTokenEditBtn, I18n.T("Settings_GitHubTokenEdit"));
+                }
+                if (GitHubTokenSaveBtn != null)
+                {
+                    GitHubTokenSaveBtn.Content = I18n.T("Settings_GitHubTokenSave");
+                    ToolTipService.SetToolTip(GitHubTokenSaveBtn, I18n.T("Settings_GitHubTokenSave"));
+                }
+                if (GitHubTokenCancelBtn != null)
+                {
+                    GitHubTokenCancelBtn.Content = I18n.T("Settings_GitHubTokenCancel");
+                    ToolTipService.SetToolTip(GitHubTokenCancelBtn, I18n.T("Settings_GitHubTokenCancel"));
+                }
+                UpdateGitHubTokenStatus();
                 SettingsDataLocationLabel.Text = I18n.T("Settings_DataLocation");
                 UpdateStorageModeUI();
                 SettingsMigrateNote.Text = I18n.T("Settings_MigrateNote");

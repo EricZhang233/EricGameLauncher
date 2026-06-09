@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
@@ -21,11 +22,33 @@ public class UpdateService
         client.DefaultRequestHeaders.Add("Accept", "application/vnd.github.v3.html+json");
     }
 
+    private static bool _tokenApplied = false;
+
     private static void ApplyGitHubToken()
     {
-        if (!string.IsNullOrEmpty(StartupArgs.GitHubToken) &&
-            !client.DefaultRequestHeaders.Contains("Authorization"))
-            client.DefaultRequestHeaders.Add("Authorization", $"Bearer {StartupArgs.GitHubToken}");
+        if (!string.IsNullOrEmpty(ConfigService.GitHubToken))
+        {
+            if (!client.DefaultRequestHeaders.Contains("Authorization"))
+            {
+                client.DefaultRequestHeaders.Add("Authorization", $"Bearer {ConfigService.GitHubToken}");
+                _tokenApplied = true;
+                LogService.Write("Update", "ApplyGitHubToken: authenticated (5000 req/h)");
+            }
+        }
+        else if (!_tokenApplied)
+        {
+            _tokenApplied = true;
+            LogService.Write("Update", "ApplyGitHubToken: no token configured, falling back to unauthenticated (60 req/h)");
+        }
+    }
+
+    private static void InvalidateToken()
+    {
+        ConfigService.GitHubToken = "";
+        ConfigService.SaveAll();
+        client.DefaultRequestHeaders.Remove("Authorization");
+        _tokenApplied = false;
+        LogService.Write("Update", "InvalidateToken: invalid token cleared, fallback to unauthenticated");
     }
     private const string AllReleasesApiUrl = "https://api.github.com/repos/EricZhang233/EricGameLauncher/releases?per_page=100";
     private const string MirrorPrefix = "https://ghproxy.com/";
@@ -48,16 +71,42 @@ public class UpdateService
         public long size { get; set; }
     }
 
+    private static async Task<List<ReleaseInfo>?> FetchReleasesWithFallbackAsync()
+    {
+        ApplyGitHubToken();
+        try
+        {
+            var releases = await client.GetFromJsonAsync<List<ReleaseInfo>>(AllReleasesApiUrl);
+            LogService.Write("Update", $"FetchReleasesWithFallback fetched releasesCount={(releases?.Count ?? 0)}");
+            return releases;
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            if (!string.IsNullOrEmpty(ConfigService.GitHubToken))
+            {
+                LogService.Write("Update", "FetchReleasesWithFallback: 401 Unauthorized, invalidating token and retrying without auth", ex);
+                InvalidateToken();
+                try
+                {
+                    var releases = await client.GetFromJsonAsync<List<ReleaseInfo>>(AllReleasesApiUrl);
+                    LogService.Write("Update", $"FetchReleasesWithFallback retry without auth succeeded, releasesCount={(releases?.Count ?? 0)}");
+                    return releases;
+                }
+                catch (Exception ex2) { LogService.Write("Update", "FetchReleasesWithFallback retry without auth failed", ex2); return null; }
+            }
+            LogService.Write("Update", "FetchReleasesWithFallback 401 without token", ex);
+            return null;
+        }
+        catch (Exception ex) { LogService.Write("Update", "FetchReleasesWithFallback failed", ex); return null; }
+    }
+
     public static async Task<ReleaseInfo?> GetLatestReleaseAsync()
     {
         using (LogService.StartOperation("Update", "GetLatestReleaseAsync"))
         {
             try
             {
-                ApplyGitHubToken();
-
-                var releases = await client.GetFromJsonAsync<List<ReleaseInfo>>(AllReleasesApiUrl);
-                LogService.Write("Update", $"GetLatestReleaseAsync fetched releasesCount={(releases?.Count ?? 0)}");
+                var releases = await FetchReleasesWithFallbackAsync();
                 if (releases == null || releases.Count == 0) return null;
 
                 var sortedReleases = releases
@@ -81,10 +130,7 @@ public class UpdateService
         {
             try
             {
-                ApplyGitHubToken();
-
-                var releases = await client.GetFromJsonAsync<List<ReleaseInfo>>(AllReleasesApiUrl);
-                LogService.Write("Update", $"GetLatestStableReleaseAsync fetched releasesCount={(releases?.Count ?? 0)}");
+                var releases = await FetchReleasesWithFallbackAsync();
                 if (releases == null || releases.Count == 0) return null;
 
                 var sortedReleases = releases

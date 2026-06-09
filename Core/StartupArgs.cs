@@ -1,15 +1,11 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
-using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.NamingConventions;
 
 namespace EricGameLauncher;
 
 internal static class StartupArgs
 {
     public static bool IsDebug { get; private set; }
-    public static string? GitHubToken { get; private set; }
     private static string[] _rawArgs = Array.Empty<string>();
 
     public static void Parse()
@@ -34,27 +30,6 @@ internal static class StartupArgs
                 ConfigService.ApplyDebugMode(Directory.GetCurrentDirectory());
         }
         catch (Exception ex) { LogService.Write("Debug", "StartupArgs.Apply failed", ex); }
-    }
-
-    public static void LoadDebugConfig()
-    {
-        try
-        {
-            string path = Path.Combine(ConfigService.CurrentDataPath, "debug.yaml");
-            if (!File.Exists(path)) return;
-            var yaml = File.ReadAllText(path);
-            var deserializer = new DeserializerBuilder()
-                .WithNamingConvention(CamelCaseNamingConvention.Instance)
-                .IgnoreUnmatchedProperties()
-                .Build();
-            var cfg = deserializer.Deserialize<Dictionary<string, string>>(yaml);
-            if (cfg != null && cfg.TryGetValue("githubToken", out var token) && !string.IsNullOrWhiteSpace(token))
-            {
-                GitHubToken = token.Trim();
-                LogService.Write("Startup", $"LoadDebugConfig: githubToken loaded");
-            }
-        }
-        catch (Exception ex) { LogService.Write("Startup", "LoadDebugConfig failed", ex); }
     }
 
     public static void LogEnvironment()

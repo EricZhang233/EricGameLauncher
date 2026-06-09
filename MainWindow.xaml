@@ -571,6 +571,63 @@
                                            Style="{ThemeResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                            TextWrapping="Wrap"/>
+                                <Border Height="1" Margin="0,4,0,4" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+                                <Grid ColumnDefinitions="Auto,*">
+                                    <StackPanel Grid.Column="0"
+                                                Orientation="Horizontal"
+                                                Spacing="12"
+                                                VerticalAlignment="Center">
+                                        <FontIcon Glyph="&#xE72E;" FontSize="16"
+                                                  VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="SettingsGitHubTokenLabel"
+                                                   Text=""
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Grid>
+                                <Grid x:Name="GitHubTokenViewRow" ColumnDefinitions="Auto,*,Auto">
+                                    <TextBlock x:Name="GitHubTokenStatusText"
+                                               Grid.Column="0"
+                                               Text=""
+                                               VerticalAlignment="Center"
+                                               FontSize="13"/>
+                                    <Button x:Name="GitHubTokenEditBtn"
+                                            Grid.Column="2"
+                                            Content=""
+                                            Click="GitHubTokenEditBtn_Click"
+                                            Padding="8,4"
+                                            ToolTipService.ToolTip=""/>
+                                </Grid>
+                                <Grid x:Name="GitHubTokenEditRow" ColumnDefinitions="*,Auto,Auto" Visibility="Collapsed">
+                                    <PasswordBox x:Name="GitHubTokenBox"
+                                                 Grid.Column="0"
+                                                 PlaceholderText=""
+                                                 HorizontalAlignment="Stretch"
+                                                 Margin="0,0,8,0"/>
+                                    <Button x:Name="GitHubTokenSaveBtn"
+                                            Grid.Column="1"
+                                            Content=""
+                                            Click="GitHubTokenSaveBtn_Click"
+                                            Padding="8,4"
+                                            Margin="0,0,4,0"
+                                            ToolTipService.ToolTip=""/>
+                                    <Button x:Name="GitHubTokenCancelBtn"
+                                            Grid.Column="2"
+                                            Content=""
+                                            Click="GitHubTokenCancelBtn_Click"
+                                            Padding="8,4"
+                                            ToolTipService.ToolTip=""/>
+                                </Grid>
+                                <TextBlock x:Name="SettingsGitHubTokenDesc"
+                                           Text=""
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                           TextWrapping="Wrap"/>
+                                <HyperlinkButton x:Name="SettingsGitHubTokenLink"
+                                                 Content=""
+                                                 NavigateUri="https://github.com/settings/personal-access-tokens"
+                                                 HorizontalAlignment="Left"
+                                                 Padding="0"
+                                                 FontSize="12"/>
                             </StackPanel>
                             <Border Height="2" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="0,4,0,4"/>
                             <StackPanel Spacing="8">
