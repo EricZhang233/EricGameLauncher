@@ -76,7 +76,7 @@ announcements:
     title_en: |
       Outdated Versions list
     body_zh: |
-        v1.0.x：不再接收更新和支持,不再支持服务器配置，且存在多项严重缺陷，不推荐继续使用。
+        v1.0.x：不再接收更新和支持，不再支持服务器配置，且存在多项严重缺陷，不推荐继续使用。
     body_en: |
         v1.0.x: No longer receiving updates and support, no longer supports server configuration, and contains several critical defects. Continued use is not recommended.
     time: "2026-06-01T00:00:00Z"
