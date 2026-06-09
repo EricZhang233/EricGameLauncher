@@ -1,13 +1,13 @@
 ﻿using System;
 using System.IO;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Channels;
 
 using System.Runtime.Versioning;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
 namespace updater.cfgver
 {
@@ -41,7 +41,7 @@ namespace updater.cfgver
             Log($"Start argsCount={args.Length}");
             if (args.Length == 0)
             {
-                Console.WriteLine("Usage: updater.cfgver.exe <config_path>");
+                Console.WriteLine("Usage: updater.cfgver.exe <items_path>");
                 Log("InvalidArgs");
                 return;
             }
@@ -60,36 +60,38 @@ namespace updater.cfgver
                 return;
             }
 
-            JsonNode? rulesArray = null;
+            List<object>? rulesList = null;
             try
             {
                 var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-                using var stream = assembly.GetManifestResourceStream("updater.cfgver.migration_rules.json");
+                using var stream = assembly.GetManifestResourceStream("updater.cfgver.migration_rules.yaml");
                 if (stream != null)
                 {
                     using var reader = new StreamReader(stream);
-                    string rulesJson = reader.ReadToEnd();
-                    rulesArray = JsonNode.Parse(rulesJson);
+                    string rulesYaml = reader.ReadToEnd();
+                    var deserializer = new DeserializerBuilder().Build();
+                    rulesList = deserializer.Deserialize<List<object>>(rulesYaml);
                 }
             }
             catch (Exception ex) { Log($"RulesLoadFailed info={ex}"); return; }
 
-            if (rulesArray == null) return;
+            if (rulesList == null) return;
 
-            JsonObject? configRoot;
+            Dictionary<object, object>? configRoot;
             try
             {
-                string configJson = File.ReadAllText(inputPath);
-                configRoot = JsonNode.Parse(configJson)?.AsObject();
+                string configYaml = File.ReadAllText(inputPath);
+                var deserializer = new DeserializerBuilder().Build();
+                configRoot = deserializer.Deserialize<Dictionary<object, object>>(configYaml);
             }
             catch (Exception ex) { Log($"ConfigReadFailed info={ex}"); return; }
 
             if (configRoot == null) return;
 
             int currentVersion = 1;
-            if (configRoot.TryGetPropertyValue("Version", out var verNode) && verNode != null)
+            if (configRoot.TryGetValue("version", out var verObj) && verObj != null)
             {
-                currentVersion = verNode.GetValue<int>();
+                try { currentVersion = Convert.ToInt32(verObj); } catch { currentVersion = 1; }
             }
 
             bool migratedAny = false;
@@ -97,12 +99,15 @@ namespace updater.cfgver
 
             while (true)
             {
-                JsonNode? matchingRule = null;
-                if (rulesArray is JsonArray arr)
+                Dictionary<object, object>? matchingRule = null;
+                foreach (var r in rulesList)
                 {
-                    foreach (var rule in arr)
+                    if (r is Dictionary<object, object> rule)
                     {
-                        if (rule?["From"]?.GetValue<int>() == currentVersion)
+                        int fromVer = 0;
+                        if (rule.TryGetValue("from", out var fv) && fv != null)
+                            try { fromVer = Convert.ToInt32(fv); } catch { }
+                        if (fromVer == currentVersion)
                         {
                             matchingRule = rule;
                             break;
@@ -112,83 +117,90 @@ namespace updater.cfgver
 
                 if (matchingRule == null) break;
 
-                int nextVersion = matchingRule["To"]!.GetValue<int>();
+                int nextVersion = 0;
+                if (matchingRule.TryGetValue("to", out var tv) && tv != null)
+                    try { nextVersion = Convert.ToInt32(tv); } catch { }
 
-                var transformations = matchingRule["Transformations"]?.AsArray();
-                if (transformations != null && configRoot.TryGetPropertyValue("items", out var itemsNode) && itemsNode is JsonArray itemsArr)
+                if (matchingRule.TryGetValue("transformations", out var tfsObj) && tfsObj is List<object> transformations)
                 {
-                    foreach (var itemNode in itemsArr)
+                    if (configRoot.TryGetValue("items", out var itemsObj) && itemsObj is List<object> itemsArr)
                     {
-                        if (itemNode is JsonObject itemObj)
+                        foreach (var itemNode in itemsArr)
                         {
+                            if (itemNode is not Dictionary<object, object> itemObj) continue;
                             foreach (var tf in transformations)
                             {
-                                if (tf is not JsonObject tfObj) continue;
-                                string tfType = tfObj["Type"]?.GetValue<string>() ?? "";
+                                if (tf is not Dictionary<object, object> tfObj) continue;
+                                if (!tfObj.TryGetValue("type", out var typeObj)) continue;
+                                string tfType = typeObj?.ToString() ?? "";
 
                                 if (tfType == "MoveAndGroup")
                                 {
-                                    string targetObjName = tfObj["Target"]?.GetValue<string>() ?? "";
-                                    var sourceFields = tfObj["SourceFields"]?.AsObject();
-
-                                    if (sourceFields != null && !string.IsNullOrEmpty(targetObjName))
+                                    string targetObjName = "";
+                                    if (tfObj.TryGetValue("target", out var tgt) && tgt != null) targetObjName = tgt.ToString() ?? "";
+                                    if (tfObj.TryGetValue("sourceFields", out var sfObj) && sfObj is Dictionary<object, object> sourceFields)
                                     {
-                                        JsonObject newObj = new JsonObject();
-                                        bool hasAnyField = false;
-
-                                        foreach (var field in sourceFields)
+                                        if (!string.IsNullOrEmpty(targetObjName))
                                         {
-                                            string newPropName = field.Key;
-                                            string oldPropName = field.Value?.GetValue<string>() ?? "";
+                                            var newDict = new Dictionary<object, object>();
+                                            bool hasAnyField = false;
 
-                                            if (itemObj.TryGetPropertyValue(oldPropName, out var oldPropValue) && oldPropValue != null)
+                                            foreach (var field in sourceFields)
                                             {
-                                                hasAnyField = true;
-                                                newObj[newPropName] = oldPropValue.DeepClone();
-                                                itemObj.Remove(oldPropName);
-                                                var existingKey = itemObj.Select(p => p.Key).FirstOrDefault(k => string.Equals(k, oldPropName, StringComparison.OrdinalIgnoreCase));
-                                                if (existingKey != null) itemObj.Remove(existingKey);
-                                            }
-                                        }
+                                                string newPropName = field.Key?.ToString() ?? "";
+                                                string oldPropName = field.Value?.ToString() ?? "";
 
-                                        if (hasAnyField)
-                                        {
-                                            itemObj[targetObjName] = newObj;
+                                                if (itemObj.TryGetValue(oldPropName, out var oldPropValue) && oldPropValue != null)
+                                                {
+                                                    hasAnyField = true;
+                                                    newDict[newPropName] = DeepCopyYaml(oldPropValue);
+                                                    itemObj.Remove(oldPropName);
+                                                }
+                                            }
+
+                                            if (hasAnyField)
+                                            {
+                                                itemObj[targetObjName] = newDict;
+                                            }
                                         }
                                     }
                                 }
                                 else if (tfType == "SplitRecycleBin")
                                 {
-                                    string itemsKey = tfObj["ItemsKey"]?.GetValue<string>() ?? "items";
-                                    string recycleKey = tfObj["RecycleKey"]?.GetValue<string>() ?? "recycleBinItems";
-                                    string statusField = tfObj["StatusField"]?.GetValue<string>() ?? "Status";
-                                    int normalValue = tfObj["NormalValue"]?.GetValue<int>() ?? 0;
+                                    string itemsKey = "items";
+                                    if (tfObj.TryGetValue("itemsKey", out var ik) && ik != null) itemsKey = ik.ToString() ?? "items";
+                                    string recycleKey = "recycleBin";
+                                    if (tfObj.TryGetValue("recycleKey", out var rk) && rk != null) recycleKey = rk.ToString() ?? "recycleBin";
+                                    string statusField = "status";
+                                    if (tfObj.TryGetValue("statusField", out var sf) && sf != null) statusField = sf.ToString() ?? "status";
+                                    int normalValue = 0;
+                                    if (tfObj.TryGetValue("normalValue", out var nv) && nv != null) try { normalValue = Convert.ToInt32(nv); } catch { }
 
-                                    if (configRoot.TryGetPropertyValue(itemsKey, out var itemsRoot) && itemsRoot is JsonArray itemsArray)
+                                    if (configRoot.TryGetValue(itemsKey, out var itemsRoot) && itemsRoot is List<object> itemsArray)
                                     {
-                                        JsonArray recycleArray;
-                                        if (configRoot.TryGetPropertyValue(recycleKey, out var recycleRoot) && recycleRoot is JsonArray existingRecycle)
+                                        List<object> recycleArray;
+                                        if (configRoot.TryGetValue(recycleKey, out var recycleRoot) && recycleRoot is List<object> existingRecycle)
                                         {
                                             recycleArray = existingRecycle;
                                         }
                                         else
                                         {
-                                            recycleArray = new JsonArray();
+                                            recycleArray = new List<object>();
                                             configRoot[recycleKey] = recycleArray;
                                         }
 
                                         for (int i = itemsArray.Count - 1; i >= 0; i--)
                                         {
-                                            if (itemsArray[i] is not JsonObject obj) continue;
+                                            if (itemsArray[i] is not Dictionary<object, object> obj) continue;
                                             int statusValue = normalValue;
-                                            if (obj.TryGetPropertyValue(statusField, out var statusNode) && statusNode != null)
+                                            if (obj.TryGetValue(statusField, out var statusNode) && statusNode != null)
                                             {
-                                                try { statusValue = statusNode.GetValue<int>(); } catch (Exception ex) { Log($"ParseStatusFailed {ex}"); statusValue = normalValue; }
+                                                try { statusValue = Convert.ToInt32(statusNode); } catch (Exception ex) { Log($"ParseStatusFailed {ex}"); statusValue = normalValue; }
                                             }
 
                                             if (statusValue != normalValue)
                                             {
-                                                recycleArray.Add(obj.DeepClone());
+                                                recycleArray.Add(DeepCopyYaml(obj));
                                                 itemsArray.RemoveAt(i);
                                             }
                                         }
@@ -201,7 +213,7 @@ namespace updater.cfgver
 
                 currentVersion = nextVersion;
                 migratedAny = true;
-                configRoot["Version"] = currentVersion;
+                configRoot["version"] = currentVersion;
             }
 
             if (!migratedAny) return;
@@ -215,12 +227,19 @@ namespace updater.cfgver
 
             try
             {
-                var options = new JsonSerializerOptions { WriteIndented = true };
-                string newJson = configRoot.ToJsonString(options);
-                File.WriteAllText(inputPath, newJson);
+                var serializer = new SerializerBuilder().Build();
+                string newYaml = serializer.Serialize(configRoot);
+                File.WriteAllText(inputPath, newYaml);
             }
             catch (Exception ex) { Log($"WriteFailed info={ex}"); }
             Log($"End duration={sw.ElapsedMilliseconds}ms modified={(migratedAny ? "yes" : "no")}");
+        }
+
+        private static object DeepCopyYaml(object obj)
+        {
+            var serializer = new SerializerBuilder().Build();
+            var deserializer = new DeserializerBuilder().Build();
+            return deserializer.Deserialize<object>(serializer.Serialize(obj));
         }
     }
 

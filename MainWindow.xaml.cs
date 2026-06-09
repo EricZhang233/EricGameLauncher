@@ -618,6 +618,7 @@ namespace EricGameLauncher
             using (LogService.StartOperation("App", "Shutdown"))
             {
                 LogService.Write("App", "MainWindow_Closed Start");
+                ConfigService.SaveAll();
                 ServerConfigManager.AnnouncementsUpdated -= OnAnnouncementsUpdated;
                 if (_oldWndProc != IntPtr.Zero)
                 {
@@ -698,7 +699,6 @@ namespace EricGameLauncher
                 if (changed)
                 {
                     ConfigService.SetWindowBounds(x, y, width, height);
-                    _ = Task.Run(() => ConfigService.SaveConfig());
                     LogService.Write("App", $"SaveWindowState persisted newBounds x={x} y={y} w={width} h={height}");
                 }
             }
@@ -901,7 +901,7 @@ namespace EricGameLauncher
                     await Task.Delay(200);
                     LogService.Write("Startup", $"LoadData AfterMigrationDelay {sw.ElapsedMilliseconds}ms");
 
-                    string configPath = ConfigService.ConfigFilePath;
+                    string configPath = ConfigService.ItemsFilePath;
                     try
                     {
                         string tempDir = System.IO.Path.Combine(ConfigService.SystemCachePath, "updater.cfgver");
@@ -1033,6 +1033,7 @@ namespace EricGameLauncher
                 if (fg != _hWnd)
                 {
                     LogService.Write("App", "Exit requested (CloseAfterLaunch)");
+                    ConfigService.SaveAll();
                     try { Application.Current.Exit(); } catch (Exception ex) { LogService.Write("App", "Exit failed (CloseAfterLaunch)", ex); }
                 }
                 else
@@ -3623,7 +3624,6 @@ namespace EricGameLauncher
                 if (ConfigService.CloseAfterLaunch != toggle.IsOn)
                 {
                     ConfigService.CloseAfterLaunch = toggle.IsOn;
-                    ConfigService.SaveConfig();
                 }
             }
         }
@@ -3633,7 +3633,6 @@ namespace EricGameLauncher
             if (ComboLaunchMode.SelectedItem is ComboBoxItem item && item.Tag is string val)
             {
                 ConfigService.LaunchMode = val; AppGrid.IsItemClickEnabled = ConfigService.LaunchMode != "double";
-                Task.Run(() => ConfigService.SaveConfig());
             }
         }
 
@@ -3645,7 +3644,6 @@ namespace EricGameLauncher
                 if (ConfigService.UpdateChannel != newChannel)
                 {
                     ConfigService.UpdateChannel = newChannel;
-                    ConfigService.SaveConfig();
 
                     _pendingUpdate = null;
                     HasUpdate = false;
@@ -3678,7 +3676,6 @@ namespace EricGameLauncher
                 IconSize = slider.Value;
                 ConfigService.IconSize = slider.Value;
                 LogService.Write("UI", $"SizeSlider_ValueChanged newSize={slider.Value}");
-                ConfigService.SaveConfig();
 
                 UpdateGridItemSizes(slider.Value);
             }
@@ -3749,7 +3746,6 @@ namespace EricGameLauncher
                     {
                         ConfigService.CloseAfterLaunch = ToggleCloseAfterLaunch.IsOn;
                         LogService.Write("Config", $"ToggleCloseAfterLaunch changed to={ToggleCloseAfterLaunch.IsOn}");
-                        ConfigService.SaveConfig();
                     }
                     await ConfigService.SwitchStorageModeAsync(switchToSystemMode);
                     UpdateStorageModeUI();
@@ -3922,20 +3918,6 @@ namespace EricGameLauncher
                 SettingsDataLocationLabel.Text = I18n.T("Settings_DataLocation");
                 UpdateStorageModeUI();
                 SettingsMigrateNote.Text = I18n.T("Settings_MigrateNote");
-                var languages = I18n.GetAvailableLanguages();
-                LanguageComboBox.SelectionChanged -= LanguageComboBox_SelectionChanged;
-                LanguageComboBox.Items.Clear();
-                int selectedIndex = 0;
-                for (int i = 0; i < languages.Count; i++)
-                {
-                    LanguageComboBox.Items.Add(I18n.GetDisplayName(languages[i]));
-                }
-                LanguageComboBox.Tag = languages;
-                int idx = languages.IndexOf(I18n.CurrentLanguage);
-                if (idx >= 0) selectedIndex = idx;
-                LanguageComboBox.SelectedIndex = selectedIndex;
-                LanguageComboBox.SelectionChanged += LanguageComboBox_SelectionChanged;
-
                 try
                 {
                     if (BtnOpenConfigFolder != null)
@@ -4045,21 +4027,7 @@ namespace EricGameLauncher
         }
 
 
-        private void LanguageComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (LanguageComboBox.Tag is List<string> languages &&
-                LanguageComboBox.SelectedIndex >= 0 &&
-                LanguageComboBox.SelectedIndex < languages.Count)
-            {
-                var selectedLang = languages[LanguageComboBox.SelectedIndex];
-                if (selectedLang != I18n.CurrentLanguage)
-                {
-                    ConfigService.Language = selectedLang;
-                    ConfigService.SaveConfig();
-                    I18n.Load(selectedLang);
-                }
-            }
-        }
+
         private void UpdateCustomVisibility()
         {
             int visibleCount = 0;
