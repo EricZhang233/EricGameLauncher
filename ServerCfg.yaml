@@ -14,7 +14,7 @@ announcements:
       这是一个示例公告，仅用于说明配置格式。
     body_en: | # multiline string
       This is a sample announcement for format demonstration.
-    time: "2026-05-20T00:00:00Z" # ISO8601, e.g. 2026-05-20T12:00:00Z
+    time: "2026-06-01T00:00:00Z" # ISO8601, e.g. 2026-05-20T12:00:00Z
     position: normal # enum: normal | top | bottom
     visible: false # bool (true | false)
   # 示例公告结束
@@ -34,7 +34,7 @@ announcements:
       - Visit our Github project page: https://github.com/EricZhang233/EricGameLauncher
       - Questions\Suggestions? Feel free to submit an issue: https://github.com/EricZhang233/EricGameLauncher/issues
       We strive to create a lightweight yet powerful game launcher. Enjoy your gaming!
-    time: "2026-05-26T00:00:00Z"
+    time: "2026-06-01T00:00:00Z"
     position: top
     visible: true
 
@@ -47,29 +47,38 @@ announcements:
       在更新到1.1.0版本后，配置文件格式发生了重大变更。请注意以下事项：
       旧版本的配置文件将不再兼容。
       由于前期调研和本地我们看到的用户规模显示，目前用户规模较小，此时进行一次破坏性更新，虽然会给部分用户带来不便，但从长远来看是必要的，以便我们能够引入更好的设计和功能。
+      1.0.x版本将不再具有服务器配置拉取功能，这意味着所有基于服务器配置的功能将失效。
       由于用户环境中配置文件不尽相同，我们无法提供自动迁移工具。请您更新此版本后，手动重新配置您的设置。
       你可以在github中的历史release中下载1.0.20.1版本的安装包，以便继续使用旧版本，直到你准备好迁移到新版本。但请注意，旧版本将不再接收更新和支持，且该版本存在多项严重缺陷（UWP 图标模糊或颠倒、扫描导入后无法显示新项、已安装应用被误判失效等），不推荐继续使用。即使需要重新配置，我们仍强烈建议更新至最新版本。
       感谢您的理解和支持！
-
       1.0.20.1版本下载：https://github.com/EricZhang233/EricGameLauncher/releases/tag/v1.0.20.1
       下载后，如果你之前的配置路径为系统模式，则解压至任意位置后，直接运行即可；
       如果之前的配置路径为便携模式，则需要将原有的data文件夹复制到1.0.20.1版本的安装目录下，或直接将1.0.20.1的程序包覆盖解压至已更新新版本的目录下，以保留原有配置。
-      
       我们不处理非最新版本的用户反馈和问题，请尽快迁移到新版本以获得更好的体验。
-    
     body_en: |
-      After updating to version 1.1.0, there will be a significant change in the configuration file format. Please note the following:
-      The old version of the configuration file will no longer be compatible.
-      Given our preliminary research and the user scale we have observed locally, which indicates a relatively small user base, we believe that implementing a breaking update at this time, while it may cause inconvenience for some users, is necessary in the long run to allow us to introduce better designs and features.
+      After updating to version 1.1.0, there has been a significant change in the configuration file format. Please note the following:
+      The old version's configuration file will no longer be compatible.
+      Given our preliminary research and the current user base size, we believe that while this breaking change may cause inconvenience for some users, it is necessary in the long run to allow us to introduce better designs and features.
+      Version 1.0.x will no longer have the server configuration fetching feature, which means all features based on server configuration will be non-functional.
       Due to the varying configurations in user environments, we are unable to provide an automatic migration tool. Please manually reconfigure your settings after updating to this version.
       You can download the installation package for version 1.0.20.1 from our GitHub releases page to continue using the old version until you are ready to migrate to the new version. Please note that the old version will no longer receive updates or support. Additionally, version 1.0.20.1 contains several critical defects (blurry or flipped UWP icons, new items not appearing after scanning, installed apps incorrectly flagged as invalid, etc.) and is not recommended for continued use. Even if reconfiguration is required, we strongly advise updating to the latest version.
       We recommend migrating to the new version as soon as possible to enjoy improved performance and additional features. Thank you for your understanding and support!
-
       Download for version 1.0.20.1: https://github.com/EricZhang233/EricGameLauncher/releases/tag/v1.0.20.1
       After downloading, if your previous configuration path was in system mode, simply extract it to any location and run it directly; if your previous configuration path was in portable mode, you need to copy the original data folder to the installation directory of version 1.0.20.1. Alternatively, you can directly extract the version 1.0.20.1 package to the same directory. This will allow you to retain your original configuration while using the old version.
-
       We will not address feedback and issues from users of non-latest versions, so please migrate to the new version as soon as possible for a better experience.
-    time: "2026-05-26T00:00:00Z"
+    time: "2026-06-01T00:00:00Z"
     position: normal
     visible: true
 
+  - id: "outdated-versions-1"
+    title_zh: |
+      过时版本列表
+    title_en: |
+      Outdated Versions list
+    body_zh: |
+        v1.0.x：不再接收更新和支持,不再支持服务器配置，且存在多项严重缺陷，不推荐继续使用。
+    body_en: |
+        v1.0.x: No longer receiving updates and support, no longer supports server configuration, and contains several critical defects. Continued use is not recommended.
+    time: "2026-06-01T00:00:00Z"
+    position: bottom
+    visible: true

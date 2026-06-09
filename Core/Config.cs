@@ -27,6 +27,9 @@ public class AppSettings
 
     [YamlMember(Alias = "window")]
     public WindowBoundsInfo Window { get; set; } = new();
+
+    [YamlMember(Alias = "githubToken")]
+    public string GitHubToken { get; set; } = "";
 }
 
 public class WindowBoundsInfo
@@ -545,6 +548,12 @@ public static class ConfigService
     {
         get => _settings?.UpdateChannel ?? "stable";
         set { if (_settings != null) { LogService.Write("Config", $"UpdateChannel set to={value}"); _settings.UpdateChannel = value; } }
+    }
+
+    public static string GitHubToken
+    {
+        get => _settings?.GitHubToken ?? "";
+        set { if (_settings != null) { LogService.Write("Config", $"GitHubToken changed"); _settings.GitHubToken = value ?? ""; } }
     }
 
     public static bool IsSystemMode => CurrentDataPath == SystemBasePath;
