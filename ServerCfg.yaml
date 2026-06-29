@@ -38,36 +38,27 @@ announcements:
     position: top
     visible: true
 
-  - id: "config-breaking-update-1"
+  - id: "RoadMap-260629"
     title_zh: |
-      [重要] 关于1.1.x版本不再兼容1.0.x版本配置文件旧格式的公告
+      开发路线图
     title_en: |
-      [Important] Announcement Regarding Incompatibility of Configuration File Format Between Versions 1.1.x and 1.0.x
+      Development Roadmap
     body_zh: |
-      在更新到1.1.0版本后，配置文件格式发生了重大变更。请注意以下事项：
-      旧版本的配置文件将不再兼容。
-      由于前期调研和本地我们看到的用户规模显示，目前用户规模较小，此时进行一次破坏性更新，虽然会给部分用户带来不便，但从长远来看是必要的，以便我们能够引入更好的设计和功能。
-      1.0.x版本将不再具有服务器配置拉取功能，这意味着所有基于服务器配置的功能将失效。
-      由于用户环境中配置文件不尽相同，我们无法提供自动迁移工具。请您更新此版本后，手动重新配置您的设置。
-      你可以在github中的历史release中下载1.0.20.1版本的安装包，以便继续使用旧版本，直到你准备好迁移到新版本。但请注意，旧版本将不再接收更新和支持，且该版本存在多项严重缺陷（UWP 图标模糊或颠倒、扫描导入后无法显示新项、已安装应用被误判失效等），不推荐继续使用。即使需要重新配置，我们仍强烈建议更新至最新版本。
-      感谢您的理解和支持！
-      1.0.20.1版本下载：https://github.com/EricZhang233/EricGameLauncher/releases/tag/v1.0.20.1
-      下载后，如果你之前的配置路径为系统模式，则解压至任意位置后，直接运行即可；
-      如果之前的配置路径为便携模式，则需要将原有的data文件夹复制到1.0.20.1版本的安装目录下，或直接将1.0.20.1的程序包覆盖解压至已更新新版本的目录下，以保留原有配置。
-      我们不处理非最新版本的用户反馈和问题，请尽快迁移到新版本以获得更好的体验。
+      1、部分内部逻辑存在重复调用和不必要的复杂度，计划在后续版本中逐步优化重构，提升性能与稳定性。
+      2、我们持续探索更轻量、更高效的启动器呈现方式。比如在 Windows 上实现类似 macOS 的 Dock 式快捷启动形态——目前已发现一些优质的开源实现，正在评估和适配中。
+      3、围绕上述方向，未来可能引入更多布局选项：图标网格（已支持）、列表（适合 Dock 形态）、卡片（需解决头图获取与适配）等，甚至开放自定义布局，以适应不同用户的审美与操作习惯。
+
+      以上仅为当前阶段的初步设想，不承诺一定实现、也不保证按此顺序推进。具体优先级将根据用户反馈和实际情况动态调整。
+      如有新功能或改进建议，欢迎在 GitHub 提交 Issue，我们会认真评估并尽力落实。
     body_en: |
-      After updating to version 1.1.0, there has been a significant change in the configuration file format. Please note the following:
-      The old version's configuration file will no longer be compatible.
-      Given our preliminary research and the current user base size, we believe that while this breaking change may cause inconvenience for some users, it is necessary in the long run to allow us to introduce better designs and features.
-      Version 1.0.x will no longer have the server configuration fetching feature, which means all features based on server configuration will be non-functional.
-      Due to the varying configurations in user environments, we are unable to provide an automatic migration tool. Please manually reconfigure your settings after updating to this version.
-      You can download the installation package for version 1.0.20.1 from our GitHub releases page to continue using the old version until you are ready to migrate to the new version. Please note that the old version will no longer receive updates or support. Additionally, version 1.0.20.1 contains several critical defects (blurry or flipped UWP icons, new items not appearing after scanning, installed apps incorrectly flagged as invalid, etc.) and is not recommended for continued use. Even if reconfiguration is required, we strongly advise updating to the latest version.
-      We recommend migrating to the new version as soon as possible to enjoy improved performance and additional features. Thank you for your understanding and support!
-      Download for version 1.0.20.1: https://github.com/EricZhang233/EricGameLauncher/releases/tag/v1.0.20.1
-      After downloading, if your previous configuration path was in system mode, simply extract it to any location and run it directly; if your previous configuration path was in portable mode, you need to copy the original data folder to the installation directory of version 1.0.20.1. Alternatively, you can directly extract the version 1.0.20.1 package to the same directory. This will allow you to retain your original configuration while using the old version.
-      We will not address feedback and issues from users of non-latest versions, so please migrate to the new version as soon as possible for a better experience.
-    time: "2026-06-01T00:00:00Z"
-    position: normal
+      -1- We have identified some redundant calls and unnecessary complexity in certain logic and internal processes. We plan to optimize and refactor these areas in future versions to enhance performance and user experience. (Some experienced users may notice traces of this in the logs.)
+      -2- We are continuously exploring lighter and more efficient launcher presentation solutions. (Perhaps implementing a Dock-style folder layout similar to macOS on Windows? We have already seen other high-quality open-source projects achieve the effect we desire, and we are currently evaluating and adapting it...)
+      -3- Building on the previous point, we may introduce more layout options, such as icon grids (already implemented), lists (recommended for Dock-style layouts), cards (considering how to obtain header images and adapt), and even custom layouts to cater to different user habits and aesthetic preferences.
+
+      This is just our preliminary plan; it may not be implemented or followed in order. It represents our current thoughts and plans, which may change and adjust in the future. We will prioritize development based on user feedback and actual circumstances.
+      If you have any new feature or improvement suggestions, please feel free to submit an issue on Github, and we will carefully consider and strive to implement them.
+    time: "2026-06-01T00:00:01Z"
+    position: top
     visible: true
 
   - id: "outdated-versions-1"
