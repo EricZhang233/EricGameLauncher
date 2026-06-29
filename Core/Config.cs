@@ -231,6 +231,7 @@ public static class ConfigService
     public static string CurrentDataPath { get; private set; } = "";
     private static AppSettings? _settings;
     private static ItemsData? _itemsData;
+    private static string _memoryToken = "";
 
     public static string LaunchMode
     {
@@ -402,6 +403,21 @@ public static class ConfigService
                         .IgnoreUnmatchedProperties()
                         .Build();
                     _settings = deserializer.Deserialize<AppSettings>(settingsYaml) ?? new AppSettings();
+                    string loadedToken = _settings.GitHubToken ?? "";
+                    if (!string.IsNullOrEmpty(loadedToken))
+                    {
+                        string decrypted = TokenProtection.Decrypt(loadedToken);
+                        if (!string.IsNullOrEmpty(decrypted))
+                        {
+                            _memoryToken = decrypted;
+                        }
+                        else
+                        {
+                            _memoryToken = loadedToken;
+                            SaveSettingsData();
+                            LogService.Write("Config", "LoadConfigData migrated legacy plaintext token");
+                        }
+                    }
                 }
                 catch (Exception ex) { LogService.Write("Config", "LoadConfigData settings load failed", ex); _settings = new AppSettings(); }
             }
@@ -505,6 +521,7 @@ public static class ConfigService
         try
         {
             if (string.IsNullOrEmpty(CurrentDataPath) || _settings == null) return;
+            _settings.GitHubToken = TokenProtection.Encrypt(_memoryToken);
             string path = Path.Combine(CurrentDataPath, SettingsFileName);
             var serializer = new SerializerBuilder().Build();
             string yaml = serializer.Serialize(_settings);
@@ -552,8 +569,15 @@ public static class ConfigService
 
     public static string GitHubToken
     {
-        get => _settings?.GitHubToken ?? "";
-        set { if (_settings != null) { LogService.Write("Config", $"GitHubToken changed"); _settings.GitHubToken = value ?? ""; } }
+        get => _memoryToken;
+        set
+        {
+            if (!string.Equals(_memoryToken, value, StringComparison.Ordinal))
+            {
+                _memoryToken = value ?? "";
+                LogService.Write("Config", "GitHubToken changed");
+            }
+        }
     }
 
     public static bool IsSystemMode => CurrentDataPath == SystemBasePath;
