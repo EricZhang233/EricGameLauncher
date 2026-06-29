@@ -599,7 +599,7 @@
                                             ToolTipService.ToolTip=""/>
                                 </Grid>
                                 <Grid x:Name="GitHubTokenEditRow" ColumnDefinitions="*,Auto,Auto" Visibility="Collapsed">
-                                    <PasswordBox x:Name="GitHubTokenBox"
+                                    <TextBox x:Name="GitHubTokenBox"
                                                  Grid.Column="0"
                                                  PlaceholderText=""
                                                  HorizontalAlignment="Stretch"

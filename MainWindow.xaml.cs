@@ -3643,14 +3643,14 @@ namespace EricGameLauncher
         {
             GitHubTokenViewRow.Visibility = Visibility.Collapsed;
             GitHubTokenEditRow.Visibility = Visibility.Visible;
-            GitHubTokenBox.Password = ConfigService.GitHubToken;
+            GitHubTokenBox.Text = ConfigService.GitHubToken;
             GitHubTokenBox.Focus(FocusState.Programmatic);
             LogService.Write("UI", "GitHubTokenEditBtn: entering edit mode");
         }
 
         private void GitHubTokenSaveBtn_Click(object sender, RoutedEventArgs e)
         {
-            string newValue = GitHubTokenBox.Password ?? "";
+            string newValue = GitHubTokenBox.Text ?? "";
             if (ConfigService.GitHubToken != newValue)
             {
                 ConfigService.GitHubToken = newValue;
