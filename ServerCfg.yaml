@@ -34,7 +34,7 @@ announcements:
       - Visit our Github project page: https://github.com/EricZhang233/EricGameLauncher
       - Questions\Suggestions? Feel free to submit an issue: https://github.com/EricZhang233/EricGameLauncher/issues
       We strive to create a lightweight yet powerful game launcher. Enjoy your gaming!
-    time: "2026-06-01T00:00:00Z"
+    time: "2026-06-01T00:00:59Z"
     position: top
     visible: true
 
@@ -57,7 +57,7 @@ announcements:
 
       This is just our preliminary plan; it may not be implemented or followed in order. It represents our current thoughts and plans, which may change and adjust in the future. We will prioritize development based on user feedback and actual circumstances.
       If you have any new feature or improvement suggestions, please feel free to submit an issue on Github, and we will carefully consider and strive to implement them.
-    time: "2026-06-01T00:00:01Z"
+    time: "2026-06-01T00:00:40Z"
     position: top
     visible: true
 
@@ -70,6 +70,6 @@ announcements:
         v1.0.x：不再接收更新和支持，不再支持服务器配置，且存在多项严重缺陷，不推荐继续使用。
     body_en: |
         v1.0.x: No longer receiving updates and support, no longer supports server configuration, and contains several critical defects. Continued use is not recommended.
-    time: "2026-06-01T00:00:00Z"
+    time: "2026-06-01T00:00:59Z"
     position: bottom
     visible: true
