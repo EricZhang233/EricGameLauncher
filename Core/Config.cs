@@ -30,6 +30,12 @@ public class AppSettings
 
     [YamlMember(Alias = "githubToken")]
     public string GitHubToken { get; set; } = "";
+
+    [YamlMember(Alias = "appIconPath")]
+    public string AppIconPath { get; set; } = "";
+
+    [YamlMember(Alias = "appTitle")]
+    public string AppTitle { get; set; } = "";
 }
 
 public class WindowBoundsInfo
@@ -274,6 +280,7 @@ public static class ConfigService
         if (!Directory.Exists(FixedCachePath)) Directory.CreateDirectory(FixedCachePath);
 
         LoadConfigData();
+        NormalizeSettingsFile();
         LogService.Write("Config", $"Initialize End path={CurrentDataPath} mode={(CurrentDataPath == SystemBasePath ? "System" : "Portable")} duration={sw.ElapsedMilliseconds}ms");
     }
 
@@ -516,6 +523,26 @@ public static class ConfigService
         LogService.Write("Config", "SaveAll End");
     }
 
+    private static void NormalizeSettingsFile()
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(CurrentDataPath) || _settings == null) return;
+            string path = Path.Combine(CurrentDataPath, SettingsFileName);
+            if (!File.Exists(path)) return;
+            string existingYaml = File.ReadAllText(path);
+            bool needsSave = false;
+            if (!existingYaml.Contains("appIconPath:")) needsSave = true;
+            if (!existingYaml.Contains("appTitle:")) needsSave = true;
+            if (needsSave)
+            {
+                SaveSettingsData();
+                LogService.Write("Config", "NormalizeSettingsFile added missing keys");
+            }
+        }
+        catch (Exception ex) { LogService.Write("Config", "NormalizeSettingsFile failed", ex); }
+    }
+
     private static void SaveSettingsData()
     {
         try
@@ -565,6 +592,20 @@ public static class ConfigService
     {
         get => _settings?.UpdateChannel ?? "stable";
         set { if (_settings != null) { LogService.Write("Config", $"UpdateChannel set to={value}"); _settings.UpdateChannel = value; } }
+    }
+
+    public static string AppIconPath
+    {
+        get => _settings?.AppIconPath ?? "";
+    }
+
+    public static string AppTitle
+    {
+        get
+        {
+            string? title = _settings?.AppTitle;
+            return string.IsNullOrWhiteSpace(title) ? "EricGameLauncher" : title;
+        }
     }
 
     public static string GitHubToken

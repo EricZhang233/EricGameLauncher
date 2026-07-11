@@ -113,6 +113,9 @@
 
   <ItemGroup>
     <None Include="Package.appxmanifest" />
+    <Content Include="ico.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <EmbeddedResource Include="ico.ico" />
     <EmbeddedResource Include="i18n.yaml" />
   </ItemGroup>

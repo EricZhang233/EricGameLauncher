@@ -219,7 +219,6 @@ public class UpdateService
 
     public static Version NormalizeVersion(string versionStr)
     {
-        try { LogService.Write("Update", $"NormalizeVersion called versionStr={versionStr}"); } catch { }
         if (Version.TryParse(versionStr, out Version? v) && v != null)
         {
             int major = v.Major >= 0 ? v.Major : 0;
@@ -228,7 +227,6 @@ public class UpdateService
             int revision = v.Revision >= 0 ? v.Revision : 0;
             return new Version(major, minor, build, revision);
         }
-        try { LogService.Write("Update", "NormalizeVersion returning default 0.0.0.0"); } catch { }
         return new Version(0, 0, 0, 0);
     }
 
