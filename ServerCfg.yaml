@@ -44,14 +44,14 @@ announcements:
     title_en: |
       Development Roadmap
     body_zh: |
-      1、部分内部逻辑存在重复调用和不必要的复杂度，计划在后续版本中逐步优化重构，提升性能与稳定性。
+      1、持续优化性能及用户体验。
       2、我们持续探索更轻量、更高效的启动器呈现方式。比如在 Windows 上实现类似 macOS 的 Dock 式快捷启动形态——目前已发现一些优质的开源实现，正在评估和适配中。
-      3、围绕上述方向，未来可能引入更多布局选项：图标网格（已支持）、列表（适合 Dock 形态）、卡片（需解决头图获取与适配）等，甚至开放自定义布局，以适应不同用户的审美与操作习惯。
+      3、未来可能引入更多布局选项：图标网格（已支持）、列表（适合 Dock 形态）、卡片（需解决头图获取与适配）等，甚至开放自定义布局，以适应不同用户的审美与操作习惯。
 
       以上仅为当前阶段的初步设想，不承诺一定实现、也不保证按此顺序推进。具体优先级将根据用户反馈和实际情况动态调整。
       如有新功能或改进建议，欢迎在 GitHub 提交 Issue，我们会认真评估并尽力落实。
     body_en: |
-      -1- We have identified some redundant calls and unnecessary complexity in certain logic and internal processes. We plan to optimize and refactor these areas in future versions to enhance performance and user experience. (Some experienced users may notice traces of this in the logs.)
+      -1- Continuously optimizing performance and user experience.
       -2- We are continuously exploring lighter and more efficient launcher presentation solutions. (Perhaps implementing a Dock-style folder layout similar to macOS on Windows? We have already seen other high-quality open-source projects achieve the effect we desire, and we are currently evaluating and adapting it...)
       -3- Building on the previous point, we may introduce more layout options, such as icon grids (already implemented), lists (recommended for Dock-style layouts), cards (considering how to obtain header images and adapt), and even custom layouts to cater to different user habits and aesthetic preferences.
 

@@ -24,6 +24,7 @@ namespace EricGameLauncher
                 {
                     LogService.Write("Startup", "OnLaunched start");
                     m_window = new MainWindow();
+                    m_window.SetAppIcon();
                     m_window.Activate();
                     LogService.Write("Startup", "OnLaunched complete");
                 }
@@ -49,6 +50,6 @@ namespace EricGameLauncher
         {
             try { LogService.Write("App", "DomainUnhandledException", e.ExceptionObject as Exception); } catch { }
         }
-        private Window? m_window;
+        private MainWindow? m_window;
     }
 }

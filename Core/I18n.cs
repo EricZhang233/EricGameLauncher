@@ -11,6 +11,9 @@ public static class I18n
     private static Dictionary<string, string> _strings = new();
     private static Dictionary<string, Dictionary<string, string>>? _allTranslations = null;
     private static string _currentLanguage = "Zh-CN";
+    private static int _lookupCount = 0;
+    private static int _missCount = 0;
+    private static HashSet<string> _missedKeys = new();
 
     public static string CurrentLanguage => _currentLanguage;
 
@@ -23,6 +26,9 @@ public static class I18n
             var sw = Stopwatch.StartNew();
             LogService.Write("App", $"I18n Load Start: targetLang={langCode}");
             _currentLanguage = langCode;
+            _lookupCount = 0;
+            _missCount = 0;
+            _missedKeys.Clear();
 
         if (_allTranslations == null)
         {
@@ -54,8 +60,27 @@ public static class I18n
 
     public static string T(string key)
     {
-        try { LogService.Write("App", $"I18n.T lookup key={key}"); } catch { }
-        return _strings.TryGetValue(key, out var value) ? value : key;
+        _lookupCount++;
+        if (_strings.TryGetValue(key, out var value)) return value;
+        _missCount++;
+        _missedKeys.Add(key);
+        return key;
+    }
+
+    public static void FlushSummary()
+    {
+        if (_lookupCount == 0) return;
+        if (_missCount > 0)
+        {
+            LogService.Write("App", $"I18n Summary: {_lookupCount} lookups, {_missCount} MISSING keys: [{string.Join(", ", _missedKeys)}]");
+        }
+        else
+        {
+            LogService.Write("App", $"I18n Summary: {_lookupCount} lookups, all resolved (lang={_currentLanguage})");
+        }
+        _lookupCount = 0;
+        _missCount = 0;
+        _missedKeys.Clear();
     }
 
     public static List<string> GetAvailableLanguages()
@@ -74,17 +99,20 @@ public static class I18n
         return new List<string> { "Zh-CN", "EN" };
     }
 
+    private static string? _cachedSystemLanguage = null;
+
     public static string DetectSystemLanguage()
     {
+        if (_cachedSystemLanguage != null) return _cachedSystemLanguage;
         try
         {
             LogService.Write("App", "DetectSystemLanguage called");
             var culture = System.Globalization.CultureInfo.CurrentUICulture;
-            var res = culture.Name.Equals("zh-CN", StringComparison.OrdinalIgnoreCase) ? "Zh-CN" : "EN";
-            LogService.Write("App", $"DetectSystemLanguage result={res}");
-            return res;
+            _cachedSystemLanguage = culture.Name.Equals("zh-CN", StringComparison.OrdinalIgnoreCase) ? "Zh-CN" : "EN";
+            LogService.Write("App", $"DetectSystemLanguage result={_cachedSystemLanguage}");
+            return _cachedSystemLanguage;
         }
-        catch { return "EN"; }
+        catch { _cachedSystemLanguage = "EN"; return _cachedSystemLanguage; }
     }
 
     public static string GetDisplayName(string langCode)

@@ -40,7 +40,8 @@
                        Height="32"
                        Stretch="Uniform"/>
                 
-                <TextBlock Text="EricGameLauncher" 
+                <TextBlock x:Name="TitleBarText"
+                           Text="EricGameLauncher" 
                            VerticalAlignment="Center" 
                            Style="{ThemeResource BaseTextBlockStyle}"
                            FontSize="18"/>

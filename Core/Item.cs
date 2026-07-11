@@ -20,7 +20,8 @@ public class RunActionBase : INotifyPropertyChanged
 
     protected void NotifyPropertyChanged(string propertyName)
     {
-        try { LogService.Write("Run", $"NotifyPropertyChanged {propertyName}"); } catch { }
+        if (!AppItem.SuppressInitLogs)
+            try { LogService.Write("Run", $"NotifyPropertyChanged {propertyName}"); } catch { }
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 
@@ -32,7 +33,8 @@ public class RunActionBase : INotifyPropertyChanged
         {
             if (_path != value)
             {
-                LogService.Write("Run", $"Path changed from={_path ?? "null"} to={value ?? "null"}");
+                if (!AppItem.SuppressInitLogs)
+                    LogService.Write("Run", $"Path changed from={_path ?? "null"} to={value ?? "null"}");
                 _path = value;
                 NotifyPropertyChanged(nameof(Path));
             }
@@ -47,7 +49,8 @@ public class RunActionBase : INotifyPropertyChanged
         {
             if (_isAdmin != value)
             {
-                LogService.Write("Run", $"IsAdmin changed from={_isAdmin} to={value}");
+                if (!AppItem.SuppressInitLogs)
+                    LogService.Write("Run", $"IsAdmin changed from={_isAdmin} to={value}");
                 _isAdmin = value;
                 NotifyPropertyChanged(nameof(IsAdmin));
             }
@@ -63,7 +66,7 @@ public class AlternativeRunAction : RunActionBase
         get => _enabled;
         set
         {
-            if (_enabled != value) { LogService.Write("Run", $"Enabled changed from={_enabled} to={value}"); _enabled = value; NotifyPropertyChanged(nameof(Enabled)); }
+            if (_enabled != value) { if (!AppItem.SuppressInitLogs) LogService.Write("Run", $"Enabled changed from={_enabled} to={value}"); _enabled = value; NotifyPropertyChanged(nameof(Enabled)); }
         }
     }
 }
@@ -76,7 +79,7 @@ public class AlongsideRunAction : RunActionBase
         get => _enabled;
         set
         {
-            if (_enabled != value) { LogService.Write("Run", $"Enabled changed from={_enabled} to={value}"); _enabled = value; NotifyPropertyChanged(nameof(Enabled)); }
+            if (_enabled != value) { if (!AppItem.SuppressInitLogs) LogService.Write("Run", $"Enabled changed from={_enabled} to={value}"); _enabled = value; NotifyPropertyChanged(nameof(Enabled)); }
         }
     }
 }
@@ -102,7 +105,8 @@ public static class PathHashHelper
 {
     public static string GetPathHash(string path)
     {
-        try { LogService.Write("Item", $"GetPathHash called path={(path==null?"null":path)}"); } catch { }
+        if (!AppItem.SuppressInitLogs)
+            try { LogService.Write("Item", $"GetPathHash called path={(path==null?"null":path)}"); } catch { }
         if (string.IsNullOrEmpty(path))
             return Guid.NewGuid().ToString("N")[..16];
 
@@ -113,7 +117,8 @@ public static class PathHashHelper
         for (int i = 0; i < 8; i++)
             sb.Append(hashBytes[i].ToString("x2"));
         var res = sb.ToString();
-        try { LogService.Write("Item", $"GetPathHash result={res}"); } catch { }
+        if (!AppItem.SuppressInitLogs)
+            try { LogService.Write("Item", $"GetPathHash result={res}"); } catch { }
         return res;
     }
 
@@ -122,6 +127,8 @@ public static class PathHashHelper
 
 public class AppItem : INotifyPropertyChanged
 {
+    internal static bool SuppressInitLogs = false;
+
     private bool _isLoading;
     public bool IsLoading
     {
@@ -597,13 +604,20 @@ public class AppItem : INotifyPropertyChanged
     protected bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
         if (Equals(field, value)) return false;
-        try
+        if (!SuppressInitLogs)
         {
-            string oldVal = field == null ? "null" : field.ToString() ?? "";
-            string newVal = value == null ? "null" : value.ToString() ?? "";
-            LogService.Write("App", $"SetProperty {propertyName} from={oldVal} to={newVal}");
+            bool isInitialSet = field == null || EqualityComparer<T>.Default.Equals(field, default);
+            if (!isInitialSet)
+            {
+                try
+                {
+                    string oldVal = field!.ToString() ?? "";
+                    string newVal = value == null ? "null" : value.ToString() ?? "";
+                    LogService.Write("App", $"SetProperty {propertyName} from={oldVal} to={newVal}");
+                }
+                catch { }
+            }
         }
-        catch { }
         field = value;
         OnPropertyChanged(propertyName);
         return true;
@@ -665,8 +679,8 @@ public class AppItemDto
 
     public AppItem ToViewModel(string iconCachePath)
     {
-        try { LogService.Write("App", $"AppItem.ToViewModel called id={Id} title={Title}"); } catch { }
-        return new AppItem
+        AppItem.SuppressInitLogs = true;
+        var item = new AppItem
         {
             ExePath = Actions?.Main?.Path,
             IsAdmin = Actions?.Main?.IsAdmin ?? false,
@@ -692,6 +706,17 @@ public class AppItemDto
             AlongsideCommand = Actions?.Alongside?.Command,
             IsAlongsideAdmin = Actions?.Alongside?.IsAdmin ?? false,
         };
+        AppItem.SuppressInitLogs = false;
+        try
+        {
+            var m = Actions?.Main;
+            var mg = Actions?.Manager;
+            var al = Actions?.Alt;
+            var ao = Actions?.Alongside;
+            LogService.Write("App", $"ToViewModel id={item.Id} status={item.Status} deletedAt={item.DeletedAt} title={item.Title} icon={Icon} customMenu={CustomMenu?.Count ?? 0} platform={item.Platform} | main={{path={m?.Path} admin={m?.IsAdmin}}} mgr={{path={mg?.Path} admin={mg?.IsAdmin}}} alt={{enabled={al?.Enabled} cmd={al?.Command} admin={al?.IsAdmin}}} along={{enabled={ao?.Enabled} cmd={ao?.Command} admin={ao?.IsAdmin}}}");
+        }
+        catch { }
+        return item;
     }
 
     public class ActionsDto
@@ -1015,10 +1040,13 @@ public static class IconHelper
     [DllImport("shell32.dll", CharSet = CharSet.Auto)]
     private static extern IntPtr SHGetFileInfo(IntPtr pidl, uint dwFileAttributes, ref SHFILEINFO psfi, uint cbFileInfo, uint uFlags);
 
+    [DllImport("shell32.dll", CharSet = CharSet.Auto)]
+    private static extern uint ExtractIconEx(string lpszFile, int nIconIndex, IntPtr[]? phiconLarge, IntPtr[]? phiconSmall, uint nIcons);
+
     private const uint SHGFI_ICON = 0x000000100;
     private const uint SHGFI_LARGEICON = 0x000000000;
 
-    private static Icon? ExtractLargestIcon(string filePath, int iconIndex = 0)
+    public static Icon? ExtractLargestIcon(string filePath, int iconIndex = 0)
     {
         try
         {
@@ -1033,6 +1061,27 @@ public static class IconHelper
             }
         }
         catch (Exception ex) { LogService.Write("App", "ExtractLargestIcon failed", ex); }
+        return null;
+    }
+
+    public static Icon? ExtractShellIcon(string filePath, int iconIndex = 0)
+    {
+        try
+        {
+            var hIconsLarge = new IntPtr[1];
+            var hIconsSmall = new IntPtr[1];
+            uint count = ExtractIconEx(filePath, iconIndex, hIconsLarge, hIconsSmall, 1);
+            if (count > 0 && hIconsLarge[0] != IntPtr.Zero)
+            {
+                try { return (Icon)Icon.FromHandle(hIconsLarge[0]).Clone(); }
+                finally
+                {
+                    if (hIconsLarge[0] != IntPtr.Zero) DestroyIcon(hIconsLarge[0]);
+                    if (hIconsSmall[0] != IntPtr.Zero) DestroyIcon(hIconsSmall[0]);
+                }
+            }
+        }
+        catch (Exception ex) { LogService.Write("App", "ExtractShellIcon failed", ex); }
         return null;
     }
 

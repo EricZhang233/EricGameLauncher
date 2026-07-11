@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
@@ -7,20 +8,46 @@ using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace EricGameLauncher;
 
+public static class ConverterSummary
+{
+    private static int _imageTotal, _imageMissing, _nullTotal, _boolTotal;
+    private static HashSet<string> _missingPaths = new();
+
+    public static void RecordImage() { _imageTotal++; }
+    public static void RecordImageMissing(string path) { _imageMissing++; _missingPaths.Add(path); }
+    public static void RecordNull() { _nullTotal++; }
+    public static void RecordBool() { _boolTotal++; }
+
+    public static void Flush()
+    {
+        int total = _imageTotal + _nullTotal + _boolTotal;
+        if (total == 0) return;
+        if (_imageMissing > 0)
+            LogService.Write("UI", $"Converter Summary: {total} calls (img={_imageTotal} null={_nullTotal} bool={_boolTotal}), {_imageMissing} missing icons: [{string.Join(", ", _missingPaths)}]");
+        else
+            LogService.Write("UI", $"Converter Summary: {total} calls (img={_imageTotal} null={_nullTotal} bool={_boolTotal}), all ok");
+        _imageTotal = _imageMissing = _nullTotal = _boolTotal = 0;
+        _missingPaths.Clear();
+    }
+}
+
 public sealed class ImagePathConverter : IValueConverter
 {
     private static readonly ConcurrentDictionary<string, WeakReference<BitmapImage>> _bitmapCache = new();
 
     public object? Convert(object value, Type targetType, object parameter, string language)
     {
-        try { LogService.Write("Shortcut", $"ImagePathConverter.Convert called valueType={(value==null?"null":value.GetType().Name)} parameter={parameter}"); } catch { }
+        ConverterSummary.RecordImage();
         if (value is not string path || string.IsNullOrEmpty(path))
             return null;
 
         try
         {
             if (!File.Exists(path))
+            {
+                ConverterSummary.RecordImageMissing(path);
                 return null;
+            }
 
             long cacheKey = new FileInfo(path).LastWriteTime.Ticks;
             string cacheEntry = $"{path}@{cacheKey}";
@@ -54,7 +81,6 @@ public sealed class ImagePathConverter : IValueConverter
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
     {
-        try { LogService.Write("Shortcut", "ImagePathConverter.ConvertBack called"); } catch { }
         throw new NotImplementedException();
     }
 }
@@ -63,13 +89,12 @@ public sealed class NullToVisibilityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language)
     {
-        try { LogService.Write("Shortcut", $"NullToVisibilityConverter.Convert called value={(value==null?"null":value.ToString())}"); } catch { }
+        ConverterSummary.RecordNull();
         return value == null ? Visibility.Visible : Visibility.Collapsed;
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
     {
-        try { LogService.Write("Shortcut", "NullToVisibilityConverter.ConvertBack called"); } catch { }
         throw new NotImplementedException();
     }
 }
@@ -78,13 +103,12 @@ public sealed class BoolToVisibilityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language)
     {
-        try { LogService.Write("Shortcut", $"BoolToVisibilityConverter.Convert called value={(value==null?"null":value.ToString())}"); } catch { }
+        ConverterSummary.RecordBool();
         return value is bool boolValue && boolValue ? Visibility.Visible : Visibility.Collapsed;
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
     {
-        try { LogService.Write("Shortcut", $"BoolToVisibilityConverter.ConvertBack called value={(value==null?"null":value.ToString())}"); } catch { }
         return value is Visibility visibility && visibility == Visibility.Visible;
     }
 }
