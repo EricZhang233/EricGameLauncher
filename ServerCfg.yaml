@@ -67,9 +67,26 @@ announcements:
     title_en: |
       Outdated Versions list
     body_zh: |
-        v1.0.x：不再接收更新和支持，不再支持服务器配置，且存在多项严重缺陷，不推荐继续使用。
+      v1.0.x：不再接收更新和支持，不再支持服务器配置，且存在多项严重缺陷，不推荐继续使用。
     body_en: |
-        v1.0.x: No longer receiving updates and support, no longer supports server configuration, and contains several critical defects. Continued use is not recommended.
+      v1.0.x: No longer receiving updates and support, no longer supports server configuration, and contains several critical defects. Continued use is not recommended.
     time: "2026-06-01T00:00:59Z"
     position: bottom
+    visible: true
+
+      - id: "bug-0722-1"
+    title_zh: |
+      已知问题
+    title_en: |
+      Known issues
+    body_zh: |
+      Bug：数据变动不能在启动器重启前立即生效。
+      ---
+      我们将在之后的版本修复这些问题。
+    body_en: |
+      Bug: Data changes do not take effect until the launcher is restarted.
+      ---
+      We will fix these issues in a future version.
+    time: "2026-07-22T00:00:59Z"
+    position: normal
     visible: true
