@@ -74,7 +74,7 @@ announcements:
     position: bottom
     visible: true
 
-      - id: "bug-0722-1"
+  - id: "bug-0722-1"
     title_zh: |
       已知问题
     title_en: |
