@@ -81,12 +81,12 @@ announcements:
       Known issues
     body_zh: |
       Bug：数据变动不能在启动器重启前立即生效。
-      ---
+      
       我们将在之后的版本修复这些问题。
     body_en: |
       Bug: Data changes do not take effect until the launcher is restarted.
-      ---
+      
       We will fix these issues in a future version.
-    time: "2026-07-22T00:00:59Z"
+    time: "2026-07-22T00:00:00Z"
     position: normal
     visible: true
