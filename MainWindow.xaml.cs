@@ -102,7 +102,6 @@ namespace EricGameLauncher
         private bool _isRefreshPending = false;
         private bool _isRootLoaded = false;
         private bool _pendingInitialRefresh = false;
-        private bool _initialDataLoaded = false;
         private bool _suppressIconSizeEvents = true;
         private string _cachedAnnouncementData = "";
         private CancellationTokenSource? _platformDetectCts;
@@ -805,16 +804,8 @@ namespace EricGameLauncher
 
                     List<AppItem> items;
                     List<AppItem> recycleItems;
-                    if (_initialDataLoaded)
-                    {
-                        items = _allItems.ToList();
-                        recycleItems = _recycleItems.ToList();
-                    }
-                    else
-                    {
-                        items = ConfigService.LoadItems();
-                        recycleItems = ConfigService.LoadRecycleBinItems();
-                    }
+                    items = ConfigService.LoadItems();
+                    recycleItems = ConfigService.LoadRecycleBinItems();
                     ApplyItemData(items, recycleItems);
                 }
                 catch (Exception ex) { LogService.Write("App", "RefreshView failed", ex); }
@@ -1034,7 +1025,6 @@ namespace EricGameLauncher
                 var loadedRecycleItems = ConfigService.LoadRecycleBinItems();
                 ApplyItemData(loadedItems, loadedRecycleItems);
                 AppGrid.ItemsSource = _viewItems;
-                _initialDataLoaded = true;
                 LogService.Write("Startup", $"LoadData PopulatedCollections all={_allItems.Count} recycle={_recycleItems.Count}");
 
                 _preloadedStartMenuTask = Task.Run(() => ShortcutScanner.GetStartMenuItems());
