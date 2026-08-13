@@ -9,6 +9,7 @@ namespace EricGameLauncher
         public App()
         {
                 try { StartupArgs.Parse(); DebugPaths.ApplyIfDebug(); } catch { }
+            SystemGuard.EnsureSupported();
             this.InitializeComponent();
             this.UnhandledException += App_UnhandledException;
             TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
@@ -23,9 +24,18 @@ namespace EricGameLauncher
                 try
                 {
                     LogService.Write("Startup", "OnLaunched start");
+                    if (!SingleInstance.TryAcquire())
+                    {
+                        LogService.Write("Startup", "Another GUI instance is running, notifying and exiting");
+                        WindowActivator.AllowAnyForegroundWindow();
+                        SingleInstance.NotifyRunningInstance();
+                        Environment.Exit(0);
+                        return;
+                    }
                     m_window = new MainWindow();
                     m_window.SetAppIcon();
                     m_window.Activate();
+                    SingleInstance.StartServer(() => m_window?.ActivateAndFocus());
                     LogService.Write("Startup", "OnLaunched complete");
                 }
                 catch (Exception ex)

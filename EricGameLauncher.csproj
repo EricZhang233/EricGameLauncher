@@ -24,7 +24,7 @@
 
     <!-- 彻底排除源码与中间产物，防止递归扫描 -->
     <DefaultItemExcludes>
-      $(DefaultItemExcludes);Updater\updater.main\**;output\**;Updater\updater.cfgver\**</DefaultItemExcludes>
+      $(DefaultItemExcludes);Components\updater.main\**;output\**;Components\updater.cfgver\**;Components\main.cli\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <!-- 2. 自动化版本计算 (Version Calculus) -->
@@ -50,13 +50,28 @@
   <!-- 强制预编译并发布 MainUpdater 影子组件 -->
   <Target Name="BuildMainUpdater" BeforeTargets="BeforeBuild">
     <Message Importance="High" Text="Publishing MainUpdater ($(Configuration)) to intermediate directory..." />
-    <MSBuild Projects="Updater\updater.main\updater.main.csproj" Targets="Restore;Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=false;PublishDir=$(MSBuildProjectDirectory)\payload\updater.main\" />
+    <MSBuild Projects="Components\updater.main\updater.main.csproj" Targets="Restore;Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=false;PublishDir=$(MSBuildProjectDirectory)\payload\updater.main\" />
   </Target>
 
   <!-- 强制预编译并发布 CfgUpdater 影子组件 -->
   <Target Name="BuildCfgUpdater" BeforeTargets="BeforeBuild">
     <Message Importance="High" Text="Publishing CfgUpdater ($(Configuration)) to intermediate directory..." />
-    <MSBuild Projects="Updater\updater.cfgver\updater.cfgver.csproj" Targets="Restore;Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=false;PublishDir=$(MSBuildProjectDirectory)\payload\updater.cfgver\" />
+    <MSBuild Projects="Components\updater.cfgver\updater.cfgver.csproj" Targets="Restore;Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=false;PublishDir=$(MSBuildProjectDirectory)\payload\updater.cfgver\" />
+  </Target>
+
+  <!-- 强制编译 CLI 组件并复制到输出目录 -->
+  <Target Name="BuildCli" AfterTargets="Build">
+    <PropertyGroup>
+      <_CliMainDll>$([System.IO.Path]::GetFullPath('$(OutputPath)'))EricGameLauncher.dll</_CliMainDll>
+    </PropertyGroup>
+    <Message Importance="High" Text="Building CLI ($(Configuration)) mainDll=$(_CliMainDll)..." />
+    <MSBuild Projects="Components\main.cli\cli.csproj" Targets="Restore;Build" Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;MainDllPath=$(_CliMainDll)" />
+    <ItemGroup>
+      <_CliOutput Include="Components\main.cli\bin\$(Configuration)\net10.0-windows10.0.26100\win-x64\EricGameLauncher.Cli.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_CliOutput)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="Components\main.cli\bin\$(Configuration)\net10.0-windows10.0.26100\win-x64\SKILL.md" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+    <Message Importance="High" Text="CLI built and copied to output directory." />
   </Target>
 
   <!-- 4. 构建生命周期管理：构建后阶段 (Post-Build & Cleanup) -->
@@ -78,10 +93,12 @@
   <Target Name="ReleasePostCleanPayload" AfterTargets="ZipReleaseBuild" Condition="'$(Configuration)' == 'Release'">
     <RemoveDir Directories="bin" />
     <RemoveDir Directories="obj" />
-    <RemoveDir Directories="Updater\updater.main\bin" />
-    <RemoveDir Directories="Updater\updater.main\obj" />
-    <RemoveDir Directories="Updater\updater.cfgver\bin" />
-    <RemoveDir Directories="Updater\updater.cfgver\obj" />
+    <RemoveDir Directories="Components\updater.main\bin" />
+    <RemoveDir Directories="Components\updater.main\obj" />
+    <RemoveDir Directories="Components\updater.cfgver\bin" />
+    <RemoveDir Directories="Components\updater.cfgver\obj" />
+    <RemoveDir Directories="Components\main.cli\bin" />
+    <RemoveDir Directories="Components\main.cli\obj" />
     <RemoveDir Directories="payload" />
     <Message Importance="High" Text="Release post-build cleanup: payload and binary directories removed." />
   </Target>
@@ -90,10 +107,12 @@
   <Target Name="CleanAllPayload" AfterTargets="Clean">
     <RemoveDir Directories="bin" />
     <RemoveDir Directories="obj" />
-    <RemoveDir Directories="Updater\updater.main\bin" />
-    <RemoveDir Directories="Updater\updater.main\obj" />
-    <RemoveDir Directories="Updater\updater.cfgver\bin" />
-    <RemoveDir Directories="Updater\updater.cfgver\obj" />
+    <RemoveDir Directories="Components\updater.main\bin" />
+    <RemoveDir Directories="Components\updater.main\obj" />
+    <RemoveDir Directories="Components\updater.cfgver\bin" />
+    <RemoveDir Directories="Components\updater.cfgver\obj" />
+    <RemoveDir Directories="Components\main.cli\bin" />
+    <RemoveDir Directories="Components\main.cli\obj" />
     <RemoveDir Directories="payload" />
     <Message Importance="High" Text="Hard Clean: Physically removed all build and payload directories." />
   </Target>
@@ -113,11 +132,15 @@
 
   <ItemGroup>
     <None Include="Package.appxmanifest" />
+    <Content Include=".install.cmd">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="ico.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <EmbeddedResource Include="ico.ico" />
-    <EmbeddedResource Include="i18n.yaml" />
+    <EmbeddedResource Include="text.yaml" />
+    <EmbeddedResource Include="Components\main.cli\CliSkill.embed.md" LogicalName="EricGameLauncher.CliSkill.md" />
   </ItemGroup>
 
   <ItemGroup>

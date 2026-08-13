@@ -6,10 +6,11 @@ using YamlDotNet.Serialization.NamingConventions;
 
 namespace EricGameLauncher;
 
-public static class I18n
+public static class Text
 {
     private static Dictionary<string, string> _strings = new();
     private static Dictionary<string, Dictionary<string, string>>? _allTranslations = null;
+    private static Dictionary<string, string>? _cliStrings = null;
     private static string _currentLanguage = "Zh-CN";
     private static int _lookupCount = 0;
     private static int _missCount = 0;
@@ -21,10 +22,10 @@ public static class I18n
 
     public static void Load(string langCode)
     {
-        using (LogService.StartOperation("App", "I18n_Load"))
+        using (LogService.StartOperation("App", "Text_Load"))
         {
             var sw = Stopwatch.StartNew();
-            LogService.Write("App", $"I18n Load Start: targetLang={langCode}");
+            LogService.Write("App", $"Text Load Start: targetLang={langCode}");
             _currentLanguage = langCode;
             _lookupCount = 0;
             _missCount = 0;
@@ -35,7 +36,7 @@ public static class I18n
             try
             {
                 var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-                using var stream = assembly.GetManifestResourceStream("EricGameLauncher.i18n.yaml");
+                using var stream = assembly.GetManifestResourceStream("EricGameLauncher.text.yaml");
                 if (stream == null) return;
 
                 using var reader = new StreamReader(stream);
@@ -44,8 +45,14 @@ public static class I18n
                     .WithNamingConvention(YamlDotNet.Serialization.NamingConventions.CamelCaseNamingConvention.Instance)
                     .Build();
                 _allTranslations = deserializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(yaml);
+
+                if (_allTranslations != null && _allTranslations.TryGetValue("CLI", out var cliDict))
+                {
+                    _cliStrings = cliDict;
+                    _allTranslations.Remove("CLI");
+                }
             }
-            catch (Exception ex) { LogService.Write("App", $"I18n Load failed for lang={langCode}", ex); }
+            catch (Exception ex) { LogService.Write("App", $"Text Load failed for lang={langCode}", ex); }
         }
 
         if (_allTranslations != null && _allTranslations.TryGetValue(langCode, out var dict))
@@ -54,7 +61,7 @@ public static class I18n
         }
 
             LanguageChanged?.Invoke();
-            LogService.Write("App", $"I18n Load End: dictSize={_allTranslations?.Count ?? 0}, duration={sw.ElapsedMilliseconds}ms");
+            LogService.Write("App", $"Text Load End: dictSize={_allTranslations?.Count ?? 0}, duration={sw.ElapsedMilliseconds}ms");
         }
     }
 
@@ -67,16 +74,22 @@ public static class I18n
         return key;
     }
 
+    public static string Cli(string key)
+    {
+        if (_cliStrings != null && _cliStrings.TryGetValue(key, out var value)) return value;
+        return key;
+    }
+
     public static void FlushSummary()
     {
         if (_lookupCount == 0) return;
         if (_missCount > 0)
         {
-            LogService.Write("App", $"I18n Summary: {_lookupCount} lookups, {_missCount} MISSING keys: [{string.Join(", ", _missedKeys)}]");
+            LogService.Write("App", $"Text Summary: {_lookupCount} lookups, {_missCount} MISSING keys: [{string.Join(", ", _missedKeys)}]");
         }
         else
         {
-            LogService.Write("App", $"I18n Summary: {_lookupCount} lookups, all resolved (lang={_currentLanguage})");
+            LogService.Write("App", $"Text Summary: {_lookupCount} lookups, all resolved (lang={_currentLanguage})");
         }
         _lookupCount = 0;
         _missCount = 0;
@@ -128,8 +141,8 @@ public static class I18n
         string localizedKey = "LangName_" + langCode;
         if (_strings.TryGetValue(localizedKey, out var localized) &&
             !string.IsNullOrEmpty(localized) &&
-            localized != nativeName)
-            return $"{nativeName} ({localized})";
+            localized != localizedKey)
+            return localized;
 
         return nativeName;
     }
