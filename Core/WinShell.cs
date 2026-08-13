@@ -406,11 +406,11 @@ public static class ShortcutScanner
 
 public static class Win32FileDialog
 {
-    public static string FilterExecutables => I18n.T("FileDialog_FilterExecutables") + "\0*.exe;*.com;*.bat;*.cmd;*.lnk;*.url\0";
-    public static string FilterImages => I18n.T("FileDialog_FilterImages") + "\0*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.ico;*.tif;*.tiff;*.webp;*.svg\0";
-    public static string FilterAll => I18n.T("FileDialog_FilterAll") + "\0*.*\0";
+    public static string FilterExecutables => Text.T("FileDialog_FilterExecutables") + "\0*.exe;*.com;*.bat;*.cmd;*.lnk;*.url\0";
+    public static string FilterImages => Text.T("FileDialog_FilterImages") + "\0*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.ico;*.tif;*.tiff;*.webp;*.svg\0";
+    public static string FilterAll => Text.T("FileDialog_FilterAll") + "\0*.*\0";
 
-    public static string FilterExecutablesAndImages => I18n.T("FileDialog_FilterExecutablesAndImages") + "\0*.exe;*.com;*.bat;*.cmd;*.lnk;*.url;*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.ico;*.tif;*.tiff;*.webp;*.svg\0";
+    public static string FilterExecutablesAndImages => Text.T("FileDialog_FilterExecutablesAndImages") + "\0*.exe;*.com;*.bat;*.cmd;*.lnk;*.url;*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.ico;*.tif;*.tiff;*.webp;*.svg\0";
 
     public static string DefaultFilter => BuildFilter(FilterExecutables, FilterImages, FilterAll);
 
@@ -449,7 +449,7 @@ public static class Win32FileDialog
     {
         if (string.IsNullOrEmpty(title))
         {
-            title = I18n.T("FileDialog_SelectFile");
+            title = Text.T("FileDialog_SelectFile");
         }
         return ShowOpenFileDialog(hwnd, title, DefaultFilter);
     }
@@ -482,5 +482,106 @@ public static class Win32FileDialog
     public static string BuildFilter(params string[] parts)
     {
         return string.Concat(parts) + "\0";
+    }
+}
+
+public static class WindowActivator
+{
+    private const uint SW_RESTORE = 9;
+    private const uint SW_SHOW = 5;
+    private const int ASFW_ANY = -1;
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsIconic(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool AllowSetForegroundWindow(int dwProcessId);
+
+    public static void AllowAnyForegroundWindow()
+    {
+        try
+        {
+            AllowSetForegroundWindow(ASFW_ANY);
+        }
+        catch (Exception ex) { LogService.Write("App", "WindowActivator AllowAnyForegroundWindow failed", ex); }
+    }
+
+    public static void Activate(IntPtr hWnd)
+    {
+        using (LogService.StartOperation("App", "WindowActivator_Activate"))
+        {
+            try
+            {
+                if (hWnd == IntPtr.Zero)
+                {
+                    LogService.Write("App", "WindowActivator Activate skipped hwnd=0");
+                    return;
+                }
+
+                if (IsIconic(hWnd))
+                    ShowWindow(hWnd, (int)SW_RESTORE);
+                else
+                    ShowWindow(hWnd, (int)SW_SHOW);
+
+                bool ok = SetForegroundWindow(hWnd);
+                LogService.Write("App", $"WindowActivator Activate hwnd={hWnd} setForeground={ok}");
+            }
+            catch (Exception ex)
+            {
+                LogService.Write("App", "WindowActivator Activate failed", ex);
+            }
+        }
+    }
+}
+
+public static class SystemGuard
+{
+    private const uint MB_ICONERROR = 0x10;
+    private const uint MinBuild = 26100;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct OsVersionInfoEx
+    {
+        public uint dwOSVersionInfoSize;
+        public uint dwMajorVersion;
+        public uint dwMinorVersion;
+        public uint dwBuildNumber;
+        public uint dwPlatformId;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string szCSDVersion;
+        public ushort wServicePackMajor;
+        public ushort wServicePackMinor;
+        public ushort wSuiteMask;
+        public byte wProductType;
+        public byte wReserved;
+    }
+
+    [DllImport("ntdll.dll")]
+    private static extern int RtlGetVersion(ref OsVersionInfoEx lpVersionInformation);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int MessageBoxW(IntPtr hWnd, string lpText, string lpCaption, uint uType);
+
+    public static void EnsureSupported()
+    {
+        try
+        {
+            var info = new OsVersionInfoEx { dwOSVersionInfoSize = (uint)Marshal.SizeOf(typeof(OsVersionInfoEx)) };
+            if (RtlGetVersion(ref info) == 0 && info.dwBuildNumber >= MinBuild)
+                return;
+
+            MessageBoxW(IntPtr.Zero,
+                "You are running an unsupported version of Windows. EricGameLauncher requires Windows 11 24H2 (Build 26100) or later.",
+                "EricGameLauncher",
+                MB_ICONERROR);
+        }
+        catch { }
+        Environment.Exit(0);
     }
 }

@@ -230,6 +230,12 @@ public class UpdateService
         return new Version(0, 0, 0, 0);
     }
 
+    public static Version? ExtractVersion(string tagName)
+    {
+        var match = Regex.Match(tagName, @"(\d+\.\d+\.\d+(\.\d+)?)");
+        return match.Success ? NormalizeVersion(match.Value) : null;
+    }
+
     public static async Task<ReleaseInfo?> CheckForUpdateAsync(string channel = "stable")
     {
         using (LogService.StartOperation("Update", "CheckForUpdateAsync"))

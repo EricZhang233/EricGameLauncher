@@ -4,6 +4,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using YamlDotNet.Serialization;
@@ -222,6 +224,7 @@ public static class ConfigService
 
     public static bool RequiresMigration { get; private set; } = false;
     private static bool _blockSaving = false;
+    private static readonly byte[] TokenEntropy = Encoding.UTF8.GetBytes("EricGameLauncher.GitHubToken.v1");
 
     private static string SystemBasePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "eric", AppFolderName);
     private static string PortableBasePath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data");
@@ -413,7 +416,7 @@ public static class ConfigService
                     string loadedToken = _settings.GitHubToken ?? "";
                     if (!string.IsNullOrEmpty(loadedToken))
                     {
-                        string decrypted = TokenProtection.Decrypt(loadedToken);
+                        string decrypted = DecryptToken(loadedToken);
                         if (!string.IsNullOrEmpty(decrypted))
                         {
                             _memoryToken = decrypted;
@@ -548,7 +551,7 @@ public static class ConfigService
         try
         {
             if (string.IsNullOrEmpty(CurrentDataPath) || _settings == null) return;
-            _settings.GitHubToken = TokenProtection.Encrypt(_memoryToken);
+            _settings.GitHubToken = EncryptToken(_memoryToken);
             string path = Path.Combine(CurrentDataPath, SettingsFileName);
             var serializer = new SerializerBuilder().Build();
             string yaml = serializer.Serialize(_settings);
@@ -586,7 +589,7 @@ public static class ConfigService
         set { if (_settings != null) { LogService.Write("Config", $"IconSize changed to={value}"); _settings.IconSize = value; } }
     }
 
-    public static string Language => I18n.DetectSystemLanguage();
+    public static string Language => Text.DetectSystemLanguage();
 
     public static string UpdateChannel
     {
@@ -597,6 +600,7 @@ public static class ConfigService
     public static string AppIconPath
     {
         get => _settings?.AppIconPath ?? "";
+        set { if (_settings != null) { LogService.Write("Config", $"AppIconPath changed to={value}"); _settings.AppIconPath = value; } }
     }
 
     public static string AppTitle
@@ -606,6 +610,7 @@ public static class ConfigService
             string? title = _settings?.AppTitle;
             return string.IsNullOrWhiteSpace(title) ? "EricGameLauncher" : title;
         }
+        set { if (_settings != null) { LogService.Write("Config", $"AppTitle changed to={value}"); _settings.AppTitle = value; } }
     }
 
     public static string GitHubToken
@@ -794,6 +799,31 @@ public static class ConfigService
         {
             _settings.Window = new WindowBoundsInfo { X = x, Y = y, Width = width, Height = height };
             try { LogService.Write("Config", "SetWindowBounds applied"); } catch { }
+        }
+    }
+
+    private static string EncryptToken(string plainText)
+    {
+        if (string.IsNullOrEmpty(plainText))
+            return string.Empty;
+        byte[] plainBytes = Encoding.UTF8.GetBytes(plainText);
+        byte[] cipherBytes = ProtectedData.Protect(plainBytes, TokenEntropy, DataProtectionScope.CurrentUser);
+        return Convert.ToBase64String(cipherBytes);
+    }
+
+    private static string DecryptToken(string cipherText)
+    {
+        if (string.IsNullOrEmpty(cipherText))
+            return string.Empty;
+        try
+        {
+            byte[] cipherBytes = Convert.FromBase64String(cipherText);
+            byte[] plainBytes = ProtectedData.Unprotect(cipherBytes, TokenEntropy, DataProtectionScope.CurrentUser);
+            return Encoding.UTF8.GetString(plainBytes);
+        }
+        catch
+        {
+            return string.Empty;
         }
     }
 }

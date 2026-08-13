@@ -236,8 +236,8 @@ namespace EricGameLauncher
             StartupArgs.LogEnvironment();
             ServerConfigManager.LoadReadIds();
 
-            I18n.Load(ConfigService.Language);
-            I18n.LanguageChanged += () =>
+            Text.Load(ConfigService.Language);
+            Text.LanguageChanged += () =>
             {
                 DispatcherQueue.TryEnqueue(() => ApplyLocalization());
             };
@@ -291,6 +291,18 @@ namespace EricGameLauncher
                 }
             }
             catch (Exception ex) { LogService.Write("UI", "InitializeMenuItemsAsync failed", ex); }
+        }
+
+        public void ActivateAndFocus()
+        {
+            try
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    WindowActivator.Activate(_hWnd);
+                });
+            }
+            catch (Exception ex) { LogService.Write("App", "MainWindow ActivateAndFocus failed", ex); }
         }
 
         public void SetAppIcon()
@@ -424,16 +436,8 @@ namespace EricGameLauncher
                     bool isForced = false;
                     if (release != null)
                     {
-                        var match = System.Text.RegularExpressions.Regex.Match(release.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
-                        if (match.Success)
-                        {
-                            Version latestVersion = UpdateService.NormalizeVersion(match.Value);
-                            isForced = UpdateService.CheckForceUpdateAsync(latestVersion);
-                        }
-                        else
-                        {
-                            isForced = UpdateService.CheckForceUpdateAsync();
-                        }
+                        Version? latestVersion = UpdateService.ExtractVersion(release.tag_name);
+                        isForced = UpdateService.CheckForceUpdateAsync(latestVersion);
 
                         _pendingUpdate = release;
 
@@ -472,11 +476,9 @@ namespace EricGameLauncher
                 if (release != null)
                 {
                     bool hasUpdate = false;
-                    Version latestVersion = new Version(0, 0, 0, 0);
-                    var match = System.Text.RegularExpressions.Regex.Match(release.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
-                    if (match.Success)
+                    Version? latestVersion = UpdateService.ExtractVersion(release.tag_name);
+                    if (latestVersion != null)
                     {
-                        latestVersion = UpdateService.NormalizeVersion(match.Value);
                         Version currentVersion = UpdateService.NormalizeVersion(AppVersion.Version);
                         hasUpdate = latestVersion > currentVersion;
                     }
@@ -509,9 +511,9 @@ namespace EricGameLauncher
                 {
                     ContentDialog noUpdateDialog = new ContentDialog
                     {
-                        Title = I18n.T("Update_NoUpdateTitle"),
-                        Content = I18n.T("Update_NoUpdateContent"),
-                        CloseButtonText = I18n.T("Update_OK"),
+                        Title = Text.T("Update_NoUpdateTitle"),
+                        Content = Text.T("Update_NoUpdateContent"),
+                        CloseButtonText = Text.T("Update_OK"),
                         DefaultButton = ContentDialogButton.Close,
                         XamlRoot = this.Content.XamlRoot
                     };
@@ -531,7 +533,7 @@ namespace EricGameLauncher
                 MaxHeight = 400,
                 Content = new Microsoft.UI.Xaml.Controls.TextBlock
                 {
-                    Text = I18n.T("Privacy_DialogContent"),
+                    Text = Text.T("Privacy_DialogContent"),
                     TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
                     IsTextSelectionEnabled = true,
                     Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 16, 0)
@@ -539,9 +541,9 @@ namespace EricGameLauncher
             };
             ContentDialog privacyDialog = new ContentDialog
             {
-                Title = I18n.T("Privacy_DialogTitle"),
+                Title = Text.T("Privacy_DialogTitle"),
                 Content = scrollViewer,
-                CloseButtonText = I18n.T("Privacy_DialogClose"),
+                CloseButtonText = Text.T("Privacy_DialogClose"),
                 DefaultButton = ContentDialogButton.Close,
                 XamlRoot = this.Content.XamlRoot,
                 FullSizeDesired = false
@@ -815,45 +817,9 @@ namespace EricGameLauncher
         private void ApplyItemData(List<AppItem> items, List<AppItem> recycleItems)
         {
             var sw = Stopwatch.StartNew();
-            var normalItems = items.Where(x => x.Status == (int)AppItemStatus.Normal).ToList();
-            var normalizedRecycle = new List<AppItem>();
-            bool normalized = false;
-            int normalizeCount = 0;
+            var (normalItems, normalizedRecycle, _) = ItemService.NormalizeState(items, recycleItems);
 
-            foreach (var item in recycleItems)
-            {
-                if (item.Status == (int)AppItemStatus.Normal)
-                {
-                    item.Status = (int)AppItemStatus.Recycled;
-                    item.DeletedAt = null;
-                    normalized = true;
-                    normalizeCount++;
-                }
-                normalizedRecycle.Add(item);
-            }
-
-            var misplaced = items.Where(x => x.Status != (int)AppItemStatus.Normal).ToList();
-            if (misplaced.Count > 0)
-            {
-                var recycleIds = new HashSet<string>(normalizedRecycle.Select(x => x.Id));
-                foreach (var item in misplaced)
-                {
-                    if (recycleIds.Add(item.Id))
-                    {
-                        normalizedRecycle.Add(item);
-                        normalizeCount++;
-                    }
-                }
-                normalized = true;
-            }
-
-            if (normalized)
-            {
-                LogService.Write("App", $"ApplyItemData NormalizedItems count={normalizeCount}");
-                ConfigService.SaveItems(normalItems, normalizedRecycle, false);
-            }
-
-            bool hasChanges = CheckForDataChanges(normalItems, normalizedRecycle);
+            bool hasChanges = ItemService.HasChanged(_allItems.ToList(), normalItems, _recycleItems.ToList(), normalizedRecycle);
 
             if (hasChanges)
             {
@@ -880,44 +846,7 @@ namespace EricGameLauncher
 
         private bool CheckForDataChanges(List<AppItem> newItems, List<AppItem> newRecycle)
         {
-            if (_allItems.Count != newItems.Count || _recycleItems.Count != newRecycle.Count)
-            {
-                LogService.Write("App", $"CheckForDataChanges CountChanged allOld={_allItems.Count} allNew={newItems.Count} recycleOld={_recycleItems.Count} recycleNew={newRecycle.Count}");
-                return true;
-            }
-
-            var oldById = _allItems.ToDictionary(x => x.Id);
-            foreach (var newItem in newItems)
-            {
-                if (!oldById.TryGetValue(newItem.Id, out var oldItem))
-                {
-                    LogService.Write("App", $"CheckForDataChanges ItemAdded id={newItem.Id}");
-                    return true;
-                }
-                if (oldItem.GetContentFingerprint() != newItem.GetContentFingerprint())
-                {
-                    LogService.Write("App", $"CheckForDataChanges ItemChanged id={newItem.Id}");
-                    return true;
-                }
-            }
-
-            var oldRecycleById = _recycleItems.ToDictionary(x => x.Id);
-            foreach (var newItem in newRecycle)
-            {
-                if (!oldRecycleById.TryGetValue(newItem.Id, out var oldItem))
-                {
-                    LogService.Write("App", $"CheckForDataChanges RecycleItemAdded id={newItem.Id}");
-                    return true;
-                }
-                if (oldItem.GetContentFingerprint() != newItem.GetContentFingerprint())
-                {
-                    LogService.Write("App", $"CheckForDataChanges RecycleItemChanged id={newItem.Id}");
-                    return true;
-                }
-            }
-            
-            LogService.Write("App", $"CheckForDataChanges NoChanges");
-            return false;
+            return ItemService.HasChanged(_allItems.ToList(), newItems, _recycleItems.ToList(), newRecycle);
         }
 
         private void UpdateEmptyState()
@@ -951,69 +880,7 @@ namespace EricGameLauncher
                 {
                     MigrationOverlay.Visibility = Visibility.Visible;
                     await Task.Delay(200);
-                    LogService.Write("Startup", $"LoadData AfterMigrationDelay {sw.ElapsedMilliseconds}ms");
-
-                    string configPath = ConfigService.ItemsFilePath;
-                    try
-                    {
-                        string tempDir = System.IO.Path.Combine(ConfigService.SystemCachePath, "updater.cfgver");
-                        if (!System.IO.Directory.Exists(tempDir)) System.IO.Directory.CreateDirectory(tempDir);
-                        string cfgUpdaterPath = System.IO.Path.Combine(tempDir, "updater.cfgver.exe");
-
-                        var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-                        string cfgPrefix = "EricGameLauncher.updater.cfgver.";
-                        foreach (var resName in assembly.GetManifestResourceNames())
-                        {
-                            if (!resName.StartsWith(cfgPrefix)) continue;
-                            string fileName = resName.Substring(cfgPrefix.Length);
-                            string outputPath = System.IO.Path.Combine(tempDir, fileName);
-                            using (var stream = assembly.GetManifestResourceStream(resName))
-                            {
-                                if (stream == null) continue;
-                                using (var fileStream = new System.IO.FileStream(outputPath, System.IO.FileMode.Create, System.IO.FileAccess.Write))
-                                {
-                                    stream.CopyTo(fileStream);
-                                }
-                            }
-                        }
-
-                        var processStartInfo = new System.Diagnostics.ProcessStartInfo
-                        {
-                            FileName = cfgUpdaterPath,
-                            WorkingDirectory = tempDir,
-                            CreateNoWindow = true,
-                            UseShellExecute = false
-                        };
-                        processStartInfo.ArgumentList.Add(configPath);
-                        var process = System.Diagnostics.Process.Start(processStartInfo);
-                        if (process != null)
-                        {
-                            await process.WaitForExitAsync();
-                        }
-                    }
-                    catch (Exception ex) { LogService.Write("App", "Swallowed exception", ex); }
-
-                    try
-                    {
-                        string? currentExe = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
-                        if (!string.IsNullOrEmpty(currentExe))
-                        {
-                            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                            {
-                                FileName = currentExe,
-                                WorkingDirectory = System.IO.Path.GetDirectoryName(currentExe),
-                                UseShellExecute = true
-                            });
-                        }
-                    }
-                    catch (Exception ex) { LogService.Write("App", "Swallowed exception", ex); }
-
-                    try
-                    {
-                        LogService.Write("App", "Exit requested (restart flow)");
-                        Microsoft.UI.Xaml.Application.Current.Exit();
-                    }
-                    catch (Exception ex) { LogService.Write("App", "Exit failed (restart flow)", ex); }
+                    await MigrationService.RunMigrationAndRestart();
                     return;
                 }
 
@@ -1035,18 +902,10 @@ namespace EricGameLauncher
             catch (Exception ex) { LogService.Write("App", "LoadData failed", ex); }
         }
 
-        private void SaveData()
+        private void SyncFromCore()
         {
-            using (LogService.StartOperation("App", "SaveData"))
-            {
-            try
-            {
-                LogService.Write("App", $"SaveData Start items={_allItems.Count} recycle={_recycleItems.Count}");
-                ConfigService.SaveItems(_allItems.ToList(), _recycleItems.ToList());
-                LogService.Write("App", "SaveData completed");
-            }
-            catch (Exception ex) { LogService.Write("App", "SaveData failed", ex); }
-            }
+            _allItems = new ObservableCollection<AppItem>(ConfigService.LoadItems());
+            _recycleItems = new ObservableCollection<AppItem>(ConfigService.LoadRecycleBinItems());
         }
 
 
@@ -1294,196 +1153,13 @@ namespace EricGameLauncher
 
             try
             {
-                using (LogService.StartOperation("App", $"LaunchItem {item.Title}"))
-                {
-                        LogService.Write("App", $"LaunchItem Start id={item.Id} title={item.Title}");
-                    TriggerItemLoadingAnimation(item);
-
-                if (item.UseAlternativeLaunch && !string.IsNullOrEmpty(item.AlternativeLaunchCommand))
-                {
-                    LogService.Write("App", $"LaunchItem alternative command exec command={item.AlternativeLaunchCommand} isAdmin={item.IsAltAdmin}");
-
-                    RunProcess(item.AlternativeLaunchCommand, item.IsAltAdmin);
-                    LogService.Write("App", "LaunchItem alternative command invoked");
-                }
-                else if (!string.IsNullOrEmpty(item.ExePath))
-                {
-                    LogService.Write("App", $"LaunchItem exe exec path={item.ExePath} isAdmin={item.IsAdmin}");
-
-                    RunProcess(item.ExePath, item.IsAdmin);
-
-
-                    if (item.RunAlongside && !string.IsNullOrEmpty(item.AlongsideCommand))
-                    {
-                        LogService.Write("App", $"LaunchItem alongside exec command={item.AlongsideCommand} isAdmin={item.IsAlongsideAdmin}");
-                        RunProcess(item.AlongsideCommand, item.IsAlongsideAdmin);
-                        LogService.Write("App", "LaunchItem alongside command invoked");
-                    }
-                }
-                }
+                TriggerItemLoadingAnimation(item);
+                LaunchService.Launch(item, item.UseAlternativeLaunch);
+                if (ConfigService.CloseAfterLaunch)
+                    StartCloseAfterLaunchTimer();
             }
             catch (Exception ex) { LogService.Write("App", "LaunchItem failed", ex); }
         }
-
-        private void RunProcess(string path, bool admin)
-        {
-            if (string.IsNullOrEmpty(path))
-            {
-                return;
-            }
-
-            try
-            {
-                using (LogService.StartOperation("App", $"RunProcess {path}"))
-                {
-                    LogService.Write("App", $"RunProcess Start admin={admin} path={path}");
-
-                    path = Environment.ExpandEnvironmentVariables(path);
-
-                    var psi = new ProcessStartInfo
-                    {
-                        UseShellExecute = true,
-                        CreateNoWindow = false
-                    };
-
-
-                if (path.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (admin)
-                    {
-                        string psScript = $"Start-Process '{path.Replace("'", "''")}' -Verb RunAs";
-                        string encoded = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(psScript));
-                        psi.FileName = "powershell.exe";
-                        psi.Arguments = $"-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand {encoded}";
-                        psi.UseShellExecute = false;
-                        psi.CreateNoWindow = true;
-                    }
-                    else
-                    {
-                        psi.FileName = "explorer.exe";
-                        psi.Arguments = $"\"{path.Replace("\"", "\\\"")}\"";
-                    }
-                }
-                else if (path.Contains("://"))
-                {
-
-                    psi.FileName = path;
-                }
-                else
-                {
-
-                    var (filePath, arguments) = SplitPathAndArguments(path);
-
-
-                    psi.FileName = filePath;
-                    
-                    try
-                    {
-                        string? dir = System.IO.Path.GetDirectoryName(filePath);
-                        if (!string.IsNullOrEmpty(dir))
-                        {
-                            psi.WorkingDirectory = dir;
-                        }
-                    }
-                    catch (Exception ex) { LogService.Write("App", "Swallowed exception", ex); }
-
-                    if (!string.IsNullOrEmpty(arguments))
-                    {
-                        var argList = arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-                                               .Select(a => $"\"{a.Trim('"').Replace("\"", "\\\"")}\"");
-                        psi.Arguments = string.Join(" ", argList);
-                    }
-                    if (admin)
-                        psi.Verb = "runas";
-                }
-
-                Process? process = null;
-                try
-                {
-                    process = Process.Start(psi);
-                    if (process != null)
-                    {
-                        LogService.Write("App", $"RunProcess started pid={process.Id} file={psi.FileName} args={psi.Arguments}");
-                    }
-                    else
-                    {
-                        LogService.Write("App", $"RunProcess start returned null for file={psi.FileName} args={psi.Arguments}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    LogService.Write("App", $"RunProcess start exception file={psi.FileName} args={psi.Arguments}", ex);
-                    throw;
-                }
-
-                if (ConfigService.CloseAfterLaunch)
-                {
-                    StartCloseAfterLaunchTimer();
-                    LogService.Write("App", "RunProcess triggered CloseAfterLaunch timer");
-                }
-                }
-            }
-            catch (Exception ex) { LogService.Write("App", "RunProcess failed", ex); }
-        }
-
-
-
-
-
-
-
-
-
-        private (string filePath, string arguments) SplitPathAndArguments(string input)
-        {
-            try { LogService.Write("App", $"SplitPathAndArguments called inputLen={(input==null?0:input.Length)}"); } catch { }
-            if (string.IsNullOrWhiteSpace(input))
-                return (string.Empty, string.Empty);
-
-            input = input.Trim();
-
-
-            if (input.StartsWith("\""))
-            {
-                int endQuote = input.IndexOf("\"", 1);
-                if (endQuote > 0)
-                {
-                    string filePath = input.Substring(1, endQuote - 1);
-
-                    filePath = Environment.ExpandEnvironmentVariables(filePath);
-                    string arguments = endQuote < input.Length - 1 ? input.Substring(endQuote + 1).Trim() : string.Empty;
-                    return (filePath, arguments);
-                }
-            }
-
-
-
-            int lastSpaceIndex = input.LastIndexOf(' ');
-            if (lastSpaceIndex > 0)
-            {
-
-                int currentIndex = lastSpaceIndex;
-                while (currentIndex > 0)
-                {
-                    string potentialPath = input.Substring(0, currentIndex);
-
-                    string expandedPath = Environment.ExpandEnvironmentVariables(potentialPath);
-                    if (File.Exists(expandedPath))
-                    {
-                        string arguments = input.Substring(currentIndex + 1).Trim();
-                        return (expandedPath, arguments);
-                    }
-
-
-                    currentIndex = input.LastIndexOf(' ', currentIndex - 1);
-                }
-            }
-
-
-            return (Environment.ExpandEnvironmentVariables(input), string.Empty);
-        }
-
-
 
         private AppItem? GetTag(object sender)
         {
@@ -1550,11 +1226,11 @@ namespace EricGameLauncher
                         {
                             menuItem.Text = si.Symbol switch
                             {
-                                Symbol.Play => I18n.T("Menu_Run"),
-                                Symbol.Repair => I18n.T("Menu_RunManager"),
-                                Symbol.Folder => I18n.T("Menu_OpenFileLocation"),
-                                Symbol.Edit => I18n.T("Menu_Properties"),
-                                Symbol.Delete => I18n.T("Menu_Delete"),
+                                Symbol.Play => Text.T("Menu_Run"),
+                                Symbol.Repair => Text.T("Menu_RunManager"),
+                                Symbol.Folder => Text.T("Menu_OpenFileLocation"),
+                                Symbol.Edit => Text.T("Menu_Properties"),
+                                Symbol.Delete => Text.T("Menu_Delete"),
                                 _ => menuItem.Text
                             };
 
@@ -1596,16 +1272,16 @@ namespace EricGameLauncher
 
                     if (mgrPlatform != null)
                     {
-                        mgrItem.Text = string.Format(I18n.T("Menu_PlatformManager"), mgrPlatform.PlatformName);
+                        mgrItem.Text = string.Format(Text.T("Menu_PlatformManager"), mgrPlatform.PlatformName);
                     }
                     else if (platform != null || isXbox)
                     {
                         string pName = isXbox ? "Xbox" : (platform?.PlatformName ?? "");
-                        mgrItem.Text = string.Format(I18n.T("Menu_PlatformManager"), pName);
+                        mgrItem.Text = string.Format(Text.T("Menu_PlatformManager"), pName);
                     }
                     else if (hasCustomMgr)
                     {
-                        mgrItem.Text = I18n.T("Menu_RunManager");
+                        mgrItem.Text = Text.T("Menu_RunManager");
                     }
 
                     mgrItem.Click += MenuRunMgr_Click;
@@ -1638,15 +1314,9 @@ namespace EricGameLauncher
             {
                 if (sender is MenuFlyoutItem menuItem && menuItem.Tag is CustomMenuItem ci)
                 {
-                    if (!string.IsNullOrEmpty(ci.Command))
-                    {
-                        LogService.Write("App", $"MenuCustom_Click command={ci.Command} isAdmin={ci.IsAdmin} title={ci.Title}");
-                        if ((DateTime.Now - _lastLaunchTime).TotalMilliseconds < 500) return;
-                        _lastLaunchTime = DateTime.Now;
-
-                        RunProcess(ci.Command, ci.IsAdmin);
-                        LogService.Write("App", "MenuCustom_Click invoked RunProcess");
-                    }
+                    if ((DateTime.Now - _lastLaunchTime).TotalMilliseconds < 500) return;
+                    _lastLaunchTime = DateTime.Now;
+                    LaunchService.LaunchCustomCommand(ci);
                 }
             }
             catch (Exception ex) { LogService.Write("App", "MenuCustom_Click failed", ex); }
@@ -1659,24 +1329,11 @@ namespace EricGameLauncher
                 var item = GetTag(sender);
                 if (item == null) return;
 
-                string? managerPath = item.RuntimeManagerPath;
+                if ((DateTime.Now - _lastLaunchTime).TotalMilliseconds < 500) return;
+                _lastLaunchTime = DateTime.Now;
 
-                if (string.IsNullOrEmpty(managerPath) && item.PlatformName == "Xbox")
-                {
-                    managerPath = "xbox://";
-                }
-
-                if (!string.IsNullOrEmpty(managerPath))
-                {
-                    LogService.Write("App", $"MenuRunMgr_Click managerPath={managerPath} itemId={item.Id} platform={item.PlatformName} isMgrAdmin={item.IsMgrAdmin}");
-                    if ((DateTime.Now - _lastLaunchTime).TotalMilliseconds < 500) return;
-                    _lastLaunchTime = DateTime.Now;
-
-                    TriggerItemLoadingAnimation(item);
-
-                    RunProcess(managerPath, item.IsMgrAdmin);
-                    LogService.Write("App", "MenuRunMgr_Click invoked RunProcess for manager");
-                }
+                TriggerItemLoadingAnimation(item);
+                LaunchService.LaunchManager(item);
             }
             catch (Exception ex) { LogService.Write("App", "MenuRunMgr_Click failed", ex); }
         }
@@ -1723,14 +1380,9 @@ namespace EricGameLauncher
                 var item = GetTag(sender);
                 if (item != null)
                 {
-                    LogService.Write("App", $"MenuDel_Click removing itemId={item.Id} title={item.Title}");
-                    _allItems.Remove(item);
-                    item.Status = (int)AppItemStatus.Recycled;
-                    item.DeletedAt = null;
-                    _recycleItems.Add(item);
-                    SaveData();
+                    ItemService.RemoveItem(item.Id, null);
+                    SyncFromCore();
                     RefreshView();
-                    LogService.Write("App", $"MenuDel_Click completed for itemId={item.Id}");
                 }
             }
             catch (Exception ex) { LogService.Write("App", "MenuDel_Click failed", ex); }
@@ -1768,161 +1420,30 @@ namespace EricGameLauncher
 
                 var dialogTask = ScannerDialog.ShowAsync();
 
-                var scannedGames = await Task.Run(async () =>
-                {
-                    var games = new List<ScannedGame>();
-                    games.AddRange(SteamHelper.GetAllInstalledGames());
-                    games.AddRange(EpicGamesHelper.GetAllInstalledGames());
-                    games.AddRange(await StoreHelper.GetAllInstalledGamesAsync());
-                    return games;
-                });
+                var scannedGames = await ScanService.ScanAllAsync();
 
                 LogService.Write("Scan", $"MenuScan_Click scannedGamesCount={scannedGames?.Count ?? 0}");
 
-                bool canValidateSteam = !string.IsNullOrEmpty(SteamHelper.DetectSteamPath());
-                bool canValidateEpic = !string.IsNullOrEmpty(EpicGamesHelper.DetectEpicManifestDir());
+                bool canValidateSteam = ScanService.CanValidateSteam;
+                bool canValidateEpic = ScanService.CanValidateEpic;
 
-                var existingGames = new List<ScannedGame>();
-                var newGames = new List<ScannedGame>();
                 var allItems = _allItems.Concat(_recycleItems).ToList();
-
-                if (scannedGames == null)
-                {
-                    LogService.Write("Scan", "MenuScan_Click aborted: no scanned games");
-                    return;
-                }
-
-                foreach (var game in scannedGames)
-                {
-                    bool exists = false;
-
-                    if (game.PlatformBadge == "Xbox")
-                    {
-                        string gameId = game.ExePath.Replace(LauncherConstants.UwpAppsFolderPrefix, "");
-                        exists = allItems.Any(a => !string.IsNullOrEmpty(a.ExePath) && a.ExePath.Contains(gameId, StringComparison.OrdinalIgnoreCase));
-                    }
-                    else
-                    {
-                        static string NormalizePath(string? p)
-                        {
-                            try { LogService.Write("UI", $"NormalizePath called p={(p ?? "")}"); } catch { }
-                            if (string.IsNullOrEmpty(p)) return string.Empty;
-                            try { return Path.GetFullPath(p).ToUpperInvariant(); }
-                            catch { return p.ToUpperInvariant(); }
-                        }
-
-                        string gameNorm = NormalizePath(game.ExePath);
-                        exists = allItems.Any(a =>
-                            (!string.IsNullOrEmpty(a.ExePath) && NormalizePath(a.ExePath) == gameNorm) ||
-                            string.Equals(a.Title, game.Title, StringComparison.OrdinalIgnoreCase)
-                        );
-                    }
-
-                    if (exists) existingGames.Add(game);
-                    else newGames.Add(game);
-                }
+                var (newGames, existingGames) = ScanService.Classify(scannedGames ?? new List<ScannedGame>(), allItems);
 
                 LogService.Write("Scan", $"MenuScan_Click classification existing={existingGames.Count} new={newGames.Count}");
 
-                var invalidGames = new List<ScannedGame>();
-                void TrackInvalidGame(AppItem i, string? badge)
-                {
-                    invalidGames.Add(new ScannedGame
-                    {
-                        Title = i.Title ?? "Unknown",
-                        ExePath = i.ExePath ?? string.Empty,
-                        PlatformBadge = badge ?? "",
-                        ItemId = i.Id
-                    });
-                }
-
-                foreach (var item in _allItems)
-                {
-                    bool isFileOrDirExists = false;
-                    string? pureExePath = item.ExePath;
-
-                    if (!string.IsNullOrEmpty(item.ExePath))
-                    {
-                        try
-                        {
-                            string expandedPath = Environment.ExpandEnvironmentVariables(item.ExePath);
-                            pureExePath = expandedPath;
-
-                            if (File.Exists(pureExePath) || Directory.Exists(pureExePath))
-                            {
-                                isFileOrDirExists = true;
-                            }
-                        }
-                        catch (Exception ex) { LogService.Write("App", "Swallowed exception", ex); }
-                    }
-
-                    if (isFileOrDirExists) continue;
-
-                    string? platformName = item.PlatformName;
-                    if (platformName == "Steam" || platformName == "Epic Games" || platformName == "Xbox")
-                    {
-                        if (platformName == "Steam" && !canValidateSteam)
-                        {
-                            continue;
-                        }
-
-                        if (platformName == "Epic Games" && !canValidateEpic)
-                        {
-                            continue;
-                        }
-
-                        if (platformName == "Xbox")
-                        {
-                            if (!StoreHelper.IsAppInstalled(item.ExePath))
-                            {
-                                TrackInvalidGame(item, platformName);
-                            }
-                            continue;
-                        }
-                        
-                        bool found = false;
-                        foreach (var game in scannedGames)
-                        {
-                            if (game.PlatformBadge == platformName)
-                            {
-                                static string NormalizePath(string? p)
-                                {
-                                    if (string.IsNullOrEmpty(p)) return string.Empty;
-                                    try { return Path.GetFullPath(p).ToUpperInvariant(); }
-                                    catch { return p.ToUpperInvariant(); }
-                                }
-                                string itemNorm = NormalizePath(item.ExePath);
-                                string gameNorm = NormalizePath(game.ExePath);
-                                if ((!string.IsNullOrEmpty(item.ExePath) && itemNorm == gameNorm) ||
-                                    string.Equals(item.Title, game.Title, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    found = true; break;
-                                }
-                            }
-                        }
-
-                        if (!found)
-                        {
-                            TrackInvalidGame(item, platformName);
-                        }
-                    }
-                    else
-                    {
-                        if (IsUserLaunchTargetInvalid(item.ExePath))
-                        {
-                            TrackInvalidGame(item, "User");
-                        }
-                    }
-                }
+                var invalidGames = ScanService.FindInvalidGames(
+                    _allItems.ToList(), scannedGames ?? new List<ScannedGame>(),
+                    canValidateSteam, canValidateEpic);
 
                 ScannerNewGamesList.ItemsSource = new ObservableCollection<ScannedGame>(newGames);
                 ScannerExistingGamesList.ItemsSource = new ObservableCollection<ScannedGame>(existingGames);
                 ScannerInvalidGamesList.ItemsSource = new ObservableCollection<ScannedGame>(invalidGames);
 
-                ScannerNewGamesHeader.Text = string.Format(I18n.T("Scanner_NewGames"), newGames.Count);
-                ScannerExistingGamesHeader.Text = string.Format(I18n.T("Scanner_ExistingGames"), existingGames.Count);
-                ScannerInvalidGamesHeader.Text = string.Format(I18n.T("Scanner_InvalidGames") ?? "已失效 ({0})", invalidGames.Count);
-                ScannerDeleteInvalidBtn.Content = I18n.T("Scanner_DeleteInvalid") ?? "删除所选项";
+                ScannerNewGamesHeader.Text = string.Format(Text.T("Scanner_NewGames"), newGames.Count);
+                ScannerExistingGamesHeader.Text = string.Format(Text.T("Scanner_ExistingGames"), existingGames.Count);
+                ScannerInvalidGamesHeader.Text = string.Format(Text.T("Scanner_InvalidGames"), invalidGames.Count);
+                ScannerDeleteInvalidBtn.Content = Text.T("Scanner_DeleteInvalid");
 
                 ScannerNewGamesSection.Visibility = newGames.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
                 ScannerExistingGamesSection.Visibility = existingGames.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -1957,7 +1478,7 @@ namespace EricGameLauncher
                     {
                         source.Remove(item);
                     }
-                    ScannerNewGamesHeader.Text = string.Format(I18n.T("Scanner_NewGames"), source.Count);
+                    ScannerNewGamesHeader.Text = string.Format(Text.T("Scanner_NewGames"), source.Count);
                     if (source.Count == 0)
                     {
                         ScannerNewGamesSection.Visibility = Visibility.Collapsed;
@@ -1973,11 +1494,11 @@ namespace EricGameLauncher
             {
                 if (ScannerNewGamesList.Items.Count > 0 && ScannerNewGamesList.SelectedItems.Count == ScannerNewGamesList.Items.Count)
                 {
-                    ScannerNewSelectAllBtn.Content = I18n.T("Scanner_DeselectAll") ?? "Deselect All";
+                    ScannerNewSelectAllBtn.Content = Text.T("Scanner_DeselectAll");
                 }
                 else
                 {
-                    ScannerNewSelectAllBtn.Content = I18n.T("Scanner_SelectAll") ?? "Select All";
+                    ScannerNewSelectAllBtn.Content = Text.T("Scanner_SelectAll");
                 }
             }
             catch (Exception ex) { LogService.Write("App", "Swallowed exception", ex); }
@@ -2005,11 +1526,11 @@ namespace EricGameLauncher
             {
                 if (ScannerInvalidGamesList.Items.Count > 0 && ScannerInvalidGamesList.SelectedItems.Count == ScannerInvalidGamesList.Items.Count)
                 {
-                    ScannerInvalidSelectAllBtn.Content = I18n.T("Scanner_DeselectAll") ?? "Deselect All";
+                    ScannerInvalidSelectAllBtn.Content = Text.T("Scanner_DeselectAll");
                 }
                 else
                 {
-                    ScannerInvalidSelectAllBtn.Content = I18n.T("Scanner_SelectAll") ?? "Select All";
+                    ScannerInvalidSelectAllBtn.Content = Text.T("Scanner_SelectAll");
                 }
             }
             catch (Exception ex) { LogService.Write("App", "ScannerInvalidSelectAllBtn_Click failed", ex); }
@@ -2047,7 +1568,7 @@ namespace EricGameLauncher
                     {
                         source.Remove(item);
                     }
-                    ScannerInvalidGamesHeader.Text = string.Format(I18n.T("Scanner_InvalidGames") ?? "已失效 ({0})", source.Count);
+                    ScannerInvalidGamesHeader.Text = string.Format(Text.T("Scanner_InvalidGames"), source.Count);
                     if (source.Count == 0)
                     {
                         ScannerInvalidGamesSection.Visibility = Visibility.Collapsed;
@@ -2061,19 +1582,12 @@ namespace EricGameLauncher
         {
             try
             {
-                bool deleted = false;
                 var processedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                bool canValidateSteam = ScanService.CanValidateSteam;
+                bool canValidateEpic = ScanService.CanValidateEpic;
+                var steamInstalledUrls = ScanService.GetSteamInstalledUrls();
+                var epicInstalledUrls = ScanService.GetEpicInstalledUrls();
 
-                bool canValidateSteam = !string.IsNullOrEmpty(SteamHelper.DetectSteamPath());
-                bool canValidateEpic = !string.IsNullOrEmpty(EpicGamesHelper.DetectEpicManifestDir());
-                var steamInstalledUrls = canValidateSteam
-                    ? new HashSet<string>(SteamHelper.GetAllInstalledGames().Select(x => x.ExePath), StringComparer.OrdinalIgnoreCase)
-                    : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                var epicInstalledUrls = canValidateEpic
-                    ? new HashSet<string>(EpicGamesHelper.GetAllInstalledGames().Select(x => x.ExePath), StringComparer.OrdinalIgnoreCase)
-                    : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-                #pragma warning disable CS8602
                 foreach (var game in games)
                 {
                     if (string.IsNullOrEmpty(game.ItemId) || !processedIds.Add(game.ItemId)) continue;
@@ -2081,135 +1595,23 @@ namespace EricGameLauncher
                     var itemToDelete = _allItems.FirstOrDefault(a => a.Id == game.ItemId);
                     if (itemToDelete == null) continue;
 
-                    if (!IsItemStillInvalid(itemToDelete, canValidateSteam, canValidateEpic, steamInstalledUrls, epicInstalledUrls)) continue;
+                    if (!ScanService.IsItemStillInvalid(itemToDelete, canValidateSteam, canValidateEpic, steamInstalledUrls, epicInstalledUrls))
+                        continue;
 
-                    if (itemToDelete != null)
-                    {
-                        _allItems.Remove(itemToDelete);
-                        itemToDelete.Status = (int)AppItemStatus.Recycled;
-                        itemToDelete.DeletedAt = null;
-                        _recycleItems.Add(itemToDelete);
-                        deleted = true;
-                    }
+                    ItemService.RemoveItem(itemToDelete.Id, null);
                 }
-                #pragma warning restore CS8602
 
-                if (deleted)
-                {
-                    SaveData();
-                }
+                SyncFromCore();
             }
             catch (Exception ex) { LogService.Write("App", "DeleteInvalidGames failed", ex); }
-        }
-
-        private bool IsItemStillInvalid(AppItem item, bool canValidateSteam, bool canValidateEpic, HashSet<string> steamInstalledUrls, HashSet<string> epicInstalledUrls)
-        {
-            try
-            {
-                var exePath = item.ExePath;
-                if (string.IsNullOrWhiteSpace(exePath)) return false;
-
-                if (item.PlatformName == "Xbox")
-                {
-                    return !StoreHelper.IsAppInstalled(exePath);
-                }
-
-                if (item.PlatformName == "Steam")
-                {
-                    if (!canValidateSteam) return false;
-                    return !steamInstalledUrls.Contains(exePath);
-                }
-
-                if (item.PlatformName == "Epic Games")
-                {
-                    if (!canValidateEpic) return false;
-                    return !epicInstalledUrls.Contains(exePath);
-                }
-
-                return IsUserLaunchTargetInvalid(exePath);
-            }
-            catch (Exception ex)
-            {
-                LogService.Write("App", "IsItemStillInvalid failed", ex);
-                return false;
-            }
-        }
-
-        private bool IsUserLaunchTargetInvalid(string? rawPath)
-        {
-            try
-            {
-                if (string.IsNullOrWhiteSpace(rawPath)) return false;
-
-                string path = Environment.ExpandEnvironmentVariables(rawPath.Trim());
-
-                if (path.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase))
-                {
-                    return !StoreHelper.IsAppInstalled(path);
-                }
-
-                if (path.Contains("://", StringComparison.OrdinalIgnoreCase))
-                {
-                    return false;
-                }
-
-                if (File.Exists(path) || Directory.Exists(path))
-                {
-                    return false;
-                }
-
-                var (filePath, _) = SplitPathAndArguments(path);
-                if (!string.IsNullOrWhiteSpace(filePath))
-                {
-                    string resolved = Environment.ExpandEnvironmentVariables(filePath.Trim());
-                    if (File.Exists(resolved) || Directory.Exists(resolved))
-                    {
-                        return false;
-                    }
-                }
-
-                if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) ||
-                    path.EndsWith(".url", StringComparison.OrdinalIgnoreCase) ||
-                    path.EndsWith(".bat", StringComparison.OrdinalIgnoreCase) ||
-                    path.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase) ||
-                    path.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase))
-                {
-                    return !File.Exists(path);
-                }
-
-                if (path.Contains(".exe", StringComparison.OrdinalIgnoreCase))
-                {
-                    int exeIndex = path.IndexOf(".exe", StringComparison.OrdinalIgnoreCase) + 4;
-                    string exeCandidate = path.Substring(0, exeIndex).Trim('\"', ' ', '\'');
-                    return !File.Exists(exeCandidate);
-                }
-
-                return false;
-            }
-            catch
-            {
-                return false;
-            }
         }
 
         private void RestoreRecycledItem(AppItem item)
         {
             try
             {
-                var removeItem = _recycleItems.FirstOrDefault(x => x.Id == item.Id);
-                if (removeItem != null)
-                {
-                    _recycleItems.Remove(removeItem);
-                }
-                var existing = _allItems.FirstOrDefault(x => x.Id == item.Id);
-                if (existing != null)
-                {
-                    _allItems.Remove(existing);
-                }
-                item.Status = (int)AppItemStatus.Normal;
-                item.DeletedAt = null;
-                _allItems.Add(item);
-                SaveData();
+                ItemService.RestoreItem(item.Id, null);
+                SyncFromCore();
                 RefreshView();
             }
             catch (Exception ex) { LogService.Write("App", "RestoreRecycledItem failed", ex); }
@@ -2219,9 +1621,7 @@ namespace EricGameLauncher
         {
             try
             {
-                item.Status = (int)AppItemStatus.PendingDeletion;
-                item.DeletedAt = DateTimeOffset.UtcNow;
-                SaveData();
+                ItemService.MarkPendingDeletion(item.Id);
             }
             catch (Exception ex) { LogService.Write("App", "MarkItemForDeletion failed", ex); }
         }
@@ -2230,18 +1630,7 @@ namespace EricGameLauncher
         {
             try
             {
-                var recycledItems = _recycleItems.Where(i => i.Status == (int)AppItemStatus.Recycled).ToList();
-                var now = DateTimeOffset.UtcNow;
-                foreach (var item in recycledItems)
-                {
-                    item.Status = (int)AppItemStatus.PendingDeletion;
-                    item.DeletedAt = now;
-                }
-                
-                if (recycledItems.Count > 0)
-                {
-                    SaveData();
-                }
+                ItemService.MarkAllPendingDeletion();
             }
             catch (Exception ex) { LogService.Write("App", "EmptyRecycleBin failed", ex); }
         }
@@ -2272,25 +1661,8 @@ namespace EricGameLauncher
         {
             try
             {
-                bool changed = false;
-                var now = DateTimeOffset.UtcNow;
-                var toRemove = new List<AppItem>();
-                foreach (var item in _recycleItems)
-                {
-                    if (item.Status == (int)AppItemStatus.PendingDeletion && item.DeletedAt.HasValue)
-                    {
-                        if ((now - item.DeletedAt.Value).TotalHours >= 72)
-                        {
-                            toRemove.Add(item);
-                            changed = true;
-                        }
-                    }
-                }
-                if (changed)
-                {
-                    foreach (var item in toRemove) _recycleItems.Remove(item);
-                    ConfigService.SaveItems(_allItems.ToList(), _recycleItems.ToList());
-                }
+                ItemService.AutoCleanExpired();
+                SyncFromCore();
             }
             catch (Exception ex) { LogService.Write("App", "AutoCleanRecycleBin failed", ex); }
         }
@@ -2311,10 +1683,10 @@ namespace EricGameLauncher
                 if (flyout.Items.Count >= 2)
                 {
                     if (flyout.Items[0] is MenuFlyoutItem restoreItem)
-                        restoreItem.Text = I18n.T("RecycleBin_Restore");
+                        restoreItem.Text = Text.T("RecycleBin_Restore");
                     if (flyout.Items[1] is MenuFlyoutItem deleteItem)
                     {
-                        deleteItem.Text = I18n.T("RecycleBin_Delete");
+                        deleteItem.Text = Text.T("RecycleBin_Delete");
                         deleteItem.Visibility = selectedItem.Status == (int)AppItemStatus.PendingDeletion ? Visibility.Collapsed : Visibility.Visible;
                     }
                 }
@@ -2353,55 +1725,14 @@ namespace EricGameLauncher
 
         private void ImportScannedGames(List<ScannedGame> games)
         {
-            #pragma warning disable CS8602, CS8604
             try
             {
-                using (LogService.StartOperation("Scan", "ImportScannedGames"))
-                {
-                        if (games == null || games.Count == 0)
-                        {
-                            LogService.Write("Scan", "ImportScannedGames aborted: no input");
-                            return;
-                        }
-
-                        LogService.Write("Scan", $"ImportScannedGames Start inputCount={games?.Count ?? 0}");
-                    var localGames = games!;
-                    int sortOrder = 0;
-                    if (_allItems != null && _allItems.Count > 0)
-                    {
-                        sortOrder = _allItems.Max(x => x.SortOrder) + 1;
-                    }
-
-                var newAppItems = new List<AppItem>();
-                foreach (var game in games)
-                {
-                    var gTitle = game?.Title;
-                    var gExe = game?.ExePath;
-                    var gPlatform = game?.PlatformBadge;
-                    var newItem = new AppItem
-                    {
-                        Id = Guid.NewGuid().ToString(),
-                        Title = gTitle,
-                        ExePath = gExe,
-                        Platform = gPlatform,
-                        SortOrder = sortOrder++
-                    };
-
-                    newAppItems.Add(newItem);
-                }
-
-                    var mergedItems = _allItems!.Concat(newAppItems).ToList();
-                    foreach (var newItem in newAppItems)
-                    {
-                        _allItems.Add(newItem);
-                    }
-                    ConfigService.SaveItems(mergedItems, _recycleItems!.ToList());
-                    LogService.Write("Scan", $"ImportScannedGames completed newAdded={newAppItems.Count} totalItems={mergedItems.Count}");
-
-                    _ = ConfigService.RefreshGlobalAsync();
-                }
+                if (games == null || games.Count == 0) return;
+                var addedCount = ItemService.ImportGames(games);
+                SyncFromCore();
+                _ = ConfigService.RefreshGlobalAsync();
+                LogService.Write("Scan", $"ImportScannedGames completed imported={addedCount}");
             }
-            #pragma warning restore CS8602, CS8604
             catch (Exception ex) { LogService.Write("App", "ImportScannedGames failed", ex); }
         }
 
@@ -2415,7 +1746,7 @@ namespace EricGameLauncher
                 PropIsAdmin.IsChecked = _currentEditingItem.IsAdmin;
                 PropMgrPath.Text = _currentEditingItem.MgrPath ?? "";
                 PropIsMgrAdmin.IsChecked = _currentEditingItem.IsMgrAdmin;
-                PropDisplayNameLabel.Text = I18n.T("Property_DisplayName");
+                PropDisplayNameLabel.Text = Text.T("Property_DisplayName");
 
                 string? exePathSnapshot = _currentEditingItem.ExePath;
                 _ = Task.Run(async () =>
@@ -2671,9 +2002,9 @@ namespace EricGameLauncher
                 {
                     int index = i;
                     var flyout = new MenuFlyout();
-                    var startMenuSub = new MenuFlyoutSubItem { Text = I18n.T("Source_StartMenu"), Icon = new FontIcon { Glyph = "\uE700" } };
-                    var desktopSub = new MenuFlyoutSubItem { Text = I18n.T("Source_Desktop"), Icon = new FontIcon { Glyph = "\uE8FC" } };
-                    var browseItem = new MenuFlyoutItem { Text = I18n.T("Property_BrowseFile"), Icon = new FontIcon { Glyph = "\uE8E5" } };
+                    var startMenuSub = new MenuFlyoutSubItem { Text = Text.T("Source_StartMenu"), Icon = new FontIcon { Glyph = "\uE700" } };
+                    var desktopSub = new MenuFlyoutSubItem { Text = Text.T("Source_Desktop"), Icon = new FontIcon { Glyph = "\uE8FC" } };
+                    var browseItem = new MenuFlyoutItem { Text = Text.T("Property_BrowseFile"), Icon = new FontIcon { Glyph = "\uE8E5" } };
 
                     browseItem.Click += (s, e) => BtnBrowseCustom_Click(index);
 
@@ -2923,7 +2254,6 @@ namespace EricGameLauncher
                     return;
                 }
 
-
                 if (string.IsNullOrWhiteSpace(PropExePath.Text))
                 {
                     LogService.Write("App", "BtnSaveProperty_Click validation failed: empty PropExePath");
@@ -2934,7 +2264,6 @@ namespace EricGameLauncher
                     PropExePath.Focus(FocusState.Programmatic);
                     return;
                 }
-
 
                 if (_isNewItemMode)
                 {
@@ -2954,22 +2283,15 @@ namespace EricGameLauncher
                     }
                 }
 
-
                 SaveToItem();
 
-                LogService.Write("App", $"BtnSaveProperty_Click SaveToItem applied for id={_currentEditingItem.Id} title={_currentEditingItem.Title} exePath={_currentEditingItem.ExePath}");
-
-
                 if (_isNewItemMode)
-                {
-                    _allItems.Add(_currentEditingItem);
-                }
+                    ItemService.AddItem(_currentEditingItem);
                 else
-                {
-                }
+                    ItemService.EditItem(_currentEditingItem, _ => { });
 
-                SaveData();
-                LogService.Write("App", $"BtnSaveProperty_Click SaveData completed itemsCount={_allItems.Count}");
+                SyncFromCore();
+                RefreshView();
                 HidePropertyPanel();
             }
             catch (Exception ex) { LogService.Write("App", "BtnSaveProperty_Click failed", ex); }
@@ -2986,20 +2308,9 @@ namespace EricGameLauncher
                 if (_currentEditingItem == null) return;
 
                 if (!_isNewItemMode)
-                {
-                    _allItems.Remove(_currentEditingItem);
-                    _currentEditingItem.Status = (int)AppItemStatus.Recycled;
-                    _currentEditingItem.DeletedAt = null;
-                    _recycleItems.Add(_currentEditingItem);
-                    LogService.Write("App", $"BtnDeleteProperty_Click recycled itemId={_currentEditingItem.Id}");
-                }
-                else
-                {
-                    _allItems.Remove(_currentEditingItem);
-                    LogService.Write("App", $"BtnDeleteProperty_Click removed new temporary item");
-                }
-                
-                SaveData();
+                    ItemService.RemoveItem(_currentEditingItem.Id, null);
+
+                SyncFromCore();
                 RefreshView();
                 HidePropertyPanel();
             }
@@ -3016,7 +2327,7 @@ namespace EricGameLauncher
 
                 IntPtr hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
                 string filter = Win32FileDialog.BuildFilter(Win32FileDialog.FilterExecutablesAndImages, Win32FileDialog.FilterAll);
-                string? filePath = Win32FileDialog.ShowOpenFileDialog(hwnd, I18n.T("FileDialog_SelectIconFile"), filter);
+                string? filePath = Win32FileDialog.ShowOpenFileDialog(hwnd, Text.T("FileDialog_SelectIconFile"), filter);
 
                 if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
                 {
@@ -3088,7 +2399,7 @@ namespace EricGameLauncher
                     filter = Win32FileDialog.BuildFilter(Win32FileDialog.FilterExecutables, Win32FileDialog.FilterAll);
                 }
                 LogService.Write("App", $"BrowseFile invoking dialog filter={filter}");
-                string? filePath = Win32FileDialog.ShowOpenFileDialog(hwnd, I18n.T("FileDialog_SelectFile"), filter);
+                string? filePath = Win32FileDialog.ShowOpenFileDialog(hwnd, Text.T("FileDialog_SelectFile"), filter);
                 LogService.Write("App", $"BrowseFile dialog returned filePath={filePath}");
 
                 if (!string.IsNullOrEmpty(filePath))
@@ -3326,7 +2637,7 @@ namespace EricGameLauncher
 
                 int unreadCount = _announcementItems.Count(x => !x.IsRead);
                 UpdateAnnouncementButtonIndicator(unreadCount);
-                ToolTipService.SetToolTip(AnnouncementButton, I18n.T("Menu_Announcements"));
+                ToolTipService.SetToolTip(AnnouncementButton, Text.T("Menu_Announcements"));
 
                 LogService.Write("Announcement", $"Announcement list refreshed total={_announcementItems.Count} unread={unreadCount}");
             }
@@ -3408,12 +2719,7 @@ namespace EricGameLauncher
 
                 IEnumerable<AppItem> filtered = string.IsNullOrEmpty(query)
                     ? _allItems
-                    : _allItems.Where(item =>
-                        (!string.IsNullOrEmpty(item.Title) && item.Title.ToLower().Contains(query)) ||
-                        (!string.IsNullOrEmpty(item.ExePath) && item.ExePath.ToLower().Contains(query)) ||
-                        (!string.IsNullOrEmpty(item.TitlePinyin) && item.TitlePinyin.Contains(query)) ||
-                        (!string.IsNullOrEmpty(item.TitlePinyinInitial) && item.TitlePinyinInitial.Contains(query)) ||
-                        (!string.IsNullOrEmpty(item.TitleEnglishInitial) && item.TitleEnglishInitial.Contains(query)));
+                    : ItemService.Search(_allItems, query);
 
                 _viewItems = new ObservableCollection<AppItem>(filtered);
                 AppGrid.ItemsSource = _viewItems;
@@ -3446,9 +2752,9 @@ namespace EricGameLauncher
                     if (sortButtons != null && sortButtons.Children.Count >= 2)
                     {
                         if (sortButtons.Children[0] is Button moveUpBtn)
-                            ToolTipService.SetToolTip(moveUpBtn, I18n.T("Sort_MoveUp"));
+                            ToolTipService.SetToolTip(moveUpBtn, Text.T("Sort_MoveUp"));
                         if (sortButtons.Children[1] is Button moveDownBtn)
-                            ToolTipService.SetToolTip(moveDownBtn, I18n.T("Sort_MoveDown"));
+                            ToolTipService.SetToolTip(moveDownBtn, Text.T("Sort_MoveDown"));
                     }
                 }
             }
@@ -3488,12 +2794,10 @@ namespace EricGameLauncher
                 if (_tempOrderCollection != null)
                 {
                     var newOrder = _tempOrderCollection.ToList();
+                    ItemService.SaveOrder(newOrder);
                     _allItems.Clear();
                     foreach (var item in newOrder)
-                    {
                         _allItems.Add(item);
-                    }
-                    ConfigService.SaveItems(newOrder, _recycleItems.ToList());
                     _tempOrderCollection = null;
                 }
             }
@@ -3504,16 +2808,19 @@ namespace EricGameLauncher
         {
             if (item == null || _tempOrderCollection == null) return;
 
-            int index = _tempOrderCollection.IndexOf(item);
-            if (index == -1) return;
+            var list = _tempOrderCollection.ToList();
+            if (offset < 0)
+                ItemService.MoveUp(list, item.Id);
+            else
+                ItemService.MoveDown(list, item.Id);
 
-            int newIndex = index + offset;
+            _tempOrderCollection.Clear();
+            foreach (var i in list) _tempOrderCollection.Add(i);
 
-            if (newIndex >= 0 && newIndex < _tempOrderCollection.Count)
+            if (_orderItemsControl != null)
             {
-                _tempOrderCollection.Move(index, newIndex);
-
-                if (_orderItemsControl != null)
+                int newIdx = _tempOrderCollection.IndexOf(item);
+                if (newIdx >= 0)
                 {
                     _orderItemsControl.SelectedItem = item;
                     _orderItemsControl.ScrollIntoView(item);
@@ -3635,57 +2942,13 @@ namespace EricGameLauncher
 
         private void MenuInstall_Click(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                using (LogService.StartOperation("App", "Install"))
-                {
-                    LogService.Write("App", "Install Start");
-                string exePath = Process.GetCurrentProcess().MainModule?.FileName ?? "";
-                if (string.IsNullOrEmpty(exePath)) return;
-
-                string appName = "EricGameLauncher";
-                string description = "Eric Game Launcher";
-
-                string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-                string desktopShortcutPath = Path.Combine(desktopPath, $"{appName}.lnk");
-
-                string appDataRoaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-                string startMenuPath = Path.Combine(appDataRoaming, @"Microsoft\Windows\Start Menu\Programs");
-                string startMenuShortcutPath = Path.Combine(startMenuPath, $"{appName}.lnk");
-
-                if (File.Exists(desktopShortcutPath)) File.Delete(desktopShortcutPath);
-                if (File.Exists(startMenuShortcutPath)) File.Delete(startMenuShortcutPath);
-
-                ShortcutResolver.CreateShortcut(exePath, desktopShortcutPath, description);
-
-                if (!Directory.Exists(startMenuPath)) Directory.CreateDirectory(startMenuPath);
-                ShortcutResolver.CreateShortcut(exePath, startMenuShortcutPath, description);
-                    LogService.Write("App", "Install Complete");
-                }
-            }
+            try { AppInstallService.Install(); }
             catch (Exception ex) { LogService.Write("App", "MenuInstall_Click failed", ex); }
         }
 
         private void MenuUninstall_Click(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                using (LogService.StartOperation("App", "Uninstall"))
-                {
-                    LogService.Write("App", "Uninstall Start");
-                string appName = "EricGameLauncher";
-
-                string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-                string desktopShortcutPath = Path.Combine(desktopPath, $"{appName}.lnk");
-
-                string appDataRoaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-                string startMenuShortcutPath = Path.Combine(appDataRoaming, @"Microsoft\Windows\Start Menu\Programs", $"{appName}.lnk");
-
-                if (File.Exists(desktopShortcutPath)) File.Delete(desktopShortcutPath);
-                if (File.Exists(startMenuShortcutPath)) File.Delete(startMenuShortcutPath);
-                    LogService.Write("App", "Uninstall Complete");
-                }
-            }
+            try { AppInstallService.Uninstall(); }
             catch (Exception ex) { LogService.Write("App", "MenuUninstall_Click failed", ex); }
         }
 
@@ -3746,7 +3009,7 @@ namespace EricGameLauncher
         private void UpdateGitHubTokenStatus()
         {
             bool hasToken = !string.IsNullOrEmpty(ConfigService.GitHubToken);
-            GitHubTokenStatusText.Text = hasToken ? I18n.T("Settings_GitHubTokenConfigured") : I18n.T("Settings_GitHubTokenNotConfigured");
+            GitHubTokenStatusText.Text = hasToken ? Text.T("Settings_GitHubTokenConfigured") : Text.T("Settings_GitHubTokenNotConfigured");
         }
 
         private void ComboUpdateChannel_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -3881,13 +3144,13 @@ namespace EricGameLauncher
             string baseModeText;
             if (ConfigService.IsSystemMode)
             {
-                baseModeText = I18n.T("Settings_SystemMode");
-                ToolTipService.SetToolTip(BtnSwitchStorageMode, I18n.T("Settings_SwitchToPortable"));
+                baseModeText = Text.T("Settings_SystemMode");
+                ToolTipService.SetToolTip(BtnSwitchStorageMode, Text.T("Settings_SwitchToPortable"));
             }
             else
             {
-                baseModeText = I18n.T("Settings_PortableMode");
-                ToolTipService.SetToolTip(BtnSwitchStorageMode, I18n.T("Settings_SwitchToSystem"));
+                baseModeText = Text.T("Settings_PortableMode");
+                ToolTipService.SetToolTip(BtnSwitchStorageMode, Text.T("Settings_SwitchToSystem"));
             }
             var displayText = baseModeText ?? "";
             if (DebugPaths.IsDebug())
@@ -3982,125 +3245,125 @@ namespace EricGameLauncher
         {
             try
             {
-                AnnouncementsTitleText.Text = I18n.T("Announcements_Title");
-                AnnouncementsEmptyText.Text = I18n.T("Announcements_None");
-                ToolTipService.SetToolTip(SearchButton, I18n.T("TitleBar_Search"));
-                SearchBoxFlyout.PlaceholderText = I18n.T("TitleBar_SearchPlaceholder");
-                ToolTipService.SetToolTip(BtnMore, I18n.T("TitleBar_More"));
-                MenuIconSizeItem.Text = I18n.T("Menu_IconSize");
-                MenuAddItem.Text = I18n.T("Menu_Add");
-                if (MenuScanItem != null) MenuScanItem.Text = I18n.T("Menu_Scan");
+                AnnouncementsTitleText.Text = Text.T("Announcements_Title");
+                AnnouncementsEmptyText.Text = Text.T("Announcements_None");
+                ToolTipService.SetToolTip(SearchButton, Text.T("TitleBar_Search"));
+                SearchBoxFlyout.PlaceholderText = Text.T("TitleBar_SearchPlaceholder");
+                ToolTipService.SetToolTip(BtnMore, Text.T("TitleBar_More"));
+                MenuIconSizeItem.Text = Text.T("Menu_IconSize");
+                MenuAddItem.Text = Text.T("Menu_Add");
+                if (MenuScanItem != null) MenuScanItem.Text = Text.T("Menu_Scan");
                 if (ScannerDialog != null)
                 {
-                    if (ScannerDialogTitle != null) ScannerDialogTitle.Text = I18n.T("Scanner_Title");
-                    ToolTipService.SetToolTip(ScannerDialogCloseBtn, I18n.T("Property_Close") ?? "Close");
-                    if (ScannerImportSelectedBtn != null) ScannerImportSelectedBtn.Content = I18n.T("Scanner_ImportSelected");
-                    if (ScannerNewSelectAllBtn != null) ScannerNewSelectAllBtn.Content = ScannerNewGamesList?.Items.Count > 0 && ScannerNewGamesList.SelectedItems.Count == ScannerNewGamesList.Items.Count ? I18n.T("Scanner_DeselectAll") : I18n.T("Scanner_SelectAll");
-                    if (ScannerInvalidSelectAllBtn != null) ScannerInvalidSelectAllBtn.Content = ScannerInvalidGamesList?.Items.Count > 0 && ScannerInvalidGamesList.SelectedItems.Count == ScannerInvalidGamesList.Items.Count ? I18n.T("Scanner_DeselectAll") : I18n.T("Scanner_SelectAll");
-                    if (ScannerLoadingText != null) ScannerLoadingText.Text = I18n.T("Scanner_Loading");
-                    if (ScannerDescriptionText != null) ScannerDescriptionText.Text = I18n.T("Scanner_Description");
+                    if (ScannerDialogTitle != null) ScannerDialogTitle.Text = Text.T("Scanner_Title");
+                    ToolTipService.SetToolTip(ScannerDialogCloseBtn, Text.T("Property_Close"));
+                    if (ScannerImportSelectedBtn != null) ScannerImportSelectedBtn.Content = Text.T("Scanner_ImportSelected");
+                    if (ScannerNewSelectAllBtn != null) ScannerNewSelectAllBtn.Content = ScannerNewGamesList?.Items.Count > 0 && ScannerNewGamesList.SelectedItems.Count == ScannerNewGamesList.Items.Count ? Text.T("Scanner_DeselectAll") : Text.T("Scanner_SelectAll");
+                    if (ScannerInvalidSelectAllBtn != null) ScannerInvalidSelectAllBtn.Content = ScannerInvalidGamesList?.Items.Count > 0 && ScannerInvalidGamesList.SelectedItems.Count == ScannerInvalidGamesList.Items.Count ? Text.T("Scanner_DeselectAll") : Text.T("Scanner_SelectAll");
+                    if (ScannerLoadingText != null) ScannerLoadingText.Text = Text.T("Scanner_Loading");
+                    if (ScannerDescriptionText != null) ScannerDescriptionText.Text = Text.T("Scanner_Description");
                 }
-                MenuSortItem.Text = I18n.T("Menu_Sort");
-                MenuRecycleBinItem.Text = I18n.T("Menu_RecycleBin");
-                if(RecycleTitle != null) RecycleTitle.Text = I18n.T("RecycleBin_Title");
-                if(RecycleDescription != null) RecycleDescription.Text = I18n.T("RecycleBin_Desc");
-                if(BtnEmptyRecycleBin != null) BtnEmptyRecycleBin.Content = I18n.T("RecycleBin_Empty");
-                MenuSettingsItem.Text = I18n.T("Menu_Settings");
-                MenuCheckUpdateItem.Text = I18n.T("Menu_CheckUpdate");
-                MenuPrivacyItem.Text = I18n.T("Privacy_MenuTitle");
-                MenuSystemIntegrationItem.Text = I18n.T("Menu_SystemIntegration");
-                MenuInstallItem.Text = I18n.T("Menu_Install");
-                MenuUninstallItem.Text = I18n.T("Menu_Uninstall");
-                SizeFlyoutTitle.Text = I18n.T("Menu_IconSize");
-                SortTitle.Text = I18n.T("Sort_Title");
-                SortDescription.Text = I18n.T("Sort_Description");
-                SettingsTitle.Text = I18n.T("Settings_Title");
-                SettingsGeneralLabel.Text = I18n.T("Settings_General");
-                SettingsCloseAfterLaunchLabel.Text = I18n.T("Settings_CloseAfterLaunch");
-                SettingsLaunchModeLabel.Text = I18n.T("Settings_LaunchMode");
+                MenuSortItem.Text = Text.T("Menu_Sort");
+                MenuRecycleBinItem.Text = Text.T("Menu_RecycleBin");
+                if(RecycleTitle != null) RecycleTitle.Text = Text.T("RecycleBin_Title");
+                if(RecycleDescription != null) RecycleDescription.Text = Text.T("RecycleBin_Desc");
+                if(BtnEmptyRecycleBin != null) BtnEmptyRecycleBin.Content = Text.T("RecycleBin_Empty");
+                MenuSettingsItem.Text = Text.T("Menu_Settings");
+                MenuCheckUpdateItem.Text = Text.T("Menu_CheckUpdate");
+                MenuPrivacyItem.Text = Text.T("Privacy_MenuTitle");
+                MenuSystemIntegrationItem.Text = Text.T("Menu_SystemIntegration");
+                MenuInstallItem.Text = Text.T("Menu_Install");
+                MenuUninstallItem.Text = Text.T("Menu_Uninstall");
+                SizeFlyoutTitle.Text = Text.T("Menu_IconSize");
+                SortTitle.Text = Text.T("Sort_Title");
+                SortDescription.Text = Text.T("Sort_Description");
+                SettingsTitle.Text = Text.T("Settings_Title");
+                SettingsGeneralLabel.Text = Text.T("Settings_General");
+                SettingsCloseAfterLaunchLabel.Text = Text.T("Settings_CloseAfterLaunch");
+                SettingsLaunchModeLabel.Text = Text.T("Settings_LaunchMode");
                 ComboLaunchMode.SelectionChanged -= ComboLaunchMode_SelectionChanged;
                 ComboLaunchMode.Items.Clear();
-                ComboLaunchMode.Items.Add(new ComboBoxItem { Content = I18n.T("Settings_LaunchMode_Single"), Tag = "single" });
-                ComboLaunchMode.Items.Add(new ComboBoxItem { Content = I18n.T("Settings_LaunchMode_Double"), Tag = "double" });
+                ComboLaunchMode.Items.Add(new ComboBoxItem { Content = Text.T("Settings_LaunchMode_Single"), Tag = "single" });
+                ComboLaunchMode.Items.Add(new ComboBoxItem { Content = Text.T("Settings_LaunchMode_Double"), Tag = "double" });
                 ComboLaunchMode.SelectedIndex = ConfigService.LaunchMode == "double" ? 1 : 0; AppGrid.IsItemClickEnabled = ConfigService.LaunchMode != "double";
                 ComboLaunchMode.SelectionChanged += ComboLaunchMode_SelectionChanged;
-                SettingsUpdateChannelLabel.Text = I18n.T("Settings_UpdateChannel");
+                SettingsUpdateChannelLabel.Text = Text.T("Settings_UpdateChannel");
                 ComboUpdateChannel.SelectionChanged -= ComboUpdateChannel_SelectionChanged;
                 ComboUpdateChannel.Items.Clear();
-                ComboUpdateChannel.Items.Add(I18n.T("Settings_UpdateChannel_Stable"));
-                ComboUpdateChannel.Items.Add(I18n.T("Settings_UpdateChannel_Latest"));
+                ComboUpdateChannel.Items.Add(Text.T("Settings_UpdateChannel_Stable"));
+                ComboUpdateChannel.Items.Add(Text.T("Settings_UpdateChannel_Latest"));
                 ComboUpdateChannel.SelectedIndex = ConfigService.UpdateChannel == "latest" ? 1 : 0;
                 ComboUpdateChannel.SelectionChanged += ComboUpdateChannel_SelectionChanged;
                 if (SettingsUpdateChannelDesc != null)
-                    SettingsUpdateChannelDesc.Text = I18n.T("Settings_UpdateChannel_Desc");
+                    SettingsUpdateChannelDesc.Text = Text.T("Settings_UpdateChannel_Desc");
                 if (SettingsGitHubTokenLabel != null)
-                    SettingsGitHubTokenLabel.Text = I18n.T("Settings_GitHubTokenLabel");
+                    SettingsGitHubTokenLabel.Text = Text.T("Settings_GitHubTokenLabel");
                 if (GitHubTokenBox != null)
-                    GitHubTokenBox.PlaceholderText = I18n.T("Settings_GitHubTokenPlaceholder");
+                    GitHubTokenBox.PlaceholderText = Text.T("Settings_GitHubTokenPlaceholder");
                 if (SettingsGitHubTokenDesc != null)
-                    SettingsGitHubTokenDesc.Text = I18n.T("Settings_GitHubTokenDesc");
+                    SettingsGitHubTokenDesc.Text = Text.T("Settings_GitHubTokenDesc");
                 if (SettingsGitHubTokenLink != null)
-                    SettingsGitHubTokenLink.Content = I18n.T("Settings_GitHubTokenLink");
+                    SettingsGitHubTokenLink.Content = Text.T("Settings_GitHubTokenLink");
                 if (GitHubTokenEditBtn != null)
                 {
-                    GitHubTokenEditBtn.Content = I18n.T("Settings_GitHubTokenEdit");
-                    ToolTipService.SetToolTip(GitHubTokenEditBtn, I18n.T("Settings_GitHubTokenEdit"));
+                    GitHubTokenEditBtn.Content = Text.T("Settings_GitHubTokenEdit");
+                    ToolTipService.SetToolTip(GitHubTokenEditBtn, Text.T("Settings_GitHubTokenEdit"));
                 }
                 if (GitHubTokenSaveBtn != null)
                 {
-                    GitHubTokenSaveBtn.Content = I18n.T("Settings_GitHubTokenSave");
-                    ToolTipService.SetToolTip(GitHubTokenSaveBtn, I18n.T("Settings_GitHubTokenSave"));
+                    GitHubTokenSaveBtn.Content = Text.T("Settings_GitHubTokenSave");
+                    ToolTipService.SetToolTip(GitHubTokenSaveBtn, Text.T("Settings_GitHubTokenSave"));
                 }
                 if (GitHubTokenCancelBtn != null)
                 {
-                    GitHubTokenCancelBtn.Content = I18n.T("Settings_GitHubTokenCancel");
-                    ToolTipService.SetToolTip(GitHubTokenCancelBtn, I18n.T("Settings_GitHubTokenCancel"));
+                    GitHubTokenCancelBtn.Content = Text.T("Settings_GitHubTokenCancel");
+                    ToolTipService.SetToolTip(GitHubTokenCancelBtn, Text.T("Settings_GitHubTokenCancel"));
                 }
                 UpdateGitHubTokenStatus();
-                SettingsDataLocationLabel.Text = I18n.T("Settings_DataLocation");
+                SettingsDataLocationLabel.Text = Text.T("Settings_DataLocation");
                 UpdateStorageModeUI();
-                SettingsMigrateNote.Text = I18n.T("Settings_MigrateNote");
+                SettingsMigrateNote.Text = Text.T("Settings_MigrateNote");
                 try
                 {
                     if (BtnOpenConfigFolder != null)
-                        ToolTipService.SetToolTip(BtnOpenConfigFolder, I18n.T("Settings_OpenConfigFolder"));
+                        ToolTipService.SetToolTip(BtnOpenConfigFolder, Text.T("Settings_OpenConfigFolder"));
                     if (BtnOpenCacheFolder != null)
-                        ToolTipService.SetToolTip(BtnOpenCacheFolder, I18n.T("Settings_OpenCacheFolder"));
+                        ToolTipService.SetToolTip(BtnOpenCacheFolder, Text.T("Settings_OpenCacheFolder"));
                 }
                 catch (Exception ex) { LogService.Write("App", "ApplyLocalization failed", ex); }
 
-                PropTitleLabel.Text = I18n.T("Property_Title");
+                PropTitleLabel.Text = Text.T("Property_Title");
                 try
                 {
                     var closeBtn = PropTitleLabel.Parent is Grid g ? g.Children.OfType<Button>().FirstOrDefault() : null;
                     if (closeBtn != null)
-                        ToolTipService.SetToolTip(closeBtn, I18n.T("Property_Close"));
+                        ToolTipService.SetToolTip(closeBtn, Text.T("Property_Close"));
                 }
                 catch (Exception ex) { LogService.Write("App", "ApplyLocalization failed", ex); }
 
-                PropDisplayNameLabel.Text = I18n.T("Property_DisplayName");
-                PropMainExePathLabel.Text = I18n.T("Property_MainExePath");
-                MenuExeStartMenu.Text = I18n.T("Source_StartMenu");
-                MenuExeDesktop.Text = I18n.T("Source_Desktop");
-                MenuExeBrowse.Text = I18n.T("Property_BrowseFile");
+                PropDisplayNameLabel.Text = Text.T("Property_DisplayName");
+                PropMainExePathLabel.Text = Text.T("Property_MainExePath");
+                MenuExeStartMenu.Text = Text.T("Source_StartMenu");
+                MenuExeDesktop.Text = Text.T("Source_Desktop");
+                MenuExeBrowse.Text = Text.T("Property_BrowseFile");
 
-                MenuAltStartMenu.Text = I18n.T("Source_StartMenu");
-                MenuAltDesktop.Text = I18n.T("Source_Desktop");
-                MenuAltBrowse.Text = I18n.T("Property_BrowseFile");
+                MenuAltStartMenu.Text = Text.T("Source_StartMenu");
+                MenuAltDesktop.Text = Text.T("Source_Desktop");
+                MenuAltBrowse.Text = Text.T("Property_BrowseFile");
 
-                MenuAlongStartMenu.Text = I18n.T("Source_StartMenu");
-                MenuAlongDesktop.Text = I18n.T("Source_Desktop");
-                MenuAlongBrowse.Text = I18n.T("Property_BrowseFile");
+                MenuAlongStartMenu.Text = Text.T("Source_StartMenu");
+                MenuAlongDesktop.Text = Text.T("Source_Desktop");
+                MenuAlongBrowse.Text = Text.T("Property_BrowseFile");
 
-                MenuMgrStartMenu.Text = I18n.T("Source_StartMenu");
-                MenuMgrDesktop.Text = I18n.T("Source_Desktop");
-                MenuMgrBrowse.Text = I18n.T("Property_BrowseFile");
-                PropSubstituteExeLabel.Text = I18n.T("Property_SubstituteExe");
-                PropRunAtLaunchLabel.Text = I18n.T("Property_RunAtLaunch");
-                PropManagerPathLabel.Text = I18n.T("Property_ManagerPath");
-                PropOptionalLabel.Text = I18n.T("Property_Optional");
+                MenuMgrStartMenu.Text = Text.T("Source_StartMenu");
+                MenuMgrDesktop.Text = Text.T("Source_Desktop");
+                MenuMgrBrowse.Text = Text.T("Property_BrowseFile");
+                PropSubstituteExeLabel.Text = Text.T("Property_SubstituteExe");
+                PropRunAtLaunchLabel.Text = Text.T("Property_RunAtLaunch");
+                PropManagerPathLabel.Text = Text.T("Property_ManagerPath");
+                PropOptionalLabel.Text = Text.T("Property_Optional");
 
-                string adminText = I18n.T("Property_Admin");
+                string adminText = Text.T("Property_Admin");
                 PropAdminLabel1.Text = adminText;
                 PropAdminLabel2.Text = adminText;
                 PropAdminLabel3.Text = adminText;
@@ -4110,7 +3373,7 @@ namespace EricGameLauncher
                     var iconGrid = PropIcon?.Parent as Border;
                     var changeIconBtn = iconGrid?.Parent is Grid ig ? ig.Children.OfType<Button>().FirstOrDefault(b => b != null) : null;
                     if (changeIconBtn != null)
-                        ToolTipService.SetToolTip(changeIconBtn, I18n.T("Property_ChangeIcon"));
+                        ToolTipService.SetToolTip(changeIconBtn, Text.T("Property_ChangeIcon"));
                 }
                 catch (Exception ex) { LogService.Write("App", "ApplyLocalization failed", ex); }
 
@@ -4118,36 +3381,36 @@ namespace EricGameLauncher
                 {
                     var exeDropDown = PropExePath?.Parent is Grid eg ? eg.Children.OfType<DropDownButton>().FirstOrDefault() : null;
                     if (exeDropDown != null)
-                        ToolTipService.SetToolTip(exeDropDown, I18n.T("Property_SelectFile"));
+                        ToolTipService.SetToolTip(exeDropDown, Text.T("Property_SelectFile"));
 
                     var mgrDropDown = PropMgrPath?.Parent is Grid mg ? mg.Children.OfType<DropDownButton>().FirstOrDefault() : null;
                     if (mgrDropDown != null)
-                        ToolTipService.SetToolTip(mgrDropDown, I18n.T("Property_SelectFile"));
+                        ToolTipService.SetToolTip(mgrDropDown, Text.T("Property_SelectFile"));
                 }
                 catch (Exception ex) { LogService.Write("App", "ApplyLocalization failed", ex); }
 
-                PropDeleteText.Text = I18n.T("Menu_Delete");
-                ToolTipService.SetToolTip(PropBtnDelete, I18n.T("Property_DeleteItem"));
-                PropSaveText.Text = I18n.T("Property_Save");
+                PropDeleteText.Text = Text.T("Menu_Delete");
+                ToolTipService.SetToolTip(PropBtnDelete, Text.T("Property_DeleteItem"));
+                PropSaveText.Text = Text.T("Property_Save");
                 try
                 {
                     var saveBtnParent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(PropSaveText);
                     var saveBtn = saveBtnParent != null ? Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(saveBtnParent) as Button : null;
                     if (saveBtn != null)
-                        ToolTipService.SetToolTip(saveBtn, I18n.T("Property_Save"));
+                        ToolTipService.SetToolTip(saveBtn, Text.T("Property_Save"));
                 }
                 catch (Exception ex) { LogService.Write("App", "ApplyLocalization failed", ex); }
 
-                EmptyStateText.Text = I18n.T("Empty_Description");
+                EmptyStateText.Text = Text.T("Empty_Description");
 
-                PropCustomMenuLabel.Text = I18n.T("Property_CustomMenu");
-                string titlePlaceholder = I18n.T("Property_CustomTitlePlaceholder");
-                string cmdPlaceholder = I18n.T("Property_CustomCommandPlaceholder");
-                string browseTooltip = I18n.T("Property_BrowseFile");
-                string selectTooltip = I18n.T("Property_SelectFile");
-                string adminTooltip = I18n.T("Property_Admin");
+                PropCustomMenuLabel.Text = Text.T("Property_CustomMenu");
+                string titlePlaceholder = Text.T("Property_CustomTitlePlaceholder");
+                string cmdPlaceholder = Text.T("Property_CustomCommandPlaceholder");
+                string browseTooltip = Text.T("Property_BrowseFile");
+                string selectTooltip = Text.T("Property_SelectFile");
+                string adminTooltip = Text.T("Property_Admin");
 
-                string customItemLabel = I18n.T("Property_CustomItem");
+                string customItemLabel = Text.T("Property_CustomItem");
                 for (int i = 0; i < 10; i++)
                 {
                     _customSlotLabels[i].Text = $"{customItemLabel} {i + 1}";
@@ -4158,10 +3421,10 @@ namespace EricGameLauncher
                     _customAdminLabels[i].Text = adminTooltip;
                 }
 
-                if (MigrationTitle != null) MigrationTitle.Text = I18n.T("Migration_OverlayTitle");
-                if (MigrationSubTitle != null) MigrationSubTitle.Text = I18n.T("Migration_OverlaySubTitle");
+                if (MigrationTitle != null) MigrationTitle.Text = Text.T("Migration_OverlayTitle");
+                if (MigrationSubTitle != null) MigrationSubTitle.Text = Text.T("Migration_OverlaySubTitle");
                 RefreshAnnouncementList();
-                I18n.FlushSummary();
+                Text.FlushSummary();
             }
             catch (Exception ex)
             {
@@ -4174,7 +3437,7 @@ namespace EricGameLauncher
         private void UpdateCustomVisibility()
         {
             int visibleCount = 0;
-            string customItemLabel = I18n.T("Property_CustomItem");
+            string customItemLabel = Text.T("Property_CustomItem");
             for (int i = 0; i < 10; i++)
             {
                 bool isVisible = false;
@@ -4216,11 +3479,11 @@ namespace EricGameLauncher
             var dialog = new ContentDialog
             {
                 Title = hasUpdate
-                    ? (object)I18n.T("Update_DialogTitle")
-                    : I18n.T("Update_NoUpdateContent"),
+                    ? (object)Text.T("Update_DialogTitle")
+                    : Text.T("Update_NoUpdateContent"),
                 Content = contentGrid,
-                PrimaryButtonText = hasUpdate ? I18n.T("Update_DialogConfirm") : (string.IsNullOrEmpty(downloadUrl) ? "" : I18n.T("Update_Repair")),
-                CloseButtonText = isForced ? I18n.T("Update_Exit") : (hasUpdate ? I18n.T("Update_DialogCancel") : I18n.T("Update_OK")),
+                PrimaryButtonText = hasUpdate ? Text.T("Update_DialogConfirm") : (string.IsNullOrEmpty(downloadUrl) ? "" : Text.T("Update_Repair")),
+                CloseButtonText = isForced ? Text.T("Update_Exit") : (hasUpdate ? Text.T("Update_DialogCancel") : Text.T("Update_OK")),
                 DefaultButton = hasUpdate ? ContentDialogButton.Primary : ContentDialogButton.Close,
                 XamlRoot = this.Content.XamlRoot
             };
@@ -4250,7 +3513,7 @@ namespace EricGameLauncher
                 isUpdating = true;
                 dialog.IsPrimaryButtonEnabled = false;
                 dialog.CloseButtonText = "";
-                dialog.PrimaryButtonText = string.Format(I18n.T("Update_DownloadProgress"), 0);
+                dialog.PrimaryButtonText = string.Format(Text.T("Update_DownloadProgress"), 0);
 
                 try
                 {
@@ -4261,7 +3524,7 @@ namespace EricGameLauncher
                             if (msg.StartsWith("DOWNLOAD "))
                             {
                                 var pct = msg.Split(' ')[1];
-                                dialog.PrimaryButtonText = string.Format(I18n.T("Update_DownloadProgress"), pct);
+                                dialog.PrimaryButtonText = string.Format(Text.T("Update_DownloadProgress"), pct);
                             }
                         });
                     });
@@ -4354,11 +3617,11 @@ namespace EricGameLauncher
             }
 
             string channelName = ConfigService.UpdateChannel == "latest"
-                ? I18n.T("Settings_UpdateChannel_Latest")
-                : I18n.T("Settings_UpdateChannel_Stable");
+                ? Text.T("Settings_UpdateChannel_Latest")
+                : Text.T("Settings_UpdateChannel_Stable");
             var channelNote = new TextBlock
             {
-                Text = string.Format(I18n.T("Update_ChannelNote"), channelName),
+                Text = string.Format(Text.T("Update_ChannelNote"), channelName),
                 TextWrapping = TextWrapping.Wrap,
                 FontSize = 12,
                 Opacity = 0.6,
@@ -4382,17 +3645,8 @@ namespace EricGameLauncher
             LogService.Write("App", "VersionText_PointerPressed invoked");
             if (HasUpdate && _pendingUpdate != null)
             {
-                bool isForced = false;
-                var match = System.Text.RegularExpressions.Regex.Match(_pendingUpdate.tag_name, @"(\d+\.\d+\.\d+(\.\d+)?)");
-                if (match.Success)
-                {
-                    Version latestVersion = UpdateService.NormalizeVersion(match.Value);
-                    isForced = UpdateService.CheckForceUpdateAsync(latestVersion);
-                }
-                else
-                {
-                    isForced = UpdateService.CheckForceUpdateAsync();
-                }
+                Version? latestVersion = UpdateService.ExtractVersion(_pendingUpdate.tag_name);
+                bool isForced = UpdateService.CheckForceUpdateAsync(latestVersion);
                 await StartUpdateFlowAsync(_pendingUpdate, isForced);
                 LogService.Write("App", "VersionText_PointerPressed started update flow");
             }

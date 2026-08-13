@@ -161,7 +161,7 @@ public sealed class AnnouncementListItem : INotifyPropertyChanged
     public int TitleMaxLines => IsExpanded ? int.MaxValue : 1;
     public TextTrimming TitleTextTrimming => IsExpanded ? TextTrimming.None : TextTrimming.CharacterEllipsis;
 
-    public string ReadStatusText => IsRead ? I18n.T("Announcements_Read") : I18n.T("Announcements_Unread");
+    public string ReadStatusText => IsRead ? Text.T("Announcements_Read") : Text.T("Announcements_Unread");
     public FontWeight TitleWeight => Microsoft.UI.Text.FontWeights.Normal;
 
     public event PropertyChangedEventHandler? PropertyChanged;
