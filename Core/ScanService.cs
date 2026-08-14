@@ -176,6 +176,36 @@ public static class ScanService
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     }
 
+    public static int DeleteInvalidGames(List<ScannedGame> games)
+    {
+        using (LogService.StartOperation("Scan", "DeleteInvalidGames"))
+        {
+            var processedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            bool canValidateSteam = CanValidateSteam;
+            bool canValidateEpic = CanValidateEpic;
+            var steamInstalledUrls = GetSteamInstalledUrls();
+            var epicInstalledUrls = GetEpicInstalledUrls();
+            var idsToRemove = new List<string>();
+
+            foreach (var game in games)
+            {
+                if (string.IsNullOrEmpty(game.ItemId) || !processedIds.Add(game.ItemId)) continue;
+
+                var item = ItemService.FindItem(game.ItemId, null);
+                if (item == null) continue;
+
+                if (!IsItemStillInvalid(item, canValidateSteam, canValidateEpic, steamInstalledUrls, epicInstalledUrls))
+                    continue;
+
+                idsToRemove.Add(item.Id);
+            }
+
+            int removed = ItemService.RemoveItems(idsToRemove);
+            LogService.Write("Scan", $"DeleteInvalidGames removed={removed}");
+            return removed;
+        }
+    }
+
     private static string NormalizePath(string? p)
     {
         if (string.IsNullOrEmpty(p)) return string.Empty;

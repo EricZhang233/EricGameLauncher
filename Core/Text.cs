@@ -98,7 +98,6 @@ public static class Text
 
     public static List<string> GetAvailableLanguages()
     {
-        try { LogService.Write("App", "GetAvailableLanguages called"); } catch { }
         if (_allTranslations == null)
         {
             Load(_currentLanguage);

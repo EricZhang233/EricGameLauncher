@@ -25,12 +25,12 @@ Use the CLI when the user wants to control their EricGameLauncher library from a
 - `edit --id <id> [options]` — edit an item; run `edit --help` for all supported fields
 - `remove --id <id> | --title <title> [--permanent]` — remove an item (to recycle bin by default)
 - `restore --id <id> | --title <title> | --all` — restore items from the recycle bin
-- `recycle --list | --empty | --clean [--json]` — manage the recycle bin
+- `recycle --list | --mark <id> | --empty | --purge | --clean [--json]` — manage the recycle bin
 - `scan [--steam | --epic | --xbox | --all] [--classify] [--invalid] [--delete-invalid] [--import] [--json]` — scan for installed games
 - `search <query> [--json]` — search by title, path, pinyin, or pinyin initials
 - `sort --list | --id <id> --move-up | --move-down | --swap-with <id>` — reorder items
 - `settings --list | --get <key> | --set <key>=<value>` — view or modify settings
-- `update --check [--channel <stable|latest>] [--json]` — check for updates
+- `update --check [--channel <stable|latest>] [--json] | --install | --repair [--channel <stable|latest>]` — check, install, or force-reinstall updates
 - `announcements --list | --read <id>` — view server announcements
 - `install` / `uninstall` — create or remove desktop and start menu shortcuts
 - `storage --status | --switch <system|portable>` — view or switch storage mode

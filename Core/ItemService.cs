@@ -56,6 +56,11 @@ public static class ItemService
         {
             apply(item);
             var items = ConfigService.LoadItems();
+            var index = items.FindIndex(i => string.Equals(i.Id, item.Id, StringComparison.OrdinalIgnoreCase));
+            if (index >= 0)
+                items[index] = item;
+            else
+                items.Add(item);
             ConfigService.SaveItems(items, ConfigService.LoadRecycleBinItems());
             LogService.Write("Item", $"Edited id={item.Id}");
         }
@@ -92,6 +97,32 @@ public static class ItemService
         }
     }
 
+    public static int RemoveItems(IEnumerable<string> ids)
+    {
+        using (LogService.StartOperation("Item", "RemoveItems"))
+        {
+            var items = ConfigService.LoadItems();
+            var recycleItems = ConfigService.LoadRecycleBinItems();
+            int removed = 0;
+
+            foreach (var id in ids)
+            {
+                var item = FindItem(id, null, items);
+                if (item == null) continue;
+                item.Status = (int)AppItemStatus.Recycled;
+                recycleItems.Add(item);
+                items.Remove(item);
+                removed++;
+            }
+
+            if (removed > 0)
+                ConfigService.SaveItems(items, recycleItems);
+
+            LogService.Write("Item", $"Removed {removed} items");
+            return removed;
+        }
+    }
+
     public static void RestoreItem(string? id, string? title)
     {
         using (LogService.StartOperation("Item", "Restore"))
@@ -120,6 +151,7 @@ public static class ItemService
         {
             var recycleItems = ConfigService.LoadRecycleBinItems();
             var items = ConfigService.LoadItems();
+            int restoredCount = recycleItems.Count;
 
             foreach (var item in recycleItems)
                 item.Status = (int)AppItemStatus.Normal;
@@ -127,7 +159,7 @@ public static class ItemService
             items.AddRange(recycleItems);
             recycleItems.Clear();
             ConfigService.SaveItems(items, recycleItems);
-            LogService.Write("Item", $"Restored all ({items.Count})");
+            LogService.Write("Item", $"Restored all ({restoredCount})");
         }
     }
 
@@ -143,21 +175,26 @@ public static class ItemService
         }
     }
 
-    public static void MarkPendingDeletion(string id)
+    public static bool MarkPendingDeletion(string id)
     {
         using (LogService.StartOperation("Item", "MarkPendingDeletion"))
         {
             var recycleItems = ConfigService.LoadRecycleBinItems();
             var item = recycleItems.FirstOrDefault(i => string.Equals(i.Id, id, StringComparison.OrdinalIgnoreCase));
-            if (item == null) return;
+            if (item == null)
+            {
+                LogService.Write("Item", $"MarkPendingDeletion not found id={id}");
+                return false;
+            }
             item.Status = (int)AppItemStatus.PendingDeletion;
             item.DeletedAt = DateTimeOffset.UtcNow;
             ConfigService.SaveItems(ConfigService.LoadItems(), recycleItems);
             LogService.Write("Item", $"Marked pending deletion id={id}");
+            return true;
         }
     }
 
-    public static void MarkAllPendingDeletion()
+    public static int MarkAllPendingDeletion()
     {
         using (LogService.StartOperation("Item", "MarkAllPendingDeletion"))
         {
@@ -175,6 +212,7 @@ public static class ItemService
                 ConfigService.SaveItems(ConfigService.LoadItems(), recycleItems);
                 LogService.Write("Item", $"Marked {count} items pending deletion");
             }
+            return count;
         }
     }
 

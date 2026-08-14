@@ -265,6 +265,45 @@ public class UpdateService
         }
     }
 
+    public sealed class UpdateCheckResult
+    {
+        public ReleaseInfo? Release { get; set; }
+        public bool HasUpdate { get; set; }
+        public bool IsForced { get; set; }
+    }
+
+    public static bool IsForcedUpdate(ReleaseInfo release)
+    {
+        var latest = ExtractVersion(release.tag_name);
+        return !DebugPaths.IsDebug() && CheckForceUpdateAsync(latest);
+    }
+
+    public static async Task<UpdateCheckResult> CheckUpdateStatusAsync(string channel)
+    {
+        using (LogService.StartOperation("Update", "CheckUpdateStatusAsync"))
+        {
+            var result = new UpdateCheckResult();
+            try
+            {
+                var release = await GetReleaseAsync(channel);
+                if (release == null || string.IsNullOrEmpty(release.tag_name)) return result;
+
+                var latest = ExtractVersion(release.tag_name);
+                bool hasUpdate = latest != null && latest > NormalizeVersion(AppVersion.Version);
+
+                result.Release = release;
+                result.HasUpdate = hasUpdate;
+                result.IsForced = hasUpdate && IsForcedUpdate(release);
+                LogService.Write("Update", $"CheckUpdateStatus End hasUpdate={hasUpdate} isForced={result.IsForced} targetVer={release.tag_name}");
+            }
+            catch (Exception ex)
+            {
+                LogService.Write("Update", "CheckUpdateStatus failed", ex);
+            }
+            return result;
+        }
+    }
+
     public static async Task StartUpdaterAndWaitAsync(string downloadUrl, Action<string>? onProgress = null)
     {
         var sw = Stopwatch.StartNew();

@@ -212,6 +212,53 @@ public static class ShortcutResolver
             }
         }
     }
+
+    public sealed class ResolvedTarget
+    {
+        public string ActualPath = "";
+        public bool IsUrlProtocol;
+        public ShortcutInfo? Info;
+    }
+
+    public static ResolvedTarget ResolveTargetPath(string filePath)
+    {
+        var result = new ResolvedTarget { ActualPath = filePath };
+
+        if (filePath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+        {
+            var info = GetShortcutInfo(filePath);
+            if (info != null)
+            {
+                result.Info = info;
+                if (!string.IsNullOrEmpty(info.AUMID))
+                {
+                    result.ActualPath = $"{LauncherConstants.UwpAppsFolderPrefix}{info.AUMID}";
+                }
+                else if (info.IsUrl && !string.IsNullOrEmpty(info.ActualUrl))
+                {
+                    result.ActualPath = info.ActualUrl;
+                    result.IsUrlProtocol = true;
+                }
+                else if (!string.IsNullOrEmpty(info.TargetPath))
+                {
+                    result.ActualPath = info.TargetPath;
+                }
+            }
+        }
+        else if (filePath.EndsWith(".url", StringComparison.OrdinalIgnoreCase))
+        {
+            var info = GetUrlFileInfo(filePath);
+            if (info != null && !string.IsNullOrEmpty(info.ActualUrl))
+            {
+                result.Info = info;
+                result.ActualPath = info.ActualUrl;
+                result.IsUrlProtocol = true;
+            }
+        }
+
+        LogService.Write("Shell", $"ResolveTargetPath filePath={filePath} actualPath={result.ActualPath} isUrlProtocol={result.IsUrlProtocol}");
+        return result;
+    }
 }
 
 public static class ShortcutScanner
@@ -582,6 +629,6 @@ public static class SystemGuard
                 MB_ICONERROR);
         }
         catch { }
-        Environment.Exit(0);
+        Environment.Exit(1);
     }
 }

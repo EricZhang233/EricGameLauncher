@@ -436,12 +436,36 @@ public static class CliService
     {
         try
         {
-            if (opts.ContainsKey("empty"))
+            if (opts.ContainsKey("purge"))
             {
                 var recycleItems = ConfigService.LoadRecycleBinItems();
                 var count = recycleItems.Count;
                 ItemService.EmptyRecycle();
                 WriteLine(string.Format(Text.Cli("MsgRecycleEmptied"), count), ConsoleColor.Green);
+                return 0;
+            }
+
+            if (opts.ContainsKey("mark"))
+            {
+                var markId = opts.GetValueOrDefault("mark");
+                if (string.IsNullOrEmpty(markId) || markId == "true")
+                {
+                    WriteLine(Text.Cli("ErrMarkIdRequired"), ConsoleColor.Red);
+                    return 1;
+                }
+                if (!ItemService.MarkPendingDeletion(markId))
+                {
+                    WriteLine(Text.Cli("ErrNotInRecycle"), ConsoleColor.Red);
+                    return 1;
+                }
+                WriteLine(string.Format(Text.Cli("MsgMarkedPending"), markId), ConsoleColor.Green);
+                return 0;
+            }
+
+            if (opts.ContainsKey("empty"))
+            {
+                var count = ItemService.MarkAllPendingDeletion();
+                WriteLine(string.Format(Text.Cli("MsgMarkedAllPending"), count), ConsoleColor.Green);
                 return 0;
             }
 
@@ -535,12 +559,7 @@ public static class CliService
 
                 if (deleteInvalid)
                 {
-                    var count = invalidGames.Count;
-                    foreach (var game in invalidGames)
-                    {
-                        if (!string.IsNullOrEmpty(game.ItemId))
-                            ItemService.RemoveItem(game.ItemId, null);
-                    }
+                    var count = ScanService.DeleteInvalidGames(invalidGames);
                     WriteLine(string.Format(Text.Cli("MsgRemovedInvalid"), count), ConsoleColor.Green);
                     return 0;
                 }
@@ -767,88 +786,38 @@ public static class CliService
                 var key = parts[0].Trim();
                 var value = parts[1].Trim();
 
-                switch (key.ToLowerInvariant())
+                if (key.Equals("lang", StringComparison.OrdinalIgnoreCase))
                 {
-                    case "launchmode":
-                        if (value != "single" && value != "double")
-                        {
-                            WriteLine(Text.Cli("ErrLaunchMode"), ConsoleColor.Red);
-                            return 1;
-                        }
-                        ConfigService.LaunchMode = value;
-                        break;
-                    case "closeafterlaunch":
-                        if (value != "true" && value != "false")
-                        {
-                            WriteLine(Text.Cli("ErrCloseAfterLaunch"), ConsoleColor.Red);
-                            return 1;
-                        }
-                        ConfigService.CloseAfterLaunch = bool.Parse(value);
-                        break;
-                    case "iconsize":
-                        if (!double.TryParse(value, out var iconSize) || iconSize < 32 || iconSize > 512)
-                        {
-                            WriteLine(Text.Cli("ErrIconSize"), ConsoleColor.Red);
-                            return 1;
-                        }
-                        ConfigService.IconSize = iconSize;
-                        break;
-                    case "updatechannel":
-                        if (value != "stable" && value != "latest")
-                        {
-                            WriteLine(Text.Cli("ErrUpdateChannel"), ConsoleColor.Red);
-                            return 1;
-                        }
-                        ConfigService.UpdateChannel = value;
-                        break;
-                    case "githubtoken":
-                        ConfigService.GitHubToken = value;
-                        break;
-                    case "appiconpath":
-                        ConfigService.AppIconPath = value;
-                        break;
-                    case "apptitle":
-                        ConfigService.AppTitle = value;
-                        break;
-                    case "lang":
-                        if (value != "Zh-CN" && value != "EN")
-                        {
-                            WriteLine(Text.Cli("ErrLang"), ConsoleColor.Red);
-                            return 1;
-                        }
-                        _lang = value;
-                        Text.Load(_lang);
-                        break;
-                    case "storagemode":
-                        if (value != "system" && value != "portable")
-                        {
-                            WriteLine(Text.Cli("ErrStorageSwitch"), ConsoleColor.Red);
-                            return 1;
-                        }
-                        await ConfigService.SwitchStorageModeAsync(value == "system");
-                        break;
-                    case "windowx":
-                        if (!int.TryParse(value, out var wx)) { WriteLine(Text.Cli("ErrWindowX"), ConsoleColor.Red); return 1; }
-                        { var (_, y, w, h) = ConfigService.GetWindowBounds(); ConfigService.SetWindowBounds(wx, y, w, h); }
-                        break;
-                    case "windowy":
-                        if (!int.TryParse(value, out var wy)) { WriteLine(Text.Cli("ErrWindowY"), ConsoleColor.Red); return 1; }
-                        { var (x, _, w, h) = ConfigService.GetWindowBounds(); ConfigService.SetWindowBounds(x, wy, w, h); }
-                        break;
-                    case "windowwidth":
-                        if (!int.TryParse(value, out var ww) || ww < 400) { WriteLine(Text.Cli("ErrWindowWidth"), ConsoleColor.Red); return 1; }
-                        { var (x, y, _, h) = ConfigService.GetWindowBounds(); ConfigService.SetWindowBounds(x, y, ww, h); }
-                        break;
-                    case "windowheight":
-                        if (!int.TryParse(value, out var wh) || wh < 300) { WriteLine(Text.Cli("ErrWindowHeight"), ConsoleColor.Red); return 1; }
-                        { var (x, y, w, _) = ConfigService.GetWindowBounds(); ConfigService.SetWindowBounds(x, y, w, wh); }
-                        break;
-                    default:
-                        WriteLine(string.Format(Text.Cli("ErrUnknownSetting"), key), ConsoleColor.Red);
+                    if (value != "Zh-CN" && value != "EN")
+                    {
+                        WriteLine(Text.Cli("ErrLang"), ConsoleColor.Red);
                         return 1;
+                    }
+                    _lang = value;
+                    Text.Load(_lang);
+                }
+                else if (key.Equals("storagemode", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (value != "system" && value != "portable")
+                    {
+                        WriteLine(Text.Cli("ErrStorageSwitch"), ConsoleColor.Red);
+                        return 1;
+                    }
+                    await ConfigService.SwitchStorageModeAsync(value == "system");
+                }
+                else
+                {
+                    var errKey = ConfigService.SetSetting(key, value);
+                    if (errKey != null)
+                    {
+                        if (errKey == "ErrUnknownSetting")
+                            WriteLine(string.Format(Text.Cli(errKey), key), ConsoleColor.Red);
+                        else
+                            WriteLine(Text.Cli(errKey), ConsoleColor.Red);
+                        return 1;
+                    }
                 }
 
-                ConfigService.SaveAll();
                 WriteLine(string.Format(Text.Cli("MsgSetSetting"), key, value), ConsoleColor.Green);
                 try { LogService.Write("CLI", $"Set setting {key}={value}"); } catch { }
                 return 0;
@@ -907,6 +876,12 @@ public static class CliService
                 return 1;
             }
 
+            if (opts.ContainsKey("install"))
+                return await CmdUpdateInstall(channel);
+
+            if (opts.ContainsKey("repair"))
+                return await CmdUpdateRepair(channel);
+
             WriteLine(string.Format(Text.Cli("MsgCheckingUpdate"), channel), ConsoleColor.Cyan);
 
             var release = await UpdateService.CheckForUpdateAsync(channel);
@@ -959,6 +934,64 @@ public static class CliService
             try { LogService.Write("CLI", "CmdUpdate failed", ex); } catch { }
             return 1;
         }
+    }
+
+    private static async Task<int> CmdUpdateInstall(string channel)
+    {
+        WriteLine(string.Format(Text.Cli("MsgCheckingUpdate"), channel), ConsoleColor.Cyan);
+        var release = await UpdateService.CheckForUpdateAsync(channel);
+        if (release == null)
+        {
+            WriteLine(string.Format(Text.Cli("MsgNoUpdates"), AppVersion.Version), ConsoleColor.Green);
+            return 0;
+        }
+
+        string downloadUrl = release.assets?.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.browser_download_url ?? "";
+        if (string.IsNullOrEmpty(downloadUrl))
+        {
+            WriteLine(Text.Cli("ErrNoDownloadUrl"), ConsoleColor.Red);
+            return 1;
+        }
+
+        WriteLine(string.Format(Text.Cli("MsgUpgradeStart"), release.tag_name), ConsoleColor.Green);
+        await StartUpdaterWithProgressAsync(downloadUrl);
+        WriteLine(Text.Cli("MsgUpgradeReady"), ConsoleColor.Green);
+        return 0;
+    }
+
+    private static async Task<int> CmdUpdateRepair(string channel)
+    {
+        WriteLine(string.Format(Text.Cli("MsgCheckingUpdate"), channel), ConsoleColor.Cyan);
+        var release = await UpdateService.GetReleaseAsync(channel);
+        if (release == null)
+        {
+            WriteLine(Text.Cli("ErrNoRelease"), ConsoleColor.Red);
+            return 1;
+        }
+
+        string downloadUrl = release.assets?.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.browser_download_url ?? "";
+        if (string.IsNullOrEmpty(downloadUrl))
+        {
+            WriteLine(Text.Cli("ErrNoDownloadUrl"), ConsoleColor.Red);
+            return 1;
+        }
+
+        WriteLine(string.Format(Text.Cli("MsgRepairStart"), release.tag_name), ConsoleColor.Green);
+        await StartUpdaterWithProgressAsync(downloadUrl);
+        WriteLine(Text.Cli("MsgUpgradeReady"), ConsoleColor.Green);
+        return 0;
+    }
+
+    private static async Task StartUpdaterWithProgressAsync(string downloadUrl)
+    {
+        await UpdateService.StartUpdaterAndWaitAsync(downloadUrl, msg =>
+        {
+            if (msg.StartsWith("DOWNLOAD "))
+            {
+                var pct = msg.Split(' ')[1];
+                WriteLine(string.Format(Text.Cli("MsgUpgradeProgress"), pct));
+            }
+        });
     }
 
     private static int CmdVersion()
@@ -1327,7 +1360,7 @@ public static class CliService
                                                                        "Help_CmdEditDesc",           "Help_Edit_Text"),
         new("remove",         ["--id", "--title", "--permanent"],      "Help_CmdRemoveDesc",         "Help_Remove_Text"),
         new("restore",        ["--id", "--title", "--all"],            "Help_CmdRestoreDesc",        "Help_Restore_Text"),
-        new("recycle",        ["--list", "--empty", "--clean", "--json"],
+        new("recycle",        ["--list", "--mark", "--empty", "--purge", "--clean", "--json"],
                                                                        "Help_CmdRecycleDesc",        "Help_Recycle_Text"),
         new("scan",           ["--steam", "--epic", "--xbox", "--all", "--classify", "--invalid", "--delete-invalid", "--import", "--json"],
                                                                        "Help_CmdScanDesc",           "Help_Scan_Text"),
@@ -1335,7 +1368,7 @@ public static class CliService
         new("sort",           ["--list", "--id", "--move-up", "--move-down", "--swap-with", "--json"],
                                                                        "Help_CmdSortDesc",           "Help_Sort_Text"),
         new("settings",       ["--list", "--get", "--set", "--json"],  "Help_CmdSettingsDesc",       "Help_Settings_Text"),
-        new("update",         ["--check", "--channel", "--json"],      "Help_CmdUpdateDesc",         "Help_Update_Text"),
+        new("update",         ["--check", "--install", "--repair", "--channel", "--json"],      "Help_CmdUpdateDesc",         "Help_Update_Text"),
         new("announcements",  ["--list", "--read", "--json"],          "Help_CmdAnnouncementsDesc",  "Help_Announcements_Text"),
         new("install",        [],                                       "Help_CmdInstallDesc",        "Help_Install_Text"),
         new("uninstall",      [],                                       "Help_CmdUninstallDesc",      "Help_Uninstall_Text"),
