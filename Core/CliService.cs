@@ -893,6 +893,7 @@ public static class CliService
                     currentVersion = AppVersion.Version,
                     channel,
                     hasUpdate = release != null,
+                    latestReleaseUrl = UpdateService.LatestReleaseUrl,
                     release = release == null ? null : new
                     {
                         release.tag_name,
@@ -915,6 +916,7 @@ public static class CliService
                 WriteLine(string.Format(Text.Cli("LblUpdateCurrent"), AppVersion.Version));
                 WriteLine(string.Format(Text.Cli("LblUpdateLatest"), release.tag_name, release.name));
                 WriteLine(string.Format(Text.Cli("LblUpdateUrl"), release.html_url));
+                WriteLine(string.Format(Text.Cli("LblReleaseNotesUrl"), UpdateService.LatestReleaseUrl));
                 if (release.prerelease)
                     WriteLine(Text.Cli("LblUpdatePrerelease"), ConsoleColor.DarkYellow);
                 if (!string.IsNullOrEmpty(release.body))
