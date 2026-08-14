@@ -403,7 +403,9 @@ CLI:
   LblUpdateCurrent: "  Current: {0}"
   LblUpdateLatest: "  Latest:  {0} ({1})"
   LblUpdateUrl: "  URL:     {0}"
+  LblReleaseNotesUrl: "  Changelog: {0}"
   LblUpdatePrerelease: "  Type:    Pre-release"
+  LblReleaseNotes: "Release Notes:"
 
   # == Scan Labels ==
   ScanSteam: "Scanning Steam..."

@@ -52,6 +52,7 @@ public class UpdateService
     }
     private const string AllReleasesApiUrl = "https://api.github.com/repos/EricZhang233/EricGameLauncher/releases?per_page=100";
     private const string MirrorPrefix = "https://ghproxy.com/";
+    public const string LatestReleaseUrl = "https://github.com/EricZhang233/EricGameLauncher/releases/latest";
 
     public class ReleaseInfo
     {
