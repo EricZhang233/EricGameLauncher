@@ -364,6 +364,7 @@ public static class ConfigService
             }
             _itemsData.Items = items.Select(AppItemDto.FromViewModel).ToList();
             _itemsData.RecycleBinItems = recycleItems.Select(AppItemDto.FromViewModel).ToList();
+            SaveItemsData();
         }
         if (triggerEvent) DataChanged?.Invoke();
         LogService.Write("Config", $"SaveItems End duration={sw.ElapsedMilliseconds}ms");
@@ -781,14 +782,9 @@ public static class ConfigService
 
     public static (int X, int Y, int Width, int Height) GetWindowBounds()
     {
-        try { LogService.Write("Config", "GetWindowBounds called"); } catch { }
         var bounds = _settings?.Window;
         if (bounds != null)
-        {
-            try { LogService.Write("Config", $"GetWindowBounds returning x={bounds.X} y={bounds.Y} w={bounds.Width} h={bounds.Height}"); } catch { }
             return (bounds.X, bounds.Y, bounds.Width, bounds.Height);
-        }
-        try { LogService.Write("Config", "GetWindowBounds returning default"); } catch { }
         return (-1, -1, 950, 650);
     }
 
@@ -800,6 +796,60 @@ public static class ConfigService
             _settings.Window = new WindowBoundsInfo { X = x, Y = y, Width = width, Height = height };
             try { LogService.Write("Config", "SetWindowBounds applied"); } catch { }
         }
+    }
+
+    public static string? SetSetting(string key, string value)
+    {
+        switch (key.ToLowerInvariant())
+        {
+            case "launchmode":
+                if (value != "single" && value != "double") return "ErrLaunchMode";
+                LaunchMode = value;
+                break;
+            case "closeafterlaunch":
+                if (value != "true" && value != "false") return "ErrCloseAfterLaunch";
+                CloseAfterLaunch = bool.Parse(value);
+                break;
+            case "iconsize":
+                if (!double.TryParse(value, out var iconSize) || iconSize < 32 || iconSize > 512) return "ErrIconSize";
+                IconSize = iconSize;
+                break;
+            case "updatechannel":
+                if (value != "stable" && value != "latest") return "ErrUpdateChannel";
+                UpdateChannel = value;
+                break;
+            case "githubtoken":
+                GitHubToken = value;
+                break;
+            case "appiconpath":
+                AppIconPath = value;
+                break;
+            case "apptitle":
+                AppTitle = value;
+                break;
+            case "windowx":
+                if (!int.TryParse(value, out var wx)) return "ErrWindowX";
+                { var (_, y, w, h) = GetWindowBounds(); SetWindowBounds(wx, y, w, h); }
+                break;
+            case "windowy":
+                if (!int.TryParse(value, out var wy)) return "ErrWindowY";
+                { var (x, _, w, h) = GetWindowBounds(); SetWindowBounds(x, wy, w, h); }
+                break;
+            case "windowwidth":
+                if (!int.TryParse(value, out var ww) || ww < 400) return "ErrWindowWidth";
+                { var (x, y, _, h) = GetWindowBounds(); SetWindowBounds(x, y, ww, h); }
+                break;
+            case "windowheight":
+                if (!int.TryParse(value, out var wh) || wh < 300) return "ErrWindowHeight";
+                { var (x, y, w, _) = GetWindowBounds(); SetWindowBounds(x, y, w, wh); }
+                break;
+            default:
+                return "ErrUnknownSetting";
+        }
+
+        SaveAll();
+        LogService.Write("Config", $"SetSetting {key}={value}");
+        return null;
     }
 
     private static string EncryptToken(string plainText)

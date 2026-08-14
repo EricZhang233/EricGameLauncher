@@ -58,9 +58,7 @@ public static class ProcessRunner
 
                     if (!string.IsNullOrEmpty(arguments))
                     {
-                        var argList = arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-                                               .Select(a => $"\"{a.Trim('"').Replace("\"", "\\\"")}\"");
-                        psi.Arguments = string.Join(" ", argList);
+                        psi.Arguments = arguments;
                     }
                     if (admin) psi.Verb = "runas";
                 }

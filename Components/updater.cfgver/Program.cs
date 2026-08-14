@@ -1,9 +1,5 @@
 ﻿using System;
 using System.IO;
-using System.Text;
-using System.Runtime.CompilerServices;
-using System.Threading;
-using System.Threading.Channels;
 
 using System.Runtime.Versioning;
 using YamlDotNet.Serialization;
@@ -14,28 +10,23 @@ namespace updater.cfgver
     class Program
     {
         private static readonly object _logLock = new();
+        private static readonly string _logFile = Path.Combine(
+            Path.GetTempPath(), "eric", "ericgamelauncher", "log",
+            $"updater.cfgver.{DateTime.Now:yyyyMMdd-HHmmss}.log");
 
         private static void Log(string message)
         {
             try
             {
-                LogService.Write("UpdaterCfg", message);
+                Directory.CreateDirectory(Path.GetDirectoryName(_logFile)!);
+                var line = $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}Z UpdaterCfg/INFO] | {message}";
+                lock (_logLock) { File.AppendAllText(_logFile, line + Environment.NewLine); }
             }
-            catch (Exception ex)
-            {
-                try
-                {
-                    string fbdir = Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher", "log");
-                    Directory.CreateDirectory(fbdir);
-                    string fb = Path.Combine(fbdir, "updater.cfgver.fallback.log");
-                    File.AppendAllText(fb, ex.ToString() + Environment.NewLine);
-                }
-                catch { }
-            }
+            catch { }
         }
 
         [SupportedOSPlatform("windows")]
-        static void Main(string[] args)
+        static int Main(string[] args)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             Log($"Start argsCount={args.Length}");
@@ -43,7 +34,7 @@ namespace updater.cfgver
             {
                 Console.WriteLine("Usage: updater.cfgver.exe <items_path>");
                 Log("InvalidArgs");
-                return;
+                return 2;
             }
 
             string inputPath = args[0];
@@ -57,7 +48,7 @@ namespace updater.cfgver
             if (!File.Exists(inputPath))
             {
                 Log("InputMissing");
-                return;
+                return 3;
             }
 
             List<object>? rulesList = null;
@@ -73,9 +64,9 @@ namespace updater.cfgver
                     rulesList = deserializer.Deserialize<List<object>>(rulesYaml);
                 }
             }
-            catch (Exception ex) { Log($"RulesLoadFailed info={ex}"); return; }
+            catch (Exception ex) { Log($"RulesLoadFailed info={ex}"); return 4; }
 
-            if (rulesList == null) return;
+            if (rulesList == null) return 5;
 
             Dictionary<object, object>? configRoot;
             try
@@ -84,9 +75,9 @@ namespace updater.cfgver
                 var deserializer = new DeserializerBuilder().Build();
                 configRoot = deserializer.Deserialize<Dictionary<object, object>>(configYaml);
             }
-            catch (Exception ex) { Log($"ConfigReadFailed info={ex}"); return; }
+            catch (Exception ex) { Log($"ConfigReadFailed info={ex}"); return 6; }
 
-            if (configRoot == null) return;
+            if (configRoot == null) return 7;
 
             int currentVersion = 1;
             if (configRoot.TryGetValue("version", out var verObj) && verObj != null)
@@ -216,14 +207,18 @@ namespace updater.cfgver
                 configRoot["version"] = currentVersion;
             }
 
-            if (!migratedAny) return;
+            if (!migratedAny)
+            {
+                Log("NoRuleApplied");
+                return 10;
+            }
 
             string backupPath = $"{inputPath}.bak.v{startVersion}";
             try
             {
                 File.Copy(inputPath, backupPath, true);
             }
-            catch (Exception ex) { Log($"BackupFailed info={ex}"); return; }
+            catch (Exception ex) { Log($"BackupFailed info={ex}"); return 8; }
 
             try
             {
@@ -231,8 +226,9 @@ namespace updater.cfgver
                 string newYaml = serializer.Serialize(configRoot);
                 File.WriteAllText(inputPath, newYaml);
             }
-            catch (Exception ex) { Log($"WriteFailed info={ex}"); }
+            catch (Exception ex) { Log($"WriteFailed info={ex}"); return 9; }
             Log($"End duration={sw.ElapsedMilliseconds}ms modified={(migratedAny ? "yes" : "no")}");
+            return 0;
         }
 
         private static object DeepCopyYaml(object obj)
@@ -242,174 +238,4 @@ namespace updater.cfgver
             return deserializer.Deserialize<object>(serializer.Serialize(obj));
         }
     }
-
-        internal static class LogService
-        {
-            private const long MaxLogFileBytes = 5 * 1024 * 1024;
-            private static string LogDir => Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher", "log");
-            private static string LogFilePath => Path.Combine(LogDir, "updater.cfgver.log");
-
-            internal enum LogLevel { Debug, Info, Warn, Error }
-
-            private sealed class LogEntry
-            {
-                public DateTime Timestamp;
-                public string? Tag;
-                public string? Message;
-                public Exception? Exception;
-                public string? OperationId;
-                public LogLevel Level;
-                public string? Caller;
-                public string? CallerFile;
-                public int CallerLine;
-            }
-
-            private static readonly System.Collections.Concurrent.ConcurrentQueue<LogEntry> _entryPool = new();
-            private static LogEntry RentEntry() => _entryPool.TryDequeue(out var e) ? e : new LogEntry();
-            private static void ReturnEntry(LogEntry e)
-            {
-                e.Timestamp = default;
-                e.Tag = null;
-                e.Message = null;
-                e.Exception = null;
-                e.OperationId = null;
-                e.Level = default;
-                e.Caller = null;
-                e.CallerFile = null;
-                e.CallerLine = 0;
-                _entryPool.Enqueue(e);
-            }
-
-            private static readonly Channel<LogEntry> _channel;
-            private static readonly CancellationTokenSource _cts = new();
-            private static readonly Task _writerTask;
-
-            static LogService()
-            {
-                var options = new UnboundedChannelOptions { SingleReader = true, SingleWriter = false };
-                _channel = Channel.CreateUnbounded<LogEntry>(options);
-                _writerTask = Task.Run(WriteLoop);
-            }
-
-            internal static void Write(
-                string tag,
-                string message,
-                Exception? ex = null,
-                string? operationId = null,
-                LogLevel level = LogLevel.Info,
-                [CallerMemberName] string caller = "",
-                [CallerFilePath] string callerFile = "",
-                [CallerLineNumber] int callerLine = 0)
-            {
-                try
-                {
-                    if (string.IsNullOrEmpty(tag)) tag = "LOG";
-                    if (message == null) message = string.Empty;
-
-                    string callerFileName = string.IsNullOrEmpty(callerFile) ? string.Empty : Path.GetFileName(callerFile);
-                    var entry = RentEntry();
-                    entry.Timestamp = DateTime.UtcNow;
-                    entry.Tag = tag;
-                    entry.Message = message;
-                    entry.Exception = ex;
-                    entry.OperationId = operationId;
-                    entry.Level = level;
-                    entry.Caller = caller;
-                    entry.CallerFile = callerFileName;
-                    entry.CallerLine = callerLine;
-                    _channel.Writer.TryWrite(entry);
-                }
-                catch { }
-            }
-
-            private static async Task WriteLoop()
-            {
-                try { Directory.CreateDirectory(LogDir); } catch { }
-
-                StreamWriter? writer = null;
-                try
-                {
-                    while (await _channel.Reader.WaitToReadAsync(_cts.Token))
-                    {
-                        if (writer == null)
-                        {
-                            RotateIfNeeded(LogFilePath);
-                            writer = new StreamWriter(LogFilePath, append: true) { AutoFlush = false };
-                        }
-
-                        var sb = new StringBuilder(512);
-                        while (_channel.Reader.TryRead(out var entry))
-                        {
-                            sb.Clear();
-                            sb.Append('[');
-                            sb.Append(entry.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff"));
-                            sb.Append("Z ");
-                            sb.Append(entry.Tag);
-                            sb.Append('/');
-                            sb.Append(entry.Level.ToString().ToUpperInvariant());
-                            sb.Append("] ");
-                            sb.Append(entry.CallerFile);
-                            sb.Append(':');
-                            sb.Append(entry.CallerLine);
-                            sb.Append('.');
-                            sb.Append(entry.Caller);
-                            if (!string.IsNullOrEmpty(entry.OperationId))
-                            {
-                                sb.Append(" op=");
-                                sb.Append(entry.OperationId);
-                            }
-                            sb.Append(" | ");
-                            sb.Append(entry.Message);
-                            if (entry.Exception != null)
-                            {
-                                try
-                                {
-                                    sb.Append(" Exception=");
-                                    sb.Append(entry.Exception.GetType().FullName);
-                                    sb.Append(':');
-                                    sb.Append(entry.Exception.Message);
-                                    sb.Append(" Stack=");
-                                    sb.Append(entry.Exception.StackTrace);
-                                }
-                                catch { }
-                            }
-
-                            await writer.WriteLineAsync(sb.ToString());
-                            try { ReturnEntry(entry); } catch { }
-                        }
-
-                        await writer.FlushAsync();
-                    }
-                }
-                catch (OperationCanceledException) { }
-                finally
-                {
-                    if (writer != null)
-                    {
-                        try { await writer.DisposeAsync(); } catch { }
-                    }
-                }
-            }
-
-            private static void RotateIfNeeded(string path)
-            {
-                try
-                {
-                    if (!File.Exists(path)) return;
-                    var fi = new FileInfo(path);
-                    if (fi.Length <= MaxLogFileBytes) return;
-                    string archive = path + "." + DateTime.UtcNow.ToString("yyyyMMddHHmmss");
-                    File.Move(path, archive);
-                }
-                catch { }
-            }
-
-            internal static void FlushAndStop()
-            {
-                _channel.Writer.Complete();
-                _cts.Cancel();
-                try { _writerTask.Wait(TimeSpan.FromSeconds(3)); } catch { }
-                try { _writerTask.Dispose(); } catch { }
-            }
-        }
 }

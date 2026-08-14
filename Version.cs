@@ -7,7 +7,6 @@
         {
             get
             {
-                try { LogService.Write("App", $"DisplayVersion accessed: {Version}"); } catch { }
                 return $"Ver.{Version}";
             }
         }

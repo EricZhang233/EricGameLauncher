@@ -32,7 +32,15 @@ internal static class SingleInstance
 
                 _handle = CreateMutex(IntPtr.Zero, true, MutexName);
                 int error = Marshal.GetLastWin32Error();
-                _isFirst = _handle != IntPtr.Zero && error != ERROR_ALREADY_EXISTS;
+                if (_handle == IntPtr.Zero)
+                {
+                    LogService.Write("App", $"SingleInstance CreateMutex failed error={error}, proceeding as first instance");
+                    _isFirst = true;
+                }
+                else
+                {
+                    _isFirst = error != ERROR_ALREADY_EXISTS;
+                }
                 LogService.Write("App", $"SingleInstance TryAcquire name={MutexName} first={_isFirst} error={error}");
                 return _isFirst;
             }

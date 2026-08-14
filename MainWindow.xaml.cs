@@ -431,13 +431,11 @@ namespace EricGameLauncher
                 {
                     LogService.Write("Update", $"QuietCheck Start skipDelay={skipDelay}");
 
-                    var release = await UpdateService.CheckForUpdateAsync(ConfigService.UpdateChannel);
-
-                    bool isForced = false;
-                    if (release != null)
+                    var status = await UpdateService.CheckUpdateStatusAsync(ConfigService.UpdateChannel);
+                    if (status.HasUpdate && status.Release != null)
                     {
-                        Version? latestVersion = UpdateService.ExtractVersion(release.tag_name);
-                        isForced = UpdateService.CheckForceUpdateAsync(latestVersion);
+                        var release = status.Release;
+                        bool isForced = status.IsForced;
 
                         _pendingUpdate = release;
 
@@ -472,28 +470,20 @@ namespace EricGameLauncher
             using (LogService.StartOperation("Update", "ManualCheck"))
             {
                 LogService.Write("Update", "ManualCheck Start");
-                var release = await UpdateService.GetReleaseAsync(ConfigService.UpdateChannel);
-                if (release != null)
+                var status = await UpdateService.CheckUpdateStatusAsync(ConfigService.UpdateChannel);
+                if (status.Release != null)
                 {
-                    bool hasUpdate = false;
-                    Version? latestVersion = UpdateService.ExtractVersion(release.tag_name);
-                    if (latestVersion != null)
+                    if (status.HasUpdate)
                     {
-                        Version currentVersion = UpdateService.NormalizeVersion(AppVersion.Version);
-                        hasUpdate = latestVersion > currentVersion;
-                    }
-
-                    if (hasUpdate)
-                    {
+                        var release = status.Release;
                         _pendingUpdate = release;
-                        bool isForced = DebugPaths.IsDebug() ? false : UpdateService.CheckForceUpdateAsync(latestVersion);
 
                         DispatcherQueue.TryEnqueue(() =>
                         {
                             HasUpdate = true;
                         });
 
-                        if (isForced)
+                        if (status.IsForced)
                         {
                             await StartUpdateFlowAsync(release, true);
                         }
@@ -504,7 +494,7 @@ namespace EricGameLauncher
                     }
                     else
                     {
-                        await ShowReleaseDialogAsync(release, hasUpdate: false);
+                        await ShowReleaseDialogAsync(status.Release, hasUpdate: false);
                     }
                 }
                 else
@@ -1582,25 +1572,7 @@ namespace EricGameLauncher
         {
             try
             {
-                var processedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                bool canValidateSteam = ScanService.CanValidateSteam;
-                bool canValidateEpic = ScanService.CanValidateEpic;
-                var steamInstalledUrls = ScanService.GetSteamInstalledUrls();
-                var epicInstalledUrls = ScanService.GetEpicInstalledUrls();
-
-                foreach (var game in games)
-                {
-                    if (string.IsNullOrEmpty(game.ItemId) || !processedIds.Add(game.ItemId)) continue;
-
-                    var itemToDelete = _allItems.FirstOrDefault(a => a.Id == game.ItemId);
-                    if (itemToDelete == null) continue;
-
-                    if (!ScanService.IsItemStillInvalid(itemToDelete, canValidateSteam, canValidateEpic, steamInstalledUrls, epicInstalledUrls))
-                        continue;
-
-                    ItemService.RemoveItem(itemToDelete.Id, null);
-                }
-
+                ScanService.DeleteInvalidGames(games);
                 SyncFromCore();
             }
             catch (Exception ex) { LogService.Write("App", "DeleteInvalidGames failed", ex); }
@@ -2064,45 +2036,11 @@ namespace EricGameLauncher
                 }
                 bool isStoreApp = filePath.StartsWith("shell:AppsFolder\\");
 
-
-                string actualPath = filePath;
-                ShortcutInfo? shortcutInfo = null;
-                bool isUrlProtocol = false;
-                bool extractFromLnk = false;
-
-                if (filePath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
-                {
-                    shortcutInfo = ShortcutResolver.GetShortcutInfo(filePath);
-                    if (shortcutInfo != null)
-                    {
-                        if (!string.IsNullOrEmpty(shortcutInfo.AUMID))
-                        {
-                            actualPath = $"shell:AppsFolder\\{shortcutInfo.AUMID}";
-                        }
-                        else if (shortcutInfo.IsUrl && !string.IsNullOrEmpty(shortcutInfo.ActualUrl))
-                        {
-                            actualPath = shortcutInfo.ActualUrl;
-                            isUrlProtocol = true;
-                            extractFromLnk = true;
-                        }
-                        else if (!string.IsNullOrEmpty(shortcutInfo.TargetPath))
-                        {
-                            actualPath = shortcutInfo.TargetPath;
-                        }
-                    }
-                }
-                else if (filePath.EndsWith(".url", StringComparison.OrdinalIgnoreCase))
-                {
-                    var urlInfo = ShortcutResolver.GetUrlFileInfo(filePath);
-                    if (urlInfo != null && !string.IsNullOrEmpty(urlInfo.ActualUrl))
-                    {
-                        actualPath = urlInfo.ActualUrl;
-                        isUrlProtocol = true;
-                        extractFromLnk = true;
-
-                        shortcutInfo = urlInfo;
-                    }
-                }
+                var resolved = ShortcutResolver.ResolveTargetPath(filePath);
+                string actualPath = resolved.ActualPath;
+                ShortcutInfo? shortcutInfo = resolved.Info;
+                bool isUrlProtocol = resolved.IsUrlProtocol;
+                bool extractFromLnk = isUrlProtocol;
 
                 LogService.Write("App", $"OnShortcutMenuItemClick resolved actualPath={actualPath} isStoreApp={isStoreApp} isUrlProtocol={isUrlProtocol} extractFromLnk={extractFromLnk}");
                 if (shortcutInfo != null)
@@ -2405,43 +2343,10 @@ namespace EricGameLauncher
                 if (!string.IsNullOrEmpty(filePath))
                 {
 
-                    string actualPath = filePath;
-                    bool isUrlProtocol = false;
-                    ShortcutInfo? shortcutInfo = null;
-
-                    if (filePath.ToLower().EndsWith(".lnk"))
-                    {
-                        shortcutInfo = ShortcutResolver.GetShortcutInfo(filePath);
-                        if (shortcutInfo != null)
-                        {
-                            if (!string.IsNullOrEmpty(shortcutInfo.AUMID))
-                            {
-                                actualPath = $"shell:AppsFolder\\{shortcutInfo.AUMID}";
-                            }
-                            else if (shortcutInfo.IsUrl)
-                            {
-                                actualPath = shortcutInfo.ActualUrl ?? shortcutInfo.TargetPath ?? filePath;
-                                isUrlProtocol = true;
-                            }
-                            else if (!string.IsNullOrEmpty(shortcutInfo.TargetPath))
-                            {
-                                actualPath = shortcutInfo.TargetPath;
-                            }
-                        }
-                    }
-
-                    else if (filePath.ToLower().EndsWith(".url"))
-                    {
-                        shortcutInfo = ShortcutResolver.GetUrlFileInfo(filePath);
-                        if (shortcutInfo != null && !string.IsNullOrEmpty(shortcutInfo.ActualUrl))
-                        {
-                            actualPath = shortcutInfo.ActualUrl;
-                            isUrlProtocol = true;
-                        }
-                        else
-                        {
-                        }
-                    }
+                    var resolved = ShortcutResolver.ResolveTargetPath(filePath);
+                    string actualPath = resolved.ActualPath;
+                    bool isUrlProtocol = resolved.IsUrlProtocol;
+                    ShortcutInfo? shortcutInfo = resolved.Info;
 
                     LogService.Write("App", $"BrowseFile resolved actualPath={actualPath} isUrlProtocol={isUrlProtocol}");
                     if (shortcutInfo != null)
@@ -3472,7 +3377,7 @@ namespace EricGameLauncher
         {
             using (LogService.StartOperation("Update", "ShowReleaseDialogAsync"))
             {
-            string downloadUrl = release.assets.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.browser_download_url ?? "";
+            string downloadUrl = release.assets?.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.browser_download_url ?? "";
             if (hasUpdate && string.IsNullOrEmpty(downloadUrl)) return;
 
             var (contentGrid, dlgW, dlgH) = await BuildReleaseContentAsync(release, prependTitle: true);
@@ -3645,8 +3550,7 @@ namespace EricGameLauncher
             LogService.Write("App", "VersionText_PointerPressed invoked");
             if (HasUpdate && _pendingUpdate != null)
             {
-                Version? latestVersion = UpdateService.ExtractVersion(_pendingUpdate.tag_name);
-                bool isForced = UpdateService.CheckForceUpdateAsync(latestVersion);
+                bool isForced = UpdateService.IsForcedUpdate(_pendingUpdate);
                 await StartUpdateFlowAsync(_pendingUpdate, isForced);
                 LogService.Write("App", "VersionText_PointerPressed started update flow");
             }

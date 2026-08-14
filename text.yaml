@@ -288,6 +288,9 @@ CLI:
   ErrWindowWidth: "windowWidth must be >= 400."
   ErrWindowHeight: "windowHeight must be >= 300."
   ErrChannel: "Channel must be 'stable' or 'latest'."
+  ErrNoDownloadUrl: "No downloadable package (zip) found in the release."
+  ErrNoRelease: "Failed to fetch release information."
+  ErrMarkIdRequired: "--mark requires an item id."
   ErrStorageSwitch: "storageMode must be 'system' or 'portable'."
   ErrNotFound: "Item not found."
   ErrIdRequiredSort: "--id is required for move/swap operations."
@@ -316,6 +319,8 @@ CLI:
   MsgRestored: "Restored: {0}"
   MsgRestoredCount: "Restored {0} item(s)."
   MsgRecycleEmptied: "Recycle bin emptied ({0} item(s) removed)."
+  MsgMarkedPending: "Marked '{0}' for deletion (72h countdown)."
+  MsgMarkedAllPending: "Marked {0} item(s) for deletion (72h countdown)."
   MsgRecycleEmpty: "Recycle bin is empty."
   MsgItemsEmpty: "No items. Use 'add' command to add games/apps."
   MsgScanning: "Scanning {0}..."
@@ -360,6 +365,10 @@ CLI:
   MsgNoUpdates: "No updates available. Current version: {0}"
   MsgUpdateAvailable: "Update available!"
   MsgCheckingUpdate: "Checking for updates (channel: {0})..."
+  MsgUpgradeStart: "Downloading and installing update {0}..."
+  MsgRepairStart: "Reinstalling latest version {0}..."
+  MsgUpgradeProgress: "  Downloading {0}%"
+  MsgUpgradeReady: "Update downloaded, installer launched."
   MsgItemsHeader: "Items ({0}):"
   MsgRecycleBinHeader: "Recycle Bin ({0} items):"
   MsgSetSetting: "Set {0} = {1}"
@@ -435,7 +444,7 @@ CLI:
   Help_CmdSearchDesc: "  search         Search items by keyword"
   Help_CmdSortDesc: "  sort           Reorder items"
   Help_CmdSettingsDesc: "  settings       View or modify settings"
-  Help_CmdUpdateDesc: "  update         Check for updates"
+  Help_CmdUpdateDesc: "  update         Check / install / reinstall updates"
   Help_CmdAnnouncementsDesc: "  announcements  View server announcements"
   Help_CmdInstallDesc: "  install        Create desktop & start menu shortcuts"
   Help_CmdUninstallDesc: "  uninstall      Remove desktop & start menu shortcuts"
@@ -517,7 +526,9 @@ CLI:
     Usage: EricGameLauncher.Cli.exe recycle [options]
 
       --list              List recycle bin items
-      --empty             Empty the recycle bin
+      --mark <id>         Mark one item for deletion (72h countdown)
+      --empty             Mark all items for deletion (72h countdown)
+      --purge             Permanently empty the recycle bin immediately
       --clean             Auto-clean expired items (72h+)
       --json              Output in JSON format
   Help_Scan_Text: |
@@ -563,6 +574,8 @@ CLI:
     Usage: EricGameLauncher.Cli.exe update [options]
 
       --check             Check for available updates
+      --install           Download and install the latest update
+      --repair            Reinstall the latest version (force reinstall)
       --channel <ch>      Channel: stable or latest (default: stable)
       --json              Output in JSON format
   Help_Sort_Text: |
