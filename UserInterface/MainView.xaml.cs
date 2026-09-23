@@ -1627,6 +1627,7 @@ namespace EricGameLauncher
                     {
                         e.Cancel = true;
                         LogService.Write("App", "Exit requested (forced update dialog)");
+                        _window?.AllowRealExit();
                         try { Application.Current.Exit(); } catch (Exception ex) { LogService.Write("App", "Exit failed (forced update dialog)", ex); }
                     }
                 };
@@ -1678,6 +1679,7 @@ namespace EricGameLauncher
             if (tcs.Task.IsCompleted)
             {
                 LogService.Write("App", "Exit requested (update start)");
+                _window?.AllowRealExit();
                 try { Application.Current.Exit(); } catch (Exception ex) { LogService.Write("App", "Exit failed (update start)", ex); }
             }
             }
@@ -1905,9 +1907,17 @@ namespace EricGameLauncher
                     LogService.Write("App", $"CloseAfterLaunchTimer_Tick foreground={fg} hWnd={_hWnd}");
                     if (fg != _hWnd)
                     {
-                        LogService.Write("App", "Exit requested (CloseAfterLaunch)");
-                        ConfigService.SaveAll();
-                        try { Application.Current.Exit(); } catch (Exception ex) { LogService.Write("App", "Exit failed (CloseAfterLaunch)", ex); }
+                        if (QuickStartService.IsActive && _window != null)
+                        {
+                            LogService.Write("QuickStart", "Close after launch switched to background mode");
+                            _window.EnterBackgroundMode();
+                        }
+                        else
+                        {
+                            LogService.Write("App", "Exit requested (CloseAfterLaunch)");
+                            ConfigService.SaveAll();
+                            try { Application.Current.Exit(); } catch (Exception ex) { LogService.Write("App", "Exit failed (CloseAfterLaunch)", ex); }
+                        }
                     }
                     else
                     {

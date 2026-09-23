@@ -10,6 +10,21 @@
                     <StackPanel Spacing="8">
                         <TextBlock x:Name="SettingsGeneralLabel" Text="" FontSize="14" FontWeight="SemiBold"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE945;" FontSize="16" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="SettingsQuickStartLabel" Text="" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <ToggleSwitch x:Name="ToggleQuickStart" Grid.Column="2"
+                                          OffContent="" OnContent="" MinWidth="0"
+                                          VerticalAlignment="Center" Margin="0,-8,0,-8"
+                                          Toggled="ToggleQuickStart_Toggled"/>
+                        </Grid>
+                        <TextBlock x:Name="SettingsQuickStartDesc" Text=""
+                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                   TextWrapping="Wrap"/>
+                        <Border Height="1" Margin="0,4,0,4" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
                         <Grid HorizontalAlignment="Stretch">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>

@@ -56,6 +56,8 @@ public static class AppInstallService
                 if (File.Exists(DesktopShortcutPath)) File.Delete(DesktopShortcutPath);
                 if (File.Exists(StartMenuShortcutPath)) File.Delete(StartMenuShortcutPath);
 
+                QuickStartService.ClearAutoStartForUninstall();
+
                 LogService.Write("App", "Uninstall Complete");
             }
             catch (Exception ex) { LogService.Write("App", "AppInstallService.Uninstall failed", ex); throw; }

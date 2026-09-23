@@ -39,7 +39,9 @@ Use the CLI when the user wants to control their EricGameLauncher library from a
 
 ## Settings keys
 
-`launchMode` (single|double), `closeAfterLaunch` (true|false), `iconSize` (32-512), `updateChannel` (stable|latest), `githubToken`, `appIconPath`, `appTitle`, `lang` (Zh-CN|EN), `storageMode` (system|portable), `windowX`, `windowY`, `windowWidth`, `windowHeight`.
+`launchMode` (single|double), `closeAfterLaunch` (true|false), `quickStart` (true|false), `iconSize` (32-512), `updateChannel` (stable|latest), `githubToken`, `appIconPath`, `appTitle`, `lang` (Zh-CN|EN), `storageMode` (system|portable), `windowX`, `windowY`, `windowWidth`, `windowHeight`.
+
+`quickStart` makes the launcher run as a background service registered for auto start at sign-in; it is enabled by default. Closing the window then keeps it resident without any interface, so launching from the icon resumes in milliseconds. Use `settings --set quickStart=true|false` to control it; `settings --list` also reports `quickStartRegistered` and `quickStartCommand`.
 
 ## Examples
 
@@ -49,6 +51,7 @@ EricGameLauncher.Cli.exe launch --title "Counter-Strike 2"
 EricGameLauncher.Cli.exe add --title "My Game" --path "C:\Games\game.exe" --admin
 EricGameLauncher.Cli.exe search "cs"
 EricGameLauncher.Cli.exe settings --set lang=EN
+EricGameLauncher.Cli.exe settings --set quickStart=true
 ```
 
 ## Notes

@@ -6,6 +6,7 @@ namespace EricGameLauncher;
 internal static class StartupArgs
 {
     public static bool IsDebug { get; private set; }
+    public static bool IsQuickStart { get; private set; }
     private static string[] _rawArgs = Array.Empty<string>();
 
     public static void Parse()
@@ -17,6 +18,8 @@ internal static class StartupArgs
             {
                 if (string.Equals(a, "-debug", StringComparison.OrdinalIgnoreCase))
                     IsDebug = true;
+                else if (string.Equals(a, QuickStartService.BackgroundArgument, StringComparison.OrdinalIgnoreCase))
+                    IsQuickStart = true;
             }
         }
         catch { }

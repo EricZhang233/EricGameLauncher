@@ -21,6 +21,7 @@
     <DisablePriGeneration>true</DisablePriGeneration>
     <ApplicationIcon>ico.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
 
     <!-- 彻底排除源码与中间产物，防止递归扫描 -->
     <DefaultItemExcludes>
