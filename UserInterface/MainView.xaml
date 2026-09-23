@@ -1,0 +1,330 @@
+﻿<UserControl
+    x:Class="EricGameLauncher.MainView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:EricGameLauncher"
+    xmlns:local="using:EricGameLauncher"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:controls="using:CommunityToolkit.WinUI.UI.Controls"
+    mc:Ignorable="d"
+    x:Name="RootWindow">
+
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48"/>
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        
+
+        
+        <Grid Grid.Row="0" Padding="16,0" Background="Transparent" 
+              x:Name="TitleBarGrid" Canvas.ZIndex="1000"
+              AllowDrop="False">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+                                                
+            
+            
+            <StackPanel Grid.Column="0" 
+                        Orientation="Horizontal" 
+                        VerticalAlignment="Center"
+                        Spacing="12"
+                        Margin="0,0,20,0">
+                
+                <Image x:Name="TitleBarIcon" 
+                       Width="32" 
+                       Height="32"
+                       Stretch="Uniform"/>
+                
+                <TextBlock x:Name="TitleBarText"
+                           Text="EricGameLauncher" 
+                           VerticalAlignment="Center" 
+                           Style="{ThemeResource BaseTextBlockStyle}"
+                           FontSize="18"/>
+            </StackPanel>
+            
+            
+            <StackPanel Grid.Column="2" 
+                        Orientation="Horizontal" 
+                        Spacing="8"
+                        VerticalAlignment="Center"
+                        Margin="0,0,140,0">
+
+                <local:AnnouncementFlyoutControl x:Name="AnnouncementControl"/>
+                
+                <local:SearchFlyoutControl x:Name="SearchControl"/>
+                
+                
+                <Button x:Name="BtnMore" ToolTipService.ToolTip="">
+                    <FontIcon Glyph="&#xE712;"/>
+                    <Button.Flyout>
+                        <MenuFlyout x:Name="MoreMenuFlyout" Placement="BottomEdgeAlignedRight">
+                            
+                            <MenuFlyoutItem x:Name="MenuIconSizeItem" Text="" Click="MenuIconSize_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE91B;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            
+                            <MenuFlyoutSeparator />
+                            
+                            
+                            <MenuFlyoutItem x:Name="MenuAddItem" Text="" Click="BtnAdd_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE710;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            
+                            <MenuFlyoutItem x:Name="MenuScanItem" Text="" Click="MenuScan_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE149;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            
+                            
+                            <MenuFlyoutItem x:Name="MenuSortItem" Text="" Click="MenuSort_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE70F;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            
+                            <MenuFlyoutItem x:Name="MenuRecycleBinItem" Text="" Click="MenuRecycleBin_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE74D;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            
+                            <MenuFlyoutSeparator />
+                            
+                            
+                            <MenuFlyoutSubItem x:Name="MenuSystemIntegrationItem" Text="">
+                                <MenuFlyoutSubItem.Icon>
+                                    <FontIcon Glyph="&#xE71B;"/>
+                                </MenuFlyoutSubItem.Icon>
+                                <MenuFlyoutItem x:Name="MenuInstallItem" Text="" Click="MenuInstall_Click">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE8DA;"/>
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem x:Name="MenuUninstallItem" Text="" Click="MenuUninstall_Click">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE894;"/>
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                            </MenuFlyoutSubItem>
+
+                            <MenuFlyoutItem x:Name="MenuSettingsItem" Text="" Click="MenuSettings_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE713;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+
+                            <MenuFlyoutItem x:Name="MenuCheckUpdateItem" Text="" Click="MenuCheckUpdate_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE895;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+
+                            <MenuFlyoutItem x:Name="MenuPrivacyItem" Text="" Click="MenuPrivacyItem_Click">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE8D7;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            
+                            <MenuFlyoutSeparator />
+                            
+                            
+                            <MenuFlyoutItem Click="AuthorLink_Click">
+                                <MenuFlyoutItem.Template>
+                                    <ControlTemplate>
+                                        <Grid Padding="12,8" Background="Transparent">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                                
+                                            
+                                            
+                                            <Border Grid.Column="0"
+                                                    Width="40" 
+                                                    Height="40" 
+                                                    CornerRadius="8" 
+                                                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                                    VerticalAlignment="Top"
+                                                    Margin="0,0,10,0">
+                                                <Image x:Name="MenuAuthorIconInternal" 
+                                                       Stretch="Uniform" 
+                                                       Loaded="MenuAuthorIconInternal_Loaded"
+                                                       Margin="4"/>
+                                            </Border>
+                                            
+                                            
+                                            <StackPanel Grid.Column="1" 
+                                                        Spacing="4" 
+                                                        VerticalAlignment="Center">
+                                                <TextBlock Text="EricGameLauncher" 
+                                                           FontWeight="SemiBold"
+                                                           FontSize="12"
+                                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                                <TextBlock x:Name="MenuVersionText"
+                                                           FontSize="11"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                <TextBlock Text="Developed by EricZhang" 
+                                                           FontSize="10"
+                                                           Margin="0,2,0,0"
+                                                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </ControlTemplate>
+                                </MenuFlyoutItem.Template>
+                            </MenuFlyoutItem>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+            </StackPanel>
+            
+            
+            
+            
+            <local:IconSizeFlyoutControl x:Name="IconSizeControl"/>
+            
+            
+            <local:OrderFlyoutControl x:Name="OrderControl"/>
+            
+            <StackPanel Grid.Column="2" 
+                        Orientation="Horizontal" 
+                        VerticalAlignment="Bottom" 
+                        HorizontalAlignment="Right"
+                        Margin="0,0,8,4" 
+                        Spacing="4"
+                        Opacity="0.6">
+                <FontIcon x:Name="UpdateSyncIcon"
+                          Glyph="&#xE117;" 
+                          FontSize="10" 
+                          Foreground="Red"
+                          Visibility="{Binding HasUpdate, ElementName=RootWindow, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                <TextBlock x:Name="VersionText"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           FontSize="10"
+                           VerticalAlignment="Center"
+                           PointerPressed="VersionText_PointerPressed"/>
+            </StackPanel>
+        </Grid>
+
+<controls:AdaptiveGridView x:Name="AppGrid" Grid.Row="1" Visibility="Visible"
+                  Padding="4,0,4,0"
+                  DesiredWidth="{x:Bind DesiredIconWidth, Mode=OneWay}"
+                  StretchContentForSingleRow="False"
+                  SelectionMode="None"
+                  ScrollViewer.VerticalScrollBarVisibility="Auto"
+                  ScrollViewer.VerticalScrollMode="Enabled"
+                  ScrollViewer.IsDeferredScrollingEnabled="False"
+                  CanReorderItems="False"
+                  IsItemClickEnabled="True"
+                  ItemClick="AppGrid_ItemClick"
+                  DoubleTapped="AppGrid_DoubleTapped"
+                  PointerWheelChanged="AppGrid_PointerWheelChanged"
+                  ContainerContentChanging="AppGrid_ContainerContentChanging">
+              <controls:AdaptiveGridView.ItemTemplate>
+                  <DataTemplate x:DataType="models:AppItem">
+                        <StackPanel x:Name="ItemPanel" Width="118" Margin="4" Tag="{Binding}" HorizontalAlignment="Center"
+                                    PointerEntered="ItemPanel_PointerEntered"
+                                    PointerExited="ItemPanel_PointerExited"
+                                    PointerCanceled="ItemPanel_PointerExited">
+                        
+                        <Grid x:Name="IconGrid" Width="118" Height="118" Margin="0,0,0,2">
+                            
+                            <Border x:Name="IconBgBorder" CornerRadius="24" 
+                                    Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}" 
+                                    Opacity="0.75"/>
+                            
+                            <Border x:Name="IconImgBorder" CornerRadius="21" Margin="6">
+                                <Border.Background>
+                                    <ImageBrush ImageSource="{Binding IconPath, Converter={StaticResource ImagePathConverter}, TargetNullValue={x:Null}}" 
+                                                Stretch="Uniform"/>
+                                </Border.Background>
+                            </Border>
+                            
+                            <TextBlock Text="?" 
+                                       HorizontalAlignment="Center" 
+                                       VerticalAlignment="Center"
+                                       FontSize="48"
+                                       Opacity="0.3"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Visibility="{Binding IconPath, Converter={StaticResource NullToVisibilityConverter}}"/>
+
+                            <Grid HorizontalAlignment="Left"
+                                  VerticalAlignment="Top"
+                                  Margin="2"
+                                  Width="20"
+                                  Height="20"
+                                  IsHitTestVisible="False"
+                                  Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibilityConverter}}"
+                                  Opacity="{Binding LoadingOpacity}">
+                                <Ellipse Fill="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                         Stroke="{ThemeResource SurfaceStrokeColorDefaultBrush}"
+                                         StrokeThickness="1" />
+                                <ProgressRing IsActive="{Binding IsLoading}"
+                                              Width="16"
+                                              Height="16"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                            </Grid>
+                        </Grid>
+
+                        
+                        <TextBlock Text="{Binding Title}"
+                                   x:Name="TitleText"
+                                   Width="118"
+                                   TextAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"
+                                   Padding="6,0"
+                                   FontSize="12" />
+
+                        <StackPanel.ContextFlyout>
+                            <MenuFlyout Opening="ContextMenu_Opening">
+                                <MenuFlyoutItem Text="" Click="MenuRun_Click" Tag="{Binding}" Icon="Play"/>
+                                <MenuFlyoutItem Text="" 
+                                                Click="MenuRunMgr_Click" 
+                                                Tag="{Binding}"
+                                                Icon="Repair"
+                                                Visibility="{Binding HasManagerOrDefault, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <MenuFlyoutSeparator />
+                                <MenuFlyoutItem Text="" Click="MenuLoc_Click" Tag="{Binding}" Icon="Folder"/>
+                                <MenuFlyoutSeparator />
+                                <MenuFlyoutItem Text="" Click="MenuProp_Click" Tag="{Binding}" Icon="Edit"/>
+                                <MenuFlyoutItem Text="" Click="MenuDel_Click" Tag="{Binding}" Icon="Delete" Foreground="Red"/>
+                            </MenuFlyout>
+                        </StackPanel.ContextFlyout>
+                    </StackPanel>
+                </DataTemplate>
+              </controls:AdaptiveGridView.ItemTemplate>
+        </controls:AdaptiveGridView>
+
+        <local:EmptyStateControl x:Name="EmptyStateControl"
+              Grid.Row="1"
+              Visibility="Collapsed"/>
+
+        <local:PropertyPanelControl x:Name="PropertyControl" Grid.Row="1" Canvas.ZIndex="2000"/>
+
+        <local:MigrationOverlayControl x:Name="MigrationOverlayControl"
+              Grid.RowSpan="2"
+              Visibility="Collapsed"
+              Canvas.ZIndex="2000"/>
+
+        <Popup x:Name="CustomIconToolTip" IsHitTestVisible="False">
+            <Border Background="{ThemeResource FlyoutPresenterBackground}"
+                    BorderBrush="{ThemeResource FlyoutBorderThemeBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="8,4">
+                <TextBlock x:Name="CustomIconToolTipText" FontSize="12" />
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>

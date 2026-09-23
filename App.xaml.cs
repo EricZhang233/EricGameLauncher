@@ -33,8 +33,8 @@ namespace EricGameLauncher
                         return;
                     }
                     m_window = new MainWindow();
-                    m_window.SetAppIcon();
                     m_window.Activate();
+                    m_window.StartInitialization();
                     SingleInstance.StartServer(() => m_window?.ActivateAndFocus());
                     LogService.Write("Startup", "OnLaunched complete");
                 }

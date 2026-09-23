@@ -1,0 +1,24 @@
+<UserControl
+    x:Class="EricGameLauncher.IconSizeFlyoutControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Button x:Name="SizeButton" Visibility="Collapsed">
+        <Button.Flyout>
+            <Flyout x:Name="SizeFlyout" Placement="Bottom">
+                <StackPanel Width="220" Spacing="8">
+                    <Grid>
+                        <TextBlock x:Name="SizeTitle" Text="" FontSize="14" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="4">
+                            <Button Content="&#xE738;" FontFamily="Segoe MDL2 Assets" FontSize="12" Width="28" Height="28" Padding="0" Click="BtnSizeDecrease_Click"/>
+                            <Button Content="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="12" Width="28" Height="28" Padding="0" Click="BtnSizeIncrease_Click"/>
+                        </StackPanel>
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Slider x:Name="SizeSlider" Minimum="80" Maximum="200" Value="118" StepFrequency="1" SnapsTo="StepValues" IsThumbToolTipEnabled="False" ValueChanged="SizeSlider_ValueChanged" Margin="0,0,12,0"/>
+                        <TextBlock Grid.Column="1" Text="{Binding Value, ElementName=SizeSlider}" VerticalAlignment="Center" Width="24" TextAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </Grid>
+                </StackPanel>
+            </Flyout>
+        </Button.Flyout>
+    </Button>
+</UserControl>

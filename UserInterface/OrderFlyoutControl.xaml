@@ -1,0 +1,68 @@
+<UserControl
+    x:Class="EricGameLauncher.OrderFlyoutControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:EricGameLauncher">
+    <Button x:Name="SortButton" Visibility="Collapsed">
+        <Button.Flyout>
+            <Flyout x:Name="OrderFlyout" Placement="Bottom" Opening="OrderFlyout_Opening" Closed="OrderFlyout_Closed">
+                <Flyout.FlyoutPresenterStyle>
+                    <Style TargetType="FlyoutPresenter">
+                        <Setter Property="Padding" Value="0"/>
+                    </Style>
+                </Flyout.FlyoutPresenterStyle>
+                <StackPanel Width="340" Spacing="12" Padding="16">
+                    <TextBlock x:Name="SortTitle" Text="" FontSize="20" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="SortDescription" Text=""
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               Style="{ThemeResource CaptionTextBlockStyle}"
+                               TextWrapping="Wrap"/>
+                    <ListView x:Name="OrderItemsControl" MaxHeight="400"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto" SelectionMode="Single"
+                              PreviewKeyDown="OrderList_PreviewKeyDown"
+                              ContainerContentChanging="OrderList_ContainerContentChanging">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="Margin" Value="0,0,0,4"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="CornerRadius" Value="6"/>
+                                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}"/>
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.Resources>
+                            <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="{ThemeResource SystemAccentColorLight2}" Opacity="0.4"/>
+                            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="{ThemeResource SystemAccentColorLight2}" Opacity="0.5"/>
+                            <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPressed" Color="{ThemeResource SystemAccentColorLight2}" Opacity="0.6"/>
+                        </ListView.Resources>
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="models:AppItem">
+                                <Grid PointerEntered="OrderItem_PointerEntered" PointerExited="OrderItem_PointerExited">
+                                    <Grid Padding="10" ColumnDefinitions="32,*,Auto">
+                                        <Border Grid.Column="0" Width="28" Height="28" CornerRadius="6"
+                                                Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}">
+                                            <Image Source="{Binding IconPath, Converter={StaticResource ImagePathConverter}, TargetNullValue={x:Null}}"
+                                                   Stretch="Uniform" Margin="2"/>
+                                        </Border>
+                                        <TextBlock Grid.Column="1" Text="{Binding Title}"
+                                                   VerticalAlignment="Center" Margin="10,0,0,0"
+                                                   Style="{ThemeResource BodyTextBlockStyle}"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" x:Name="SortButtons" Opacity="0">
+                                            <Button Click="BtnMoveUp_Click" Tag="{Binding}" Width="32" Height="32" Padding="0" ToolTipService.ToolTip="">
+                                                <FontIcon Glyph="&#xE70E;" FontSize="12"/>
+                                            </Button>
+                                            <Button Click="BtnMoveDown_Click" Tag="{Binding}" Width="32" Height="32" Padding="0" ToolTipService.ToolTip="">
+                                                <FontIcon Glyph="&#xE70D;" FontSize="12"/>
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </StackPanel>
+            </Flyout>
+        </Button.Flyout>
+    </Button>
+</UserControl>

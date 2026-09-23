@@ -1,0 +1,51 @@
+<UserControl
+    x:Class="EricGameLauncher.AnnouncementFlyoutControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:EricGameLauncher">
+    <Button x:Name="AnnouncementButton" ToolTipService.ToolTip="" CornerRadius="4">
+        <FontIcon x:Name="AnnouncementButtonIcon" Glyph="&#xE7F4;"/>
+        <Button.Flyout>
+            <Flyout x:Name="AnnouncementFlyout" Placement="BottomEdgeAlignedRight" Opened="AnnouncementFlyout_Opened">
+                <Flyout.FlyoutPresenterStyle>
+                    <Style TargetType="FlyoutPresenter">
+                        <Setter Property="Padding" Value="0"/>
+                        <Setter Property="CornerRadius" Value="8"/>
+                    </Style>
+                </Flyout.FlyoutPresenterStyle>
+                <StackPanel Width="380" Spacing="8" Padding="12">
+                    <TextBlock x:Name="AnnouncementsTitleText" Text="" FontSize="18" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="AnnouncementsEmptyText" Text="" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{ThemeResource CaptionTextBlockStyle}" TextWrapping="Wrap" Visibility="Collapsed"/>
+                    <ListView x:Name="AnnouncementsListView" MaxHeight="420" SelectionMode="None" IsItemClickEnabled="True" ItemClick="AnnouncementsListView_ItemClick" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="Margin" Value="0,0,0,4"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="CornerRadius" Value="6"/>
+                                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}"/>
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="models:AnnouncementListItem">
+                                <StackPanel Padding="10" Spacing="6">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <StackPanel Grid.Column="0" Spacing="2">
+                                            <TextBlock Text="{Binding Title}" FontWeight="{Binding TitleWeight}" TextWrapping="Wrap" MaxLines="{Binding TitleMaxLines}" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding TimeText}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Width="12">
+                                            <FontIcon Glyph="{Binding MarkerGlyph}" FontSize="12" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Visibility="{Binding HasMarker, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                            <Ellipse Width="7" Height="7" Fill="Red" HorizontalAlignment="Center" Visibility="{Binding IsUnread, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                        </StackPanel>
+                                    </Grid>
+                                    <RichTextBlock TextWrapping="Wrap" Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibilityConverter}}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" IsTextSelectionEnabled="True" Loaded="BodyRichText_Loaded"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </StackPanel>
+            </Flyout>
+        </Button.Flyout>
+    </Button>
+</UserControl>

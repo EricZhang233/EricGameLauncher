@@ -103,6 +103,8 @@ public class CustomMenuItem
 
 public static class PathHashHelper
 {
+    public static string NormalizePath(string path) => (path ?? string.Empty).ToLowerInvariant().Replace('/', '\\');
+
     public static string GetPathHash(string path)
     {
         if (!AppItem.SuppressInitLogs)
@@ -110,7 +112,7 @@ public static class PathHashHelper
         if (string.IsNullOrEmpty(path))
             return Guid.NewGuid().ToString("N")[..16];
 
-        string normalizedPath = path.ToLowerInvariant().Replace('/', '\\');
+        string normalizedPath = NormalizePath(path);
         byte[] hashBytes = MD5.HashData(Encoding.UTF8.GetBytes(normalizedPath));
 
         StringBuilder sb = new();
@@ -587,9 +589,6 @@ public class AppItem : INotifyPropertyChanged
 
     [YamlIgnore]
     public bool HasManagerOrDefault => !string.IsNullOrEmpty(RuntimeManagerPath);
-
-    [YamlIgnore]
-    public BitmapImage? DisplayIcon { get; set; }
 
     private static readonly ISerializer _fingerprintSerializer = new SerializerBuilder().Build();
 
