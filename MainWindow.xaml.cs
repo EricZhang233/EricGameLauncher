@@ -20,6 +20,9 @@ namespace EricGameLauncher
 
         private IntPtr _hWnd = IntPtr.Zero;
         private IntPtr _customIconHandle = IntPtr.Zero;
+        private bool _backgroundResident = false;
+        private bool _forceExit = false;
+        private const int BackgroundOffscreenCoordinate = -32000;
 
         public MainWindow()
         {
@@ -82,6 +85,7 @@ namespace EricGameLauncher
                 _hWnd = WindowNative.GetWindowHandle(this);
                 ApplyWindowIcon();
                 this.Closed += Window_Closing_Cleanup;
+                this.AppWindow.Closing += AppWindow_Closing;
                 LogService.Write("Startup", "Pre-activation window config and state applied");
             }
             catch (Exception ex) { LogService.Write("Startup", "PrepareWindowForActivation failed", ex); }
@@ -144,6 +148,65 @@ namespace EricGameLauncher
                 DestroyIcon(_customIconHandle);
                 _customIconHandle = IntPtr.Zero;
             }
+        }
+
+        private void AppWindow_Closing(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowClosingEventArgs args)
+        {
+            try
+            {
+                if (_forceExit || !QuickStartService.IsActive)
+                    return;
+
+                args.Cancel = true;
+                LogService.Write("QuickStart", "Close request intercepted, switching to background mode");
+                EnterBackgroundMode();
+            }
+            catch (Exception ex) { LogService.Write("QuickStart", "AppWindow_Closing failed", ex); }
+        }
+
+        public void AllowRealExit()
+        {
+            _forceExit = true;
+            _backgroundResident = false;
+            LogService.Write("QuickStart", "Real exit allowed for current shutdown");
+        }
+
+        public void StartInBackground()
+        {
+            _backgroundResident = true;
+            try
+            {
+                this.AppWindow.Move(new Windows.Graphics.PointInt32(BackgroundOffscreenCoordinate, BackgroundOffscreenCoordinate));
+                this.Activate();
+                this.AppWindow.Hide();
+                LogService.Write("QuickStart", "Window started hidden offscreen as background service");
+            }
+            catch (Exception ex) { LogService.Write("QuickStart", "StartInBackground failed", ex); }
+        }
+
+        public void EnterBackgroundMode()
+        {
+            if (_backgroundResident) return;
+            _backgroundResident = true;
+            try
+            {
+                ConfigService.SaveAll();
+                this.AppWindow.Hide();
+                LogService.Write("QuickStart", "Window hidden, launcher keeps running without interface");
+            }
+            catch (Exception ex) { LogService.Write("QuickStart", "EnterBackgroundMode failed", ex); }
+        }
+
+        private void RestoreFromBackground()
+        {
+            _backgroundResident = false;
+            try
+            {
+                RestoreWindowState();
+                this.AppWindow.Show();
+                LogService.Write("QuickStart", "Background service window restored");
+            }
+            catch (Exception ex) { LogService.Write("QuickStart", "RestoreFromBackground failed", ex); }
         }
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
@@ -270,6 +333,9 @@ namespace EricGameLauncher
             {
                 DispatcherQueue.TryEnqueue(() =>
                 {
+                    if (_backgroundResident)
+                        RestoreFromBackground();
+
                     WindowActivator.Activate(WindowNative.GetWindowHandle(this));
                 });
             }

@@ -7,6 +7,7 @@ public sealed partial class SettingsFlyoutControl : UserControl
 {
     public event Action<string>? LaunchModeChanged;
     public event Action? UpdateChannelChanged;
+    private bool _syncingQuickStart = false;
 
     public Flyout Flyout => SettingsFlyout;
 
@@ -17,6 +18,9 @@ public sealed partial class SettingsFlyoutControl : UserControl
 
     public void Sync()
     {
+        _syncingQuickStart = true;
+        ToggleQuickStart.IsOn = ConfigService.QuickStart;
+        _syncingQuickStart = false;
         ToggleCloseAfterLaunch.IsOn = ConfigService.CloseAfterLaunch;
         ComboUpdateChannel.SelectedIndex = ConfigService.UpdateChannel == "latest" ? 1 : 0;
         UpdateGitHubTokenStatus();
@@ -29,6 +33,8 @@ public sealed partial class SettingsFlyoutControl : UserControl
     {
         SettingsTitle.Text = Text.T("Settings_Title");
         SettingsGeneralLabel.Text = Text.T("Settings_General");
+        SettingsQuickStartLabel.Text = Text.T("Settings_QuickStart");
+        SettingsQuickStartDesc.Text = Text.T("Settings_QuickStart_Desc");
         SettingsCloseAfterLaunchLabel.Text = Text.T("Settings_CloseAfterLaunch");
         SettingsLaunchModeLabel.Text = Text.T("Settings_LaunchMode");
 
@@ -71,6 +77,25 @@ public sealed partial class SettingsFlyoutControl : UserControl
     {
         if (sender is ToggleSwitch toggle && ConfigService.CloseAfterLaunch != toggle.IsOn)
             ConfigService.CloseAfterLaunch = toggle.IsOn;
+    }
+
+    private void ToggleQuickStart_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_syncingQuickStart) return;
+        if (sender is not ToggleSwitch toggle) return;
+        if (ConfigService.QuickStart == toggle.IsOn) return;
+
+        bool applied = QuickStartService.SetEnabled(toggle.IsOn);
+        if (!applied)
+        {
+            _syncingQuickStart = true;
+            toggle.IsOn = ConfigService.QuickStart;
+            _syncingQuickStart = false;
+            LogService.Write("QuickStart", "Quick start toggle reverted, auto start registration failed", null, null, LogService.LogLevel.Error);
+            return;
+        }
+
+        LogService.Write("UI", $"SettingsFlyoutControl quick start changed to={toggle.IsOn}");
     }
 
     private void ComboLaunchMode_SelectionChanged(object sender, SelectionChangedEventArgs e)

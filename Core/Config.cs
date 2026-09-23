@@ -21,6 +21,9 @@ public class AppSettings
     [YamlMember(Alias = "closeAfterLaunch")]
     public bool CloseAfterLaunch { get; set; } = false;
 
+    [YamlMember(Alias = "quickStart")]
+    public bool QuickStart { get; set; } = true;
+
     [YamlMember(Alias = "iconSize")]
     public double IconSize { get; set; } = 118;
 
@@ -538,6 +541,7 @@ public static class ConfigService
             bool needsSave = false;
             if (!existingYaml.Contains("appIconPath:")) needsSave = true;
             if (!existingYaml.Contains("appTitle:")) needsSave = true;
+            if (!existingYaml.Contains("quickStart:")) needsSave = true;
             if (needsSave)
             {
                 SaveSettingsData();
@@ -588,6 +592,12 @@ public static class ConfigService
     {
         get => _settings?.IconSize ?? 118;
         set { if (_settings != null) { LogService.Write("Config", $"IconSize changed to={value}"); _settings.IconSize = value; } }
+    }
+
+    public static bool QuickStart
+    {
+        get => _settings?.QuickStart ?? true;
+        set { if (_settings != null) { LogService.Write("Config", $"QuickStart changed to={value}"); _settings.QuickStart = value; } }
     }
 
     public static string Language => Text.DetectSystemLanguage();
@@ -810,6 +820,10 @@ public static class ConfigService
                 if (value != "true" && value != "false") return "ErrCloseAfterLaunch";
                 CloseAfterLaunch = bool.Parse(value);
                 break;
+            case "quickstart":
+                if (value != "true" && value != "false") return "ErrQuickStart";
+                if (!QuickStartService.SetEnabled(bool.Parse(value))) return "ErrQuickStartApply";
+                return null;
             case "iconsize":
                 if (!double.TryParse(value, out var iconSize) || iconSize < 32 || iconSize > 512) return "ErrIconSize";
                 IconSize = iconSize;

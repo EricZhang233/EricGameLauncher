@@ -731,6 +731,9 @@ public static class CliService
                 {
                     launchMode = ConfigService.LaunchMode,
                     closeAfterLaunch = ConfigService.CloseAfterLaunch,
+                    quickStart = ConfigService.QuickStart,
+                    quickStartRegistered = QuickStartService.IsAutoStartRegistered(),
+                    quickStartCommand = QuickStartService.GetRegisteredCommand() ?? "",
                     iconSize = ConfigService.IconSize,
                     updateChannel = ConfigService.UpdateChannel,
                     githubToken = string.IsNullOrEmpty(ConfigService.GitHubToken) ? Text.Cli("LblNotSet") : Text.Cli("LblConfigured"),
@@ -758,6 +761,8 @@ public static class CliService
                     WriteLine(new string('-', 40));
                     WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "launchMode", ConfigService.LaunchMode));
                     WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "closeAfterLaunch", ConfigService.CloseAfterLaunch));
+                    WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "quickStart", ConfigService.QuickStart));
+                    WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "quickStartRegistered", QuickStartService.IsAutoStartRegistered()));
                     WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "iconSize", ConfigService.IconSize));
                     WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "updateChannel", ConfigService.UpdateChannel));
                     WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "githubToken", (string.IsNullOrEmpty(ConfigService.GitHubToken) ? Text.Cli("LblNotSet") : Text.Cli("LblConfigured"))));
@@ -830,6 +835,7 @@ public static class CliService
                 {
                     "launchmode" => ConfigService.LaunchMode,
                     "closeafterlaunch" => ConfigService.CloseAfterLaunch.ToString(),
+                    "quickstart" => ConfigService.QuickStart.ToString(),
                     "iconsize" => ConfigService.IconSize.ToString(),
                     "updatechannel" => ConfigService.UpdateChannel,
                     "githubtoken" => string.IsNullOrEmpty(ConfigService.GitHubToken) ? Text.Cli("LblNotSet") : Text.Cli("LblConfigured"),

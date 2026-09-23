@@ -33,8 +33,17 @@ namespace EricGameLauncher
                         return;
                     }
                     m_window = new MainWindow();
-                    m_window.Activate();
+                    if (QuickStartService.IsBackgroundStart)
+                    {
+                        LogService.Write("QuickStart", "OnLaunched start in background service mode");
+                        m_window.StartInBackground();
+                    }
+                    else
+                    {
+                        m_window.Activate();
+                    }
                     m_window.StartInitialization();
+                    QuickStartService.SyncAutoStart();
                     SingleInstance.StartServer(() => m_window?.ActivateAndFocus());
                     LogService.Write("Startup", "OnLaunched complete");
                 }

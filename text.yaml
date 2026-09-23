@@ -98,6 +98,8 @@
   Settings_OpenCacheFolder: "打开缓存文件夹"
   Settings_OpenConfigFolder: "打开配置文件夹"
   Settings_PortableMode: "便携模式"
+  Settings_QuickStart: "快速启动"
+  Settings_QuickStart_Desc: "启动器将作为后台服务运行并开机自启；关闭窗口后不再退出，而是无界面后台常驻，从图标启动时可毫秒级唤醒。如需彻底退出，可在任务栏右键选择「结束任务」（Windows 11 24H2 及以上）。"
   Settings_SwitchToPortable: "迁移至便携模式"
   Settings_SwitchToSystem: "迁移至系统模式"
   Settings_SystemMode: "系统模式"
@@ -226,6 +228,8 @@
   Settings_OpenCacheFolder: "Open Cache Folder"
   Settings_OpenConfigFolder: "Open Config Folder"
   Settings_PortableMode: "Portable Mode"
+  Settings_QuickStart: "Quick Start"
+  Settings_QuickStart_Desc: "Runs the launcher as a background service with auto start at sign-in. Closing the window no longer exits; it stays resident without any interface so the icon launch resumes instantly. To exit completely, right-click the taskbar entry and choose End task (Windows 11 24H2 or later)."
   Settings_SwitchToPortable: "Migrate to Portable Mode"
   Settings_SwitchToSystem: "Migrate to System Mode"
   Settings_SystemMode: "System Mode"
@@ -280,6 +284,8 @@ CLI:
   ErrInvalidFormat: "Invalid format. Use --set <key>=<value>"
   ErrLaunchMode: "launchMode must be 'single' or 'double'."
   ErrCloseAfterLaunch: "closeAfterLaunch must be 'true' or 'false'."
+  ErrQuickStart: "quickStart must be 'true' or 'false'."
+  ErrQuickStartApply: "Failed to register the quick start background service."
   ErrIconSize: "iconSize must be a number between 32 and 512."
   ErrUpdateChannel: "updateChannel must be 'stable' or 'latest'."
   ErrLang: "lang must be 'Zh-CN' or 'EN'."
@@ -561,6 +567,7 @@ CLI:
     Available settings:
       launchMode          Launch mode (single / double)
       closeAfterLaunch    Auto-close after launch (true / false)
+      quickStart          Run as background service with auto start (true / false)
       iconSize            Icon size in pixels (32-512)
       updateChannel       Update channel (stable / latest)
       githubToken         GitHub personal access token
