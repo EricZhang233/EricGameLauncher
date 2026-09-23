@@ -17,9 +17,15 @@ public static class ItemService
 
     public static bool CheckDuplicate(string path, List<AppItem>? existingPool = null)
     {
-        var items = existingPool ?? ConfigService.LoadItems();
+        if (string.IsNullOrEmpty(path)) return false;
+
+        var items = existingPool ?? ConfigService.LoadItems().Concat(ConfigService.LoadRecycleBinItems()).ToList();
         var hash = PathHashHelper.GetPathHash(path);
-        return items.Any(i => string.Equals(i.Id, hash, StringComparison.OrdinalIgnoreCase));
+        string normalizedPath = PathHashHelper.NormalizePath(path).Trim();
+        return items.Any(i =>
+            string.Equals(i.Id, hash, StringComparison.OrdinalIgnoreCase) ||
+            (!string.IsNullOrEmpty(i.ExePath) &&
+             string.Equals(PathHashHelper.NormalizePath(i.ExePath!).Trim(), normalizedPath, StringComparison.OrdinalIgnoreCase)));
     }
 
     public static void AddItem(AppItem item)
