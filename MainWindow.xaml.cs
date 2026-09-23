@@ -896,6 +896,21 @@ namespace EricGameLauncher
         {
             _allItems = new ObservableCollection<AppItem>(ConfigService.LoadItems());
             _recycleItems = new ObservableCollection<AppItem>(ConfigService.LoadRecycleBinItems());
+            RefreshGridItems();
+        }
+
+        private void RefreshGridItems()
+        {
+            var query = SearchBoxFlyout?.Text?.Trim() ?? "";
+            IEnumerable<AppItem> items = string.IsNullOrEmpty(query)
+                ? _allItems
+                : ItemService.Search(_allItems, query.ToLowerInvariant());
+
+            _viewItems = new ObservableCollection<AppItem>(items);
+            AppGrid.ItemsSource = _viewItems;
+            IsFiltered = !string.IsNullOrEmpty(query);
+            UpdateEmptyState();
+            LogService.Write("App", $"RefreshGridItems applied count={_viewItems.Count} filtered={IsFiltered}");
         }
 
 
@@ -2703,6 +2718,7 @@ namespace EricGameLauncher
                     _allItems.Clear();
                     foreach (var item in newOrder)
                         _allItems.Add(item);
+                    RefreshGridItems();
                     _tempOrderCollection = null;
                 }
             }
