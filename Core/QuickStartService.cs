@@ -7,14 +7,14 @@ namespace EricGameLauncher;
 
 public static class QuickStartService
 {
-    public const string BackgroundArgument = "-quickstart";
+    public const string ServiceArgument = "-service";
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RunValueName = "EricGameLauncher";
     private const string MainExecutableName = "EricGameLauncher.exe";
 
-    public static bool IsActive => ConfigService.QuickStart;
+    public static event Action<bool>? EnabledChanged;
 
-    public static bool IsBackgroundStart => StartupArgs.IsQuickStart && IsActive;
+    public static bool IsActive => ConfigService.QuickStart;
 
     public static string ResolveMainExecutable()
     {
@@ -37,7 +37,7 @@ public static class QuickStartService
     public static string BuildAutoStartCommand()
     {
         string exe = ResolveMainExecutable();
-        return string.IsNullOrEmpty(exe) ? "" : $"\"{exe}\" {BackgroundArgument}";
+        return string.IsNullOrEmpty(exe) ? "" : $"\"{exe}\" {ServiceArgument}";
     }
 
     public static string? GetRegisteredCommand()
@@ -135,6 +135,7 @@ public static class QuickStartService
             ConfigService.QuickStart = enabled;
             ConfigService.SaveAll();
             LogService.Write("QuickStart", $"SetEnabled applied enabled={enabled} command={BuildAutoStartCommand()}");
+            try { EnabledChanged?.Invoke(enabled); } catch (Exception ex) { LogService.Write("QuickStart", "EnabledChanged handler failed", ex); }
             return true;
         }
     }

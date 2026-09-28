@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="using:EricGameLauncher">
     <Button x:Name="AnnouncementButton" ToolTipService.ToolTip="" CornerRadius="4">
-        <FontIcon x:Name="AnnouncementButtonIcon" Glyph="&#xE7F4;"/>
+        <FontIcon x:Name="AnnouncementButtonIcon" Glyph="&#xE789;"/>
         <Button.Flyout>
             <Flyout x:Name="AnnouncementFlyout" Placement="BottomEdgeAlignedRight" Opened="AnnouncementFlyout_Opened">
                 <Flyout.FlyoutPresenterStyle>

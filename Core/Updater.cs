@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
@@ -19,7 +20,7 @@ public class UpdateService
     {
         client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
         client.DefaultRequestHeaders.Add("User-Agent", "EricGameLauncher-Updater");
-        client.DefaultRequestHeaders.Add("Accept", "application/vnd.github.v3.html+json");
+        client.DefaultRequestHeaders.Add("Accept", "application/vnd.github.v3.full+json");
     }
 
     private static bool _tokenApplied = false;
@@ -61,8 +62,19 @@ public class UpdateService
         public string html_url { get; set; } = "";
         public string body { get; set; } = "";
         public string body_html { get; set; } = "";
+        public string published_at { get; set; } = "";
+        public string created_at { get; set; } = "";
         public bool prerelease { get; set; } = false;
         public List<Asset> assets { get; set; } = new List<Asset>();
+    }
+
+    public class ReleaseHistoryEntry
+    {
+        public string TagName { get; set; } = "";
+        public string Name { get; set; } = "";
+        public DateTimeOffset? PublishedAt { get; set; }
+        public string Body { get; set; } = "";
+        public string BodyHtml { get; set; } = "";
     }
 
     public class Asset
@@ -195,6 +207,56 @@ public class UpdateService
 
     public static Task<ReleaseInfo?> GetReleaseAsync(string channel)
         => channel == "latest" ? GetLatestReleaseAsync() : GetLatestStableReleaseAsync();
+
+    public static async Task<List<ReleaseHistoryEntry>?> GetReleaseHistoryAsync()
+    {
+        using (LogService.StartOperation("Update", "GetReleaseHistoryAsync"))
+        {
+            List<ReleaseInfo>? releases;
+            try
+            {
+                releases = await FetchReleasesWithFallbackAsync();
+            }
+            catch (Exception ex)
+            {
+                LogService.Write("Update", "GetReleaseHistoryAsync failed", ex);
+                return null;
+            }
+
+            if (releases == null)
+            {
+                LogService.Write("Update", "GetReleaseHistoryAsync failed: releases unavailable");
+                return null;
+            }
+
+            var entries = releases
+                .Where(r => !string.IsNullOrEmpty(r.tag_name))
+                .Select(r => new ReleaseHistoryEntry
+                {
+                    TagName = r.tag_name,
+                    Name = r.name,
+                    PublishedAt = ParsePublishedAt(r.published_at, r.created_at),
+                    Body = r.body ?? "",
+                    BodyHtml = r.body_html ?? ""
+                })
+                .OrderBy(e => e.PublishedAt ?? DateTimeOffset.MinValue)
+                .ToList();
+
+            LogService.Write("Update", $"GetReleaseHistoryAsync entries={entries.Count}");
+            return entries;
+        }
+    }
+
+    private static DateTimeOffset? ParsePublishedAt(string? primary, string? fallback)
+    {
+        foreach (var value in new[] { primary, fallback })
+        {
+            if (string.IsNullOrEmpty(value)) continue;
+            if (DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var parsed))
+                return parsed;
+        }
+        return null;
+    }
 
     public static bool CheckForceUpdateAsync(Version? latestAvailableVersion = null)
     {

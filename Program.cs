@@ -12,11 +12,26 @@ public static class Program
     {
         StartupArgs.Parse();
 
-        if (!SingleInstance.TryAcquire())
+        if (!StartupArgs.IsServiceStart)
         {
-            WindowActivator.AllowAnyForegroundWindow();
-            SingleInstance.NotifyRunningInstance();
-            return 0;
+            if (ServiceHost.IsHostRunning())
+            {
+                WindowActivator.AllowAnyForegroundWindow();
+                if (ServiceHost.NotifyWake())
+                {
+                    LogService.Write("QuickStart", "Wake signal handed to service host, launcher process exits");
+                    LogService.FlushAndStop();
+                    return 0;
+                }
+            }
+
+            if (!SingleInstance.TryAcquire())
+            {
+                WindowActivator.AllowAnyForegroundWindow();
+                SingleInstance.NotifyRunningInstance();
+                LogService.FlushAndStop();
+                return 0;
+            }
         }
 
         WinRT.ComWrappersSupport.InitializeComWrappers();

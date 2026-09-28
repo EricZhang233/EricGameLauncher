@@ -12,6 +12,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading.Tasks;
 using Windows.ApplicationModel.DataTransfer;
 using WinRT.Interop;
@@ -112,6 +113,11 @@ namespace EricGameLauncher
         private FrameworkElement? _closeAfterLaunchInputRoot;
         private DispatcherTimer? _closeAfterLaunchTimer;
         private bool _closeAfterLaunchPending = false;
+        private Action? _languageChangedHandler;
+        private Action? _dataChangedHandler;
+        private Action<bool>? _quickStartChangedHandler;
+
+        private bool WarmupMode => _window?.WarmupMode ?? false;
 
         public MainView()
         {
@@ -230,25 +236,24 @@ namespace EricGameLauncher
                 ServerConfigManager.LoadReadIds();
 
                 Text.Load(ConfigService.Language);
-                Text.LanguageChanged += () =>
-                {
-                    DispatcherQueue.TryEnqueue(() => ApplyLocalization());
-                };
+                _languageChangedHandler = () => DispatcherQueue.TryEnqueue(() => ApplyLocalization());
+                Text.LanguageChanged += _languageChangedHandler;
 
                 ServerConfigManager.AnnouncementsUpdated += OnAnnouncementsUpdated;
 
                 ConfigService.IconSize = ConfigService.IconSize;
-                ConfigService.DataChanged += () =>
-                {
-                    DispatcherQueue.TryEnqueue(() => RefreshView());
-                };
+                _dataChangedHandler = () => DispatcherQueue.TryEnqueue(() => RefreshView());
+                ConfigService.DataChanged += _dataChangedHandler;
+
+                _quickStartChangedHandler = enabled => DispatcherQueue.TryEnqueue(() => UpdateMenuExitVisibility());
+                QuickStartService.EnabledChanged += _quickStartChangedHandler;
 
                 LoadSettings();
                 ApplyLocalization();
                 RefreshAnnouncementList();
 
                 _ = LoadDataAsync();
-                _ = InitializeNetworkTasksAsync();
+                if (!WarmupMode) _ = InitializeNetworkTasksAsync();
                 _ = InitializeMenuItemsAsync();
                 LogService.Write("Startup", "Post-activation initialization scheduled");
             }
@@ -472,11 +477,16 @@ namespace EricGameLauncher
                     {
                         Title = Text.T("Update_NoUpdateTitle"),
                         Content = Text.T("Update_NoUpdateContent"),
+                        SecondaryButtonText = Text.T("Update_History"),
                         CloseButtonText = Text.T("Update_OK"),
                         DefaultButton = ContentDialogButton.Close,
                         XamlRoot = this.XamlRoot
                     };
-                    await noUpdateDialog.ShowAsync();
+                    var noUpdateResult = await noUpdateDialog.ShowAsync();
+                    if (noUpdateResult == ContentDialogResult.Secondary)
+                    {
+                        await ShowUpdateHistoryAsync();
+                    }
                 }
                 LogService.Write("Update", "ManualCheck End");
             }
@@ -646,6 +656,11 @@ namespace EricGameLauncher
                     LogService.Write("Startup", "LoadData Enter");
                 if (ConfigService.RequiresMigration)
                 {
+                    if (WarmupMode)
+                    {
+                        LogService.Write("Startup", "LoadData migration deferred, warmup window");
+                        return;
+                    }
                     MigrationOverlayControl.Visibility = Visibility.Visible;
                     await Task.Delay(200);
                     await MigrationService.RunMigrationAndRestart();
@@ -1566,6 +1581,8 @@ namespace EricGameLauncher
                 MenuSettingsItem.Text = Text.T("Menu_Settings");
                 MenuCheckUpdateItem.Text = Text.T("Menu_CheckUpdate");
                 MenuPrivacyItem.Text = Text.T("Privacy_MenuTitle");
+                MenuExitItem.Text = Text.T("Menu_Exit");
+                UpdateMenuExitVisibility();
                 MenuSystemIntegrationItem.Text = Text.T("Menu_SystemIntegration");
                 MenuInstallItem.Text = Text.T("Menu_Install");
                 MenuUninstallItem.Text = Text.T("Menu_Uninstall");
@@ -1579,6 +1596,7 @@ namespace EricGameLauncher
                 EmptyStateControl?.ApplyLocalization();
 
                 MigrationOverlayControl?.ApplyLocalization();
+                HistoryOverlayControl?.ApplyLocalization();
                 RefreshAnnouncementList();
                 Text.FlushSummary();
             }
@@ -1589,6 +1607,28 @@ namespace EricGameLauncher
         }
 
 
+
+        private void MenuExit_Click(object sender, RoutedEventArgs e)
+        {
+            LogService.Write("UI", "MenuExit_Click");
+            if (Application.Current is App app)
+            {
+                app.RequestFullExit();
+                return;
+            }
+
+            LogService.Write("UI", "MenuExit_Click could not resolve App instance", null, null, LogService.LogLevel.Error);
+            try { Application.Current?.Exit(); } catch (Exception ex) { LogService.Write("UI", "MenuExit_Click fallback exit failed", ex); }
+        }
+
+        private void UpdateMenuExitVisibility()
+        {
+            var visibility = ConfigService.QuickStart ? Visibility.Visible : Visibility.Collapsed;
+            if (MenuExitItem.Visibility == visibility && MenuExitSeparator.Visibility == visibility) return;
+            MenuExitItem.Visibility = visibility;
+            MenuExitSeparator.Visibility = visibility;
+            LogService.Write("UI", $"Menu exit visibility={visibility} quickStart={ConfigService.QuickStart}");
+        }
 
         private async Task StartUpdateFlowAsync(UpdateService.ReleaseInfo release, bool isForced = false)
         {
@@ -1607,6 +1647,7 @@ namespace EricGameLauncher
             if (hasUpdate && string.IsNullOrEmpty(downloadUrl)) return;
 
             var (contentGrid, dlgW, dlgH) = await BuildReleaseContentAsync(release, prependTitle: true);
+            var showHistory = false;
             var dialog = new ContentDialog
             {
                 Title = hasUpdate
@@ -1614,6 +1655,7 @@ namespace EricGameLauncher
                     : Text.T("Update_NoUpdateContent"),
                 Content = contentGrid,
                 PrimaryButtonText = hasUpdate ? Text.T("Update_DialogConfirm") : (string.IsNullOrEmpty(downloadUrl) ? "" : Text.T("Update_Repair")),
+                SecondaryButtonText = Text.T("Update_History"),
                 CloseButtonText = isForced ? Text.T("Update_Exit") : (hasUpdate ? Text.T("Update_DialogCancel") : Text.T("Update_OK")),
                 DefaultButton = hasUpdate ? ContentDialogButton.Primary : ContentDialogButton.Close,
                 XamlRoot = this.XamlRoot
@@ -1623,11 +1665,11 @@ namespace EricGameLauncher
             {
                 dialog.Closing += (s, e) =>
                 {
+                    if (showHistory) return;
                     if (e.Result != ContentDialogResult.Primary)
                     {
                         e.Cancel = true;
                         LogService.Write("App", "Exit requested (forced update dialog)");
-                        _window?.AllowRealExit();
                         try { Application.Current.Exit(); } catch (Exception ex) { LogService.Write("App", "Exit failed (forced update dialog)", ex); }
                     }
                 };
@@ -1638,6 +1680,14 @@ namespace EricGameLauncher
 
             var tcs = new TaskCompletionSource<bool>();
             var isUpdating = false;
+
+            dialog.SecondaryButtonClick += (s, e) =>
+            {
+                e.Cancel = true;
+                showHistory = true;
+                LogService.Write("Update", "History requested from release dialog");
+                dialog.Hide();
+            };
 
             dialog.PrimaryButtonClick += async (s, e) =>
             {
@@ -1679,8 +1729,11 @@ namespace EricGameLauncher
             if (tcs.Task.IsCompleted)
             {
                 LogService.Write("App", "Exit requested (update start)");
-                _window?.AllowRealExit();
                 try { Application.Current.Exit(); } catch (Exception ex) { LogService.Write("App", "Exit failed (update start)", ex); }
+            }
+            else if (showHistory)
+            {
+                await ShowUpdateHistoryAsync();
             }
             }
         }
@@ -1689,66 +1742,16 @@ namespace EricGameLauncher
         {
             using (LogService.StartOperation("Update", "BuildReleaseContentAsync"))
             {
-            if (!System.IO.Directory.Exists(ConfigService.SystemCachePath))
-                System.IO.Directory.CreateDirectory(ConfigService.SystemCachePath);
-            Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", System.IO.Path.Combine(ConfigService.SystemCachePath, "WebView2"));
             double viewWidth = this.ActualWidth > 0 ? this.ActualWidth : 950;
             double viewHeight = this.ActualHeight > 0 ? this.ActualHeight : 650;
             double dialogW = Math.Max(560, viewWidth * 0.80);
             double dialogH = Math.Max(420, viewHeight * 0.78);
             double innerH = Math.Max(280, dialogH - 150) - 48;
 
-            var webView = new Microsoft.UI.Xaml.Controls.WebView2
-            {
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Stretch,
-                Width = dialogW - 48,
-                Height = innerH
-            };
+            string bodyHtml = string.IsNullOrEmpty(release.body_html) ? MarkdownHtml.ToHtml(release.body ?? "") : release.body_html;
+            if (prependTitle) bodyHtml = $"<h2>{release.name}</h2>{bodyHtml}";
 
-            object dialogContent;
-            try
-            {
-                await webView.EnsureCoreWebView2Async();
-                var actualTheme = this.ActualTheme;
-                if (actualTheme == ElementTheme.Default)
-                    actualTheme = Application.Current.RequestedTheme == ApplicationTheme.Dark ? ElementTheme.Dark : ElementTheme.Light;
-
-                string bodyHtml = (!string.IsNullOrEmpty(release.body_html) ? release.body_html : release.body) ?? "";
-                if (prependTitle) bodyHtml = $"<h2>{release.name}</h2>{bodyHtml}";
-
-                string htmlContent = $@"
-                    <!DOCTYPE html>
-                    <html data-theme='{(actualTheme == ElementTheme.Dark ? "dark" : "light")}'>
-                    <head>
-                        <meta charset='utf-8'>
-                        <style>
-                            {WebViewStyles.MarkdownCss}
-                            @media (prefers-color-scheme: light), (prefers-color-scheme: dark) {{
-                                html[data-theme='dark'] .markdown-body {{ background-color: #0d1117; color: #e6edf3; }}
-                                html[data-theme='light'] .markdown-body {{ background-color: #ffffff; color: #1F2328; }}
-                            }}
-                            body {{
-                                box-sizing: border-box; overflow-x: hidden; margin: 0; padding: 25px;
-                                background-color: transparent !important;
-                            }}
-                            @media (max-width: 767px) {{ body {{ padding: 15px; width: 95%; }} }}
-                        </style>
-                    </head>
-                    <body class='markdown-body'>{bodyHtml}</body>
-                    </html>";
-
-                webView.NavigateToString(htmlContent);
-                dialogContent = webView;
-            }
-            catch
-            {
-                dialogContent = new ScrollViewer
-                {
-                    Content = new TextBlock { Text = release.body ?? string.Empty, TextWrapping = TextWrapping.Wrap },
-                    Height = innerH
-                };
-            }
+            FrameworkElement dialogContent = (await HtmlViewBuilder.CreateAsync(this, bodyHtml, release.body ?? string.Empty, dialogW - 48, innerH, "")).View;
 
             string channelName = ConfigService.UpdateChannel == "latest"
                 ? Text.T("Settings_UpdateChannel_Latest")
@@ -1773,7 +1776,17 @@ namespace EricGameLauncher
 
             return (grid, dialogW, dialogH);
         }
-    }
+        }
+
+        private async Task ShowUpdateHistoryAsync()
+        {
+            using (LogService.StartOperation("Update", "ShowUpdateHistoryAsync"))
+            {
+                LogService.Write("Update", "History overlay requested");
+                await HistoryOverlayControl.ShowAsync();
+            }
+        }
+
         private async void VersionText_PointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
             LogService.Write("App", "VersionText_PointerPressed invoked");
@@ -1864,6 +1877,28 @@ namespace EricGameLauncher
                 LogService.Write("App", "MainWindow_Closed Start");
                 ConfigService.SaveAll();
                 ServerConfigManager.AnnouncementsUpdated -= OnAnnouncementsUpdated;
+                if (_languageChangedHandler != null)
+                {
+                    Text.LanguageChanged -= _languageChangedHandler;
+                    _languageChangedHandler = null;
+                }
+                if (_dataChangedHandler != null)
+                {
+                    ConfigService.DataChanged -= _dataChangedHandler;
+                    _dataChangedHandler = null;
+                }
+                if (_quickStartChangedHandler != null)
+                {
+                    QuickStartService.EnabledChanged -= _quickStartChangedHandler;
+                    _quickStartChangedHandler = null;
+                }
+                CancelCloseAfterLaunch();
+                if (_tooltipTimer != null)
+                {
+                    _tooltipTimer.Stop();
+                    _tooltipTimer.Tick -= TooltipTimer_Tick;
+                    _tooltipTimer = null;
+                }
                 if (_oldWndProc != IntPtr.Zero)
                 {
                     SetWindowLongPtr(_hWnd, GWLP_WNDPROC, _oldWndProc);
@@ -1907,15 +1942,15 @@ namespace EricGameLauncher
                     LogService.Write("App", $"CloseAfterLaunchTimer_Tick foreground={fg} hWnd={_hWnd}");
                     if (fg != _hWnd)
                     {
+                        ConfigService.SaveAll();
                         if (QuickStartService.IsActive && _window != null)
                         {
-                            LogService.Write("QuickStart", "Close after launch switched to background mode");
-                            _window.EnterBackgroundMode();
+                            LogService.Write("QuickStart", "Close after launch closes main window, host keeps running");
+                            _window.Close();
                         }
                         else
                         {
                             LogService.Write("App", "Exit requested (CloseAfterLaunch)");
-                            ConfigService.SaveAll();
                             try { Application.Current.Exit(); } catch (Exception ex) { LogService.Write("App", "Exit failed (CloseAfterLaunch)", ex); }
                         }
                     }

@@ -1,5 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using System;
+using System.Collections.Generic;
 
 namespace EricGameLauncher;
 
@@ -7,13 +9,51 @@ public sealed partial class SettingsFlyoutControl : UserControl
 {
     public event Action<string>? LaunchModeChanged;
     public event Action? UpdateChannelChanged;
+    private const string GitHubTokenUrl = "https://github.com/settings/personal-access-tokens";
     private bool _syncingQuickStart = false;
+    private bool _syncingSplashAnimation = false;
+    private readonly List<(Button Button, Func<string> Text)> _helpButtons = new();
 
     public Flyout Flyout => SettingsFlyout;
 
     public SettingsFlyoutControl()
     {
         InitializeComponent();
+        RegisterHelpButton(QuickStartHelpButton, QuickStartHelpText);
+        RegisterHelpButton(UpdateChannelHelpButton, () => Text.T("Settings_UpdateChannel_Desc"));
+        RegisterHelpButton(GitHubTokenHelpButton, () => Text.T("Settings_GitHubTokenDesc"));
+        RegisterHelpButton(StorageLocationHelpButton, () => Text.T("Settings_MigrateNote"));
+    }
+
+    private void RegisterHelpButton(Button button, Func<string> text)
+    {
+        _helpButtons.Add((button, text));
+    }
+
+    private void RefreshHelpTexts()
+    {
+        foreach (var (button, text) in _helpButtons)
+            ToolTipService.SetToolTip(button, CreateHelpTextBlock(text()));
+    }
+
+    private static TextBlock CreateHelpTextBlock(string text)
+        => new() { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 300 };
+
+    private void HelpButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button) return;
+        string text = "";
+        foreach (var entry in _helpButtons)
+        {
+            if (entry.Button == button) { text = entry.Text(); break; }
+        }
+        if (string.IsNullOrEmpty(text)) return;
+
+        var flyout = new Flyout { Content = CreateHelpTextBlock(text) };
+        flyout.Opened += (s, args) => ToolTipService.SetToolTip(button, null);
+        flyout.Closed += (s, args) => ToolTipService.SetToolTip(button, CreateHelpTextBlock(text));
+        flyout.ShowAt(button);
+        LogService.Write("UI", $"SettingsFlyoutControl help opened for={button.Name}");
     }
 
     public void Sync()
@@ -21,20 +61,29 @@ public sealed partial class SettingsFlyoutControl : UserControl
         _syncingQuickStart = true;
         ToggleQuickStart.IsOn = ConfigService.QuickStart;
         _syncingQuickStart = false;
+        _syncingSplashAnimation = true;
+        ToggleSplashFadeIn.IsOn = ConfigService.SplashFadeIn;
+        ToggleSplashFadeOut.IsOn = ConfigService.SplashFadeOut;
+        _syncingSplashAnimation = false;
+        UpdateSplashAnimationVisibility();
         ToggleCloseAfterLaunch.IsOn = ConfigService.CloseAfterLaunch;
         ComboUpdateChannel.SelectedIndex = ConfigService.UpdateChannel == "latest" ? 1 : 0;
         UpdateGitHubTokenStatus();
         GitHubTokenEditRow.Visibility = Visibility.Collapsed;
-        GitHubTokenViewRow.Visibility = Visibility.Visible;
+        GitHubTokenStatusText.Visibility = Visibility.Visible;
+        GitHubTokenEditBtn.IsEnabled = true;
         UpdateStorageModeUI();
     }
 
     public void ApplyLocalization()
     {
         SettingsTitle.Text = Text.T("Settings_Title");
-        SettingsGeneralLabel.Text = Text.T("Settings_General");
         SettingsQuickStartLabel.Text = Text.T("Settings_QuickStart");
-        SettingsQuickStartDesc.Text = Text.T("Settings_QuickStart_Desc");
+        SettingsSplashAnimationLabel.Text = Text.T("Settings_SplashAnimation");
+        SettingsSplashFadeInLabel.Text = Text.T("Settings_SplashFadeIn");
+        SettingsSplashFadeOutLabel.Text = Text.T("Settings_SplashFadeOut");
+        UpdateSplashAnimationVisibility();
+        RefreshHelpTexts();
         SettingsCloseAfterLaunchLabel.Text = Text.T("Settings_CloseAfterLaunch");
         SettingsLaunchModeLabel.Text = Text.T("Settings_LaunchMode");
 
@@ -53,12 +102,9 @@ public sealed partial class SettingsFlyoutControl : UserControl
         ComboUpdateChannel.SelectedIndex = ConfigService.UpdateChannel == "latest" ? 1 : 0;
         ComboUpdateChannel.SelectionChanged += ComboUpdateChannel_SelectionChanged;
 
-        SettingsUpdateChannelDesc.Text = Text.T("Settings_UpdateChannel_Desc");
         SettingsGitHubTokenLabel.Text = Text.T("Settings_GitHubTokenLabel");
         GitHubTokenBox.PlaceholderText = Text.T("Settings_GitHubTokenPlaceholder");
-        SettingsGitHubTokenDesc.Text = Text.T("Settings_GitHubTokenDesc");
-        SettingsGitHubTokenLink.Content = Text.T("Settings_GitHubTokenLink");
-        GitHubTokenEditBtn.Content = Text.T("Settings_GitHubTokenEdit");
+        ToolTipService.SetToolTip(SettingsGitHubTokenLink, Text.T("Settings_GitHubTokenLink"));
         ToolTipService.SetToolTip(GitHubTokenEditBtn, Text.T("Settings_GitHubTokenEdit"));
         GitHubTokenSaveBtn.Content = Text.T("Settings_GitHubTokenSave");
         ToolTipService.SetToolTip(GitHubTokenSaveBtn, Text.T("Settings_GitHubTokenSave"));
@@ -67,7 +113,6 @@ public sealed partial class SettingsFlyoutControl : UserControl
         UpdateGitHubTokenStatus();
 
         SettingsDataLocationLabel.Text = Text.T("Settings_DataLocation");
-        SettingsMigrateNote.Text = Text.T("Settings_MigrateNote");
         ToolTipService.SetToolTip(BtnOpenConfigFolder, Text.T("Settings_OpenConfigFolder"));
         ToolTipService.SetToolTip(BtnOpenCacheFolder, Text.T("Settings_OpenCacheFolder"));
         UpdateStorageModeUI();
@@ -91,11 +136,46 @@ public sealed partial class SettingsFlyoutControl : UserControl
             _syncingQuickStart = true;
             toggle.IsOn = ConfigService.QuickStart;
             _syncingQuickStart = false;
+            UpdateSplashAnimationVisibility();
             LogService.Write("QuickStart", "Quick start toggle reverted, auto start registration failed", null, null, LogService.LogLevel.Error);
             return;
         }
 
+        UpdateSplashAnimationVisibility();
         LogService.Write("UI", $"SettingsFlyoutControl quick start changed to={toggle.IsOn}");
+    }
+
+    private void UpdateSplashAnimationVisibility()
+    {
+        SplashAnimationPanel.Visibility = ToggleQuickStart.IsOn ? Visibility.Visible : Visibility.Collapsed;
+        RefreshHelpTexts();
+    }
+
+    private string QuickStartHelpText()
+    {
+        string text = Text.T("Settings_QuickStart_Desc");
+        if (ToggleQuickStart.IsOn) text += "\n" + Text.T("Settings_SplashAnimation_Desc");
+        return text;
+    }
+
+    private void ToggleSplashFadeIn_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_syncingSplashAnimation) return;
+        if (sender is not ToggleSwitch toggle) return;
+        if (ConfigService.SplashFadeIn == toggle.IsOn) return;
+        ConfigService.SplashFadeIn = toggle.IsOn;
+        ConfigService.SaveAll();
+        LogService.Write("UI", $"SettingsFlyoutControl splash fade-in changed to={toggle.IsOn}");
+    }
+
+    private void ToggleSplashFadeOut_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_syncingSplashAnimation) return;
+        if (sender is not ToggleSwitch toggle) return;
+        if (ConfigService.SplashFadeOut == toggle.IsOn) return;
+        ConfigService.SplashFadeOut = toggle.IsOn;
+        ConfigService.SaveAll();
+        LogService.Write("UI", $"SettingsFlyoutControl splash fade-out changed to={toggle.IsOn}");
     }
 
     private void ComboLaunchMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -124,7 +204,8 @@ public sealed partial class SettingsFlyoutControl : UserControl
 
     private void GitHubTokenEditBtn_Click(object sender, RoutedEventArgs e)
     {
-        GitHubTokenViewRow.Visibility = Visibility.Collapsed;
+        GitHubTokenStatusText.Visibility = Visibility.Collapsed;
+        GitHubTokenEditBtn.IsEnabled = false;
         GitHubTokenEditRow.Visibility = Visibility.Visible;
         GitHubTokenBox.Text = ConfigService.GitHubToken;
         GitHubTokenBox.Focus(FocusState.Programmatic);
@@ -145,10 +226,25 @@ public sealed partial class SettingsFlyoutControl : UserControl
 
     private void GitHubTokenCancelBtn_Click(object sender, RoutedEventArgs e) => SwitchToTokenView();
 
+    private void GitHubTokenLink_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = GitHubTokenUrl,
+                UseShellExecute = true
+            });
+            LogService.Write("UI", "GitHubTokenLink_Click opened personal access tokens page");
+        }
+        catch (Exception ex) { LogService.Write("UI", "GitHubTokenLink_Click failed", ex); }
+    }
+
     private void SwitchToTokenView()
     {
         GitHubTokenEditRow.Visibility = Visibility.Collapsed;
-        GitHubTokenViewRow.Visibility = Visibility.Visible;
+        GitHubTokenStatusText.Visibility = Visibility.Visible;
+        GitHubTokenEditBtn.IsEnabled = true;
         UpdateGitHubTokenStatus();
         LogService.Write("UI", "GitHubToken: switched to view mode");
     }

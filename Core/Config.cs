@@ -24,6 +24,12 @@ public class AppSettings
     [YamlMember(Alias = "quickStart")]
     public bool QuickStart { get; set; } = true;
 
+    [YamlMember(Alias = "splashFadeIn")]
+    public bool SplashFadeIn { get; set; } = true;
+
+    [YamlMember(Alias = "splashFadeOut")]
+    public bool SplashFadeOut { get; set; } = true;
+
     [YamlMember(Alias = "iconSize")]
     public double IconSize { get; set; } = 118;
 
@@ -236,6 +242,7 @@ public static class ConfigService
     public static string SystemCachePath => _overrideSystemCachePath ?? Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher");
 
     private static bool _debugModeApplied = false;
+    private static bool _initialized = false;
 
     public static string SettingsFilePath => Path.Combine(CurrentDataPath, SettingsFileName);
     public static string ItemsFilePath => Path.Combine(CurrentDataPath, ItemsFileName);
@@ -257,6 +264,12 @@ public static class ConfigService
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         LogService.Write("Config", "Initialize Start");
+        if (_initialized)
+        {
+            LogService.Write("Config", "Initialize skipped, config already loaded");
+            return;
+        }
+        _initialized = true;
         if (_debugModeApplied)
         {
             try { LogService.Write("Config", "Initialize detected debug mode, skipping normal path selection"); } catch { }
@@ -288,6 +301,19 @@ public static class ConfigService
         LoadConfigData();
         NormalizeSettingsFile();
         LogService.Write("Config", $"Initialize End path={CurrentDataPath} mode={(CurrentDataPath == SystemBasePath ? "System" : "Portable")} duration={sw.ElapsedMilliseconds}ms");
+    }
+
+    public static void Reload()
+    {
+        if (string.IsNullOrEmpty(CurrentDataPath))
+        {
+            LogService.Write("Config", "Reload skipped, data path unavailable");
+            return;
+        }
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        LoadConfigData();
+        LogService.Write("Config", $"Reload End path={CurrentDataPath} duration={sw.ElapsedMilliseconds}ms");
     }
 
     public static void ApplyDebugMode(string baseDir)
@@ -542,6 +568,8 @@ public static class ConfigService
             if (!existingYaml.Contains("appIconPath:")) needsSave = true;
             if (!existingYaml.Contains("appTitle:")) needsSave = true;
             if (!existingYaml.Contains("quickStart:")) needsSave = true;
+            if (!existingYaml.Contains("splashFadeIn:")) needsSave = true;
+            if (!existingYaml.Contains("splashFadeOut:")) needsSave = true;
             if (needsSave)
             {
                 SaveSettingsData();
@@ -599,6 +627,22 @@ public static class ConfigService
         get => _settings?.QuickStart ?? true;
         set { if (_settings != null) { LogService.Write("Config", $"QuickStart changed to={value}"); _settings.QuickStart = value; } }
     }
+
+    public static bool SplashFadeIn
+    {
+        get => _settings?.SplashFadeIn ?? true;
+        set { if (_settings != null) { LogService.Write("Config", $"SplashFadeIn changed to={value}"); _settings.SplashFadeIn = value; } }
+    }
+
+    public static bool SplashFadeOut
+    {
+        get => _settings?.SplashFadeOut ?? true;
+        set { if (_settings != null) { LogService.Write("Config", $"SplashFadeOut changed to={value}"); _settings.SplashFadeOut = value; } }
+    }
+
+    public static bool SplashFadeInApplied => !QuickStart || SplashFadeIn;
+
+    public static bool SplashFadeOutApplied => !QuickStart || SplashFadeOut;
 
     public static string Language => Text.DetectSystemLanguage();
 
@@ -824,6 +868,14 @@ public static class ConfigService
                 if (value != "true" && value != "false") return "ErrQuickStart";
                 if (!QuickStartService.SetEnabled(bool.Parse(value))) return "ErrQuickStartApply";
                 return null;
+            case "splashfadein":
+                if (value != "true" && value != "false") return "ErrSplashFadeIn";
+                SplashFadeIn = bool.Parse(value);
+                break;
+            case "splashfadeout":
+                if (value != "true" && value != "false") return "ErrSplashFadeOut";
+                SplashFadeOut = bool.Parse(value);
+                break;
             case "iconsize":
                 if (!double.TryParse(value, out var iconSize) || iconSize < 32 || iconSize > 512) return "ErrIconSize";
                 IconSize = iconSize;

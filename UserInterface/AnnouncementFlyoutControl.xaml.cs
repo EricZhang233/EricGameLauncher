@@ -65,9 +65,10 @@ public sealed partial class AnnouncementFlyoutControl : UserControl
 
     private void UpdateIndicator()
     {
-        AnnouncementButtonIcon.Foreground = _items.Any(item => !item.IsRead)
-            ? new SolidColorBrush(Windows.UI.Color.FromArgb(255, 196, 43, 28))
-            : null;
+        if (_items.Any(item => !item.IsRead))
+            AnnouncementButtonIcon.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 196, 43, 28));
+        else
+            AnnouncementButtonIcon.ClearValue(IconElement.ForegroundProperty);
     }
 
     private void BodyRichText_Loaded(object sender, RoutedEventArgs e)

@@ -22,6 +22,7 @@
   Menu_Announcements_WithCount: "公告 ({0})"
   Menu_CheckUpdate: "检查更新"
   Menu_Delete: "删除"
+  Menu_Exit: "退出"
   Menu_IconSize: "图标大小"
   Menu_Install: "创建"
   Menu_OpenFileLocation: "打开文件位置"
@@ -80,7 +81,7 @@
   Scanner_SelectAll: "全选"
   Scanner_Title: "扫描本地游戏"
   Settings_CloseAfterLaunch: "启动程序后自动退出"
-  Settings_DataLocation: "数据存储位置"
+  Settings_DataLocation: "数据位置"
   Settings_General: "常规"
   Settings_GitHubTokenCancel: "取消"
   Settings_GitHubTokenConfigured: "已配置"
@@ -97,12 +98,16 @@
   Settings_MigrateNote: "切换后会自动迁移现有的配置数据"
   Settings_OpenCacheFolder: "打开缓存文件夹"
   Settings_OpenConfigFolder: "打开配置文件夹"
-  Settings_PortableMode: "便携模式"
+  Settings_PortableMode: "便携"
   Settings_QuickStart: "快速启动"
-  Settings_QuickStart_Desc: "启动器将作为后台服务运行并开机自启；关闭窗口后不再退出，而是无界面后台常驻，从图标启动时可毫秒级唤醒。如需彻底退出，可在任务栏右键选择「结束任务」（Windows 11 24H2 及以上）。"
+  Settings_QuickStart_Desc: "启动器将以后台服务方式开机自启，并在后台预加载与预热资源；关闭窗口后仍以无界面后台常驻，再次启动可快速进入。如需澈底退出，可在「更多」菜单底部选择「退出」（立即结束窗口与后台宿主，本设置保持不变），或使用任务栏右键「结束任务」（Windows 11 24H2 及以上）。"
+  Settings_SplashAnimation: "启动动画"
+  Settings_SplashAnimation_Desc: "控制启动画面的渐入与渐出动画；关闭后启动画面直接显示或消失，启动会略快一些。该设置仅在开启「快速启动」时生效，未开启时启动画面始终保留动画。"
+  Settings_SplashFadeIn: "渐入"
+  Settings_SplashFadeOut: "渐出"
   Settings_SwitchToPortable: "迁移至便携模式"
   Settings_SwitchToSystem: "迁移至系统模式"
-  Settings_SystemMode: "系统模式"
+  Settings_SystemMode: "系统"
   Settings_Title: "设置"
   Settings_UpdateChannel: "更新通道"
   Settings_UpdateChannel_Desc: "正式版仅接收正式发布；开发版第一时间获取更新。"
@@ -124,6 +129,10 @@
   Update_DialogTitle: "发现新版本"
   Update_DownloadProgress: "正在下载 {0}%"
   Update_Exit: "退出"
+  Update_History: "历史更新"
+  Update_HistoryEmpty: "暂无更新记录。"
+  Update_HistoryFailed: "无法获取历史更新记录，请稍后重试。"
+  Update_HistoryTitle: "历史更新记录"
   Update_NoUpdateContent: "您当前使用的是最新版本。"
   Update_NoUpdateTitle: "检查更新"
   Update_OK: "确定"
@@ -152,6 +161,7 @@
   Menu_Announcements_WithCount: "Announcements ({0})"
   Menu_CheckUpdate: "Check for Updates"
   Menu_Delete: "Delete"
+  Menu_Exit: "Exit"
   Menu_IconSize: "Icon Size"
   Menu_Install: "Create"
   Menu_OpenFileLocation: "Open File Location"
@@ -210,7 +220,7 @@
   Scanner_SelectAll: "Select All"
   Scanner_Title: "Scan Local Games"
   Settings_CloseAfterLaunch: "Close after launching app"
-  Settings_DataLocation: "Data Location"
+  Settings_DataLocation: "Data Dir."
   Settings_General: "General"
   Settings_GitHubTokenCancel: "Cancel"
   Settings_GitHubTokenConfigured: "Configured"
@@ -227,12 +237,16 @@
   Settings_MigrateNote: "Existing configuration data will be automatically migrated"
   Settings_OpenCacheFolder: "Open Cache Folder"
   Settings_OpenConfigFolder: "Open Config Folder"
-  Settings_PortableMode: "Portable Mode"
+  Settings_PortableMode: "Portable"
   Settings_QuickStart: "Quick Start"
-  Settings_QuickStart_Desc: "Runs the launcher as a background service with auto start at sign-in. Closing the window no longer exits; it stays resident without any interface so the icon launch resumes instantly. To exit completely, right-click the taskbar entry and choose End task (Windows 11 24H2 or later)."
+  Settings_QuickStart_Desc: "Runs the launcher as a background service with auto start at sign-in, preloading and warming up resources in the background. Closing the window keeps it resident without any interface, so the next launch enters quickly. To exit completely, choose Exit at the bottom of the More menu (it ends the window and the background host right away and keeps this setting unchanged), or right-click the taskbar entry and choose End task (Windows 11 24H2 or later)."
+  Settings_SplashAnimation: "Startup animation"
+  Settings_SplashAnimation_Desc: "Controls the splash fade-in and fade-out animations. When off, the splash appears or disappears instantly and startup is slightly faster. This setting applies only while Quick Start is enabled; with Quick Start off the splash always animates."
+  Settings_SplashFadeIn: "Fade in"
+  Settings_SplashFadeOut: "Fade out"
   Settings_SwitchToPortable: "Migrate to Portable Mode"
   Settings_SwitchToSystem: "Migrate to System Mode"
-  Settings_SystemMode: "System Mode"
+  Settings_SystemMode: "System"
   Settings_Title: "Settings"
   Settings_UpdateChannel: "Update Channel"
   Settings_UpdateChannel_Desc: "Official: formal releases only. Dev: instant updates."
@@ -254,6 +268,10 @@
   Update_DialogTitle: "New Version Found"
   Update_DownloadProgress: "Downloading {0}%"
   Update_Exit: "Exit"
+  Update_History: "History"
+  Update_HistoryEmpty: "No update history yet."
+  Update_HistoryFailed: "Failed to load the update history. Please try again later."
+  Update_HistoryTitle: "Update History"
   Update_NoUpdateContent: "You are already using the latest version."
   Update_NoUpdateTitle: "Check for Updates"
   Update_OK: "OK"
@@ -286,6 +304,8 @@ CLI:
   ErrCloseAfterLaunch: "closeAfterLaunch must be 'true' or 'false'."
   ErrQuickStart: "quickStart must be 'true' or 'false'."
   ErrQuickStartApply: "Failed to register the quick start background service."
+  ErrSplashFadeIn: "splashFadeIn must be 'true' or 'false'."
+  ErrSplashFadeOut: "splashFadeOut must be 'true' or 'false'."
   ErrIconSize: "iconSize must be a number between 32 and 512."
   ErrUpdateChannel: "updateChannel must be 'stable' or 'latest'."
   ErrLang: "lang must be 'Zh-CN' or 'EN'."
@@ -317,6 +337,7 @@ CLI:
   ErrSortingFmt: "Error sorting: {0}"
   ErrInstallFmt: "Error creating shortcuts: {0}"
   ErrUninstallFmt: "Error removing shortcuts: {0}"
+  ErrExitFailed: "Failed to signal the background host to exit."
   ErrMarkedReadFmt: "Marked announcement '{0}' as read."
 
   # == Messages ==
@@ -370,6 +391,7 @@ CLI:
   MsgAnnouncementsHeader: "Announcements ({0}):"
   MsgNoUpdates: "No updates available. Current version: {0}"
   MsgUpdateAvailable: "Update available!"
+  ErrHistoryFetch: "Failed to fetch the release history from GitHub."
   MsgCheckingUpdate: "Checking for updates (channel: {0})..."
   MsgUpgradeStart: "Downloading and installing update {0}..."
   MsgRepairStart: "Reinstalling latest version {0}..."
@@ -412,6 +434,10 @@ CLI:
   LblReleaseNotesUrl: "  Changelog: {0}"
   LblUpdatePrerelease: "  Type:    Pre-release"
   LblReleaseNotes: "Release Notes:"
+  LblHistoryHeader: "Update History (oldest first):"
+  LblHistoryDate: "  Date:    {0}"
+  LblExitSent: "Exit signal sent; the app and its background host are shutting down."
+  LblHostNotRunning: "The background host is not running."
 
   # == Scan Labels ==
   ScanSteam: "Scanning Steam..."
@@ -457,6 +483,7 @@ CLI:
   Help_CmdInstallDesc: "  install        Create desktop & start menu shortcuts"
   Help_CmdUninstallDesc: "  uninstall      Remove desktop & start menu shortcuts"
   Help_CmdStorageDesc: "  storage        Switch storage mode (system / portable)"
+  Help_CmdExitDesc: "  exit           Exit the app and stop the background host"
   Help_CmdSkillDesc: "  skill          Print the AI agent integration guide"
   Help_CmdVersionDesc: "  version        Display version information"
   Help_CmdHelpDesc: "  help           Show this help message"
@@ -568,6 +595,8 @@ CLI:
       launchMode          Launch mode (single / double)
       closeAfterLaunch    Auto-close after launch (true / false)
       quickStart          Run as background service with auto start (true / false)
+      splashFadeIn        Splash fade-in animation (true / false, applies only when quickStart is true)
+      splashFadeOut       Splash fade-out animation (true / false, applies only when quickStart is true)
       iconSize            Icon size in pixels (32-512)
       updateChannel       Update channel (stable / latest)
       githubToken         GitHub personal access token
@@ -585,6 +614,7 @@ CLI:
       --check             Check for available updates
       --install           Download and install the latest update
       --repair            Reinstall the latest version (force reinstall)
+      --history           Show the full update history, oldest first
       --channel <ch>      Channel: stable or latest (default: stable)
       --json              Output in JSON format
   Help_Sort_Text: |
@@ -616,6 +646,11 @@ CLI:
       --status            Show current storage mode
       --switch <mode>     Switch to system or portable mode
       --json              Output in JSON format
+  Help_Exit_Text: |
+    Usage: EricGameLauncher.Cli.exe exit
+
+      Stops a running background host (and any open window it owns), then exits.
+      The quick start setting is left unchanged.
   Help_Skill_Text: |
     Usage: EricGameLauncher.Cli.exe skill
 

@@ -148,70 +148,81 @@ internal static class LogService
     private static async Task WriteLoop()
     {
         try { Directory.CreateDirectory(LogDir); } catch { }
-
-        StreamWriter? writer = null;
+        try { if (File.Exists(LogFilePath)) File.Delete(LogFilePath); } catch { }
 
         try
         {
-            while (await _channel.Reader.WaitToReadAsync(_cts.Token))
+            while (!_cts.IsCancellationRequested)
             {
-                if (writer == null)
+                LogEntry entry;
+                try
                 {
-                    writer = new StreamWriter(LogFilePath, append: false) { AutoFlush = false };
+                    entry = await _channel.Reader.ReadAsync(_cts.Token);
                 }
+                catch (OperationCanceledException) { break; }
+                catch (ChannelClosedException) { break; }
 
-                var sb = new StringBuilder(512);
-                while (_channel.Reader.TryRead(out var entry))
-                {
-                    sb.Clear();
-                    sb.Append('[');
-                    sb.Append(entry.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff"));
-                    sb.Append("Z ");
-                    sb.Append(entry.Tag);
-                    sb.Append('/');
-                    sb.Append(entry.Level.ToString().ToUpperInvariant());
-                    sb.Append("] ");
-                    sb.Append(entry.CallerFile);
-                    sb.Append(':');
-                    sb.Append(entry.CallerLine);
-                    sb.Append('.');
-                    sb.Append(entry.Caller);
-                    if (!string.IsNullOrEmpty(entry.OperationId))
-                    {
-                        sb.Append(" op=");
-                        sb.Append(entry.OperationId);
-                    }
-                    sb.Append(" | ");
-                    sb.Append(entry.Message);
-                    if (entry.Exception != null)
-                    {
-                        try
-                        {
-                            sb.Append(" Exception=");
-                            sb.Append(entry.Exception.GetType().FullName);
-                            sb.Append(':');
-                            sb.Append(entry.Exception.Message);
-                            sb.Append(" Stack=");
-                            sb.Append(entry.Exception.StackTrace);
-                        }
-                        catch { }
-                    }
-
-                    await writer.WriteLineAsync(sb.ToString());
-                    try { ReturnEntry(entry); } catch { }
-                }
-
-                await writer.FlushAsync();
+                WriteEntry(entry);
             }
         }
-        catch (OperationCanceledException) { }
+        catch (Exception ex) { WriteWriterFailure(ex); }
+    }
+
+    private static void WriteEntry(LogEntry entry)
+    {
+        try
+        {
+            var sb = new StringBuilder(512);
+            sb.Append('[');
+            sb.Append(entry.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+            sb.Append("Z ");
+            sb.Append(entry.Tag);
+            sb.Append('/');
+            sb.Append(entry.Level.ToString().ToUpperInvariant());
+            sb.Append("] ");
+            sb.Append(entry.CallerFile);
+            sb.Append(':');
+            sb.Append(entry.CallerLine);
+            sb.Append('.');
+            sb.Append(entry.Caller);
+            if (!string.IsNullOrEmpty(entry.OperationId))
+            {
+                sb.Append(" op=");
+                sb.Append(entry.OperationId);
+            }
+            sb.Append(" | ");
+            sb.Append(entry.Message);
+            if (entry.Exception != null)
+            {
+                try
+                {
+                    sb.Append(" Exception=");
+                    sb.Append(entry.Exception.GetType().FullName);
+                    sb.Append(':');
+                    sb.Append(entry.Exception.Message);
+                    sb.Append(" Stack=");
+                    sb.Append(entry.Exception.StackTrace);
+                }
+                catch { }
+            }
+
+            File.AppendAllText(LogFilePath, sb.ToString() + Environment.NewLine);
+        }
+        catch (Exception ex) { WriteWriterFailure(ex); }
         finally
         {
-            if (writer != null)
-            {
-                try { await writer.DisposeAsync(); } catch { }
-            }
+            try { ReturnEntry(entry); } catch { }
         }
+    }
+
+    private static void WriteWriterFailure(Exception ex)
+    {
+        try
+        {
+            string path = Path.Combine(Path.GetTempPath(), "ericgamelauncher-log-error.txt");
+            File.AppendAllText(path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {ex.GetType().FullName}: {ex.Message}{Environment.NewLine}{ex.StackTrace}{Environment.NewLine}");
+        }
+        catch { }
     }
 
     internal static void FlushAndStop()

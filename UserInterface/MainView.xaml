@@ -137,8 +137,15 @@
                             </MenuFlyoutItem>
                             
                             <MenuFlyoutSeparator />
-                            
-                            
+
+                            <MenuFlyoutItem x:Name="MenuExitItem" Text="" Click="MenuExit_Click" Visibility="Collapsed">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE7E8;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+
+                            <MenuFlyoutSeparator x:Name="MenuExitSeparator" Visibility="Collapsed" />
+
                             <MenuFlyoutItem Click="AuthorLink_Click">
                                 <MenuFlyoutItem.Template>
                                     <ControlTemplate>
@@ -316,6 +323,11 @@
               Grid.RowSpan="2"
               Visibility="Collapsed"
               Canvas.ZIndex="2000"/>
+
+        <local:UpdateHistoryOverlayControl x:Name="HistoryOverlayControl"
+              Grid.RowSpan="2"
+              Visibility="Collapsed"
+              Canvas.ZIndex="2100"/>
 
         <Popup x:Name="CustomIconToolTip" IsHitTestVisible="False">
             <Border Background="{ThemeResource FlyoutPresenterBackground}"
