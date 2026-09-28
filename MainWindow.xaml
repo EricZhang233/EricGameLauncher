@@ -7,12 +7,11 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid>
-        <local:MainView x:Name="Main"/>
-
+    <Grid x:Name="RootGrid">
         <Grid x:Name="StartupOverlay"
               Canvas.ZIndex="3000"
               Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+              Opacity="0"
               IsHitTestVisible="True"
               Loaded="StartupOverlay_Loaded">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="18">

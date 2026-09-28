@@ -16,13 +16,21 @@ namespace EricGameLauncher
         private bool _startupDataLoaded = false;
         private bool _startupUiLoaded = false;
         private bool _startupOverlayHidden = false;
+        private bool _startupHidePending = false;
+        private Storyboard? _startupFadeInStoryboard;
+        private TaskCompletionSource<bool>? _startupFadeInCompletion;
         private readonly Stopwatch _startupOverlayStopwatch = Stopwatch.StartNew();
 
         private IntPtr _hWnd = IntPtr.Zero;
         private IntPtr _customIconHandle = IntPtr.Zero;
-        private bool _backgroundResident = false;
-        private bool _forceExit = false;
-        private const int BackgroundOffscreenCoordinate = -32000;
+        private bool _startupComplete = false;
+        private TaskCompletionSource<bool>? _startupCompletion;
+        private Microsoft.UI.Dispatching.DispatcherQueueTimer? _warmupHideTimer;
+        private const int WarmupOffscreenCoordinate = -32000;
+
+        public event Action? StartupComplete;
+        public bool IsStartupComplete => _startupComplete;
+        public bool WarmupMode { get; private set; } = false;
 
         public MainWindow()
         {
@@ -72,8 +80,6 @@ namespace EricGameLauncher
                 this.SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
                 this.ExtendsContentIntoTitleBar = true;
 
-                ConfigService.Initialize();
-
                 this.Title = ConfigService.AppTitle;
 
                 var titleBar = this.AppWindow.TitleBar;
@@ -85,7 +91,6 @@ namespace EricGameLauncher
                 _hWnd = WindowNative.GetWindowHandle(this);
                 ApplyWindowIcon();
                 this.Closed += Window_Closing_Cleanup;
-                this.AppWindow.Closing += AppWindow_Closing;
                 LogService.Write("Startup", "Pre-activation window config and state applied");
             }
             catch (Exception ex) { LogService.Write("Startup", "PrepareWindowForActivation failed", ex); }
@@ -148,65 +153,71 @@ namespace EricGameLauncher
                 DestroyIcon(_customIconHandle);
                 _customIconHandle = IntPtr.Zero;
             }
-        }
-
-        private void AppWindow_Closing(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowClosingEventArgs args)
-        {
-            try
+            if (_warmupHideTimer != null)
             {
-                if (_forceExit || !QuickStartService.IsActive)
-                    return;
-
-                args.Cancel = true;
-                LogService.Write("QuickStart", "Close request intercepted, switching to background mode");
-                EnterBackgroundMode();
+                try { _warmupHideTimer.Stop(); } catch { }
+                _warmupHideTimer = null;
             }
-            catch (Exception ex) { LogService.Write("QuickStart", "AppWindow_Closing failed", ex); }
         }
 
-        public void AllowRealExit()
+        public void PrepareOffscreenWarmup()
         {
-            _forceExit = true;
-            _backgroundResident = false;
-            LogService.Write("QuickStart", "Real exit allowed for current shutdown");
-        }
-
-        public void StartInBackground()
-        {
-            _backgroundResident = true;
+            WarmupMode = true;
             try
             {
-                this.AppWindow.Move(new Windows.Graphics.PointInt32(BackgroundOffscreenCoordinate, BackgroundOffscreenCoordinate));
+                WindowStyleHelper.HideFromTaskbar(_hWnd);
+                this.AppWindow.Move(new Windows.Graphics.PointInt32(WarmupOffscreenCoordinate, WarmupOffscreenCoordinate));
                 this.Activate();
                 this.AppWindow.Hide();
-                LogService.Write("QuickStart", "Window started hidden offscreen as background service");
+                ScheduleWarmupHide();
+                LogService.Write("Startup", "Warmup window activated offscreen and hidden");
             }
-            catch (Exception ex) { LogService.Write("QuickStart", "StartInBackground failed", ex); }
+            catch (Exception ex) { LogService.Write("Startup", "Warmup window preparation failed", ex); }
         }
 
-        public void EnterBackgroundMode()
+        private void ScheduleWarmupHide()
         {
-            if (_backgroundResident) return;
-            _backgroundResident = true;
             try
             {
-                ConfigService.SaveAll();
-                this.AppWindow.Hide();
-                LogService.Write("QuickStart", "Window hidden, launcher keeps running without interface");
+                _warmupHideTimer = DispatcherQueue.CreateTimer();
+                _warmupHideTimer.Interval = TimeSpan.FromMilliseconds(600);
+                _warmupHideTimer.IsRepeating = false;
+                _warmupHideTimer.Tick += (sender, args) =>
+                {
+                    try
+                    {
+                        sender.Stop();
+                        this.AppWindow.Hide();
+                        LogService.Write("Startup", "Warmup window re-hidden after deferred show");
+                    }
+                    catch (Exception ex) { LogService.Write("Startup", "Warmup re-hide failed", ex); }
+                };
+                _warmupHideTimer.Start();
             }
-            catch (Exception ex) { LogService.Write("QuickStart", "EnterBackgroundMode failed", ex); }
+            catch (Exception ex) { LogService.Write("Startup", "ScheduleWarmupHide failed", ex); }
         }
 
-        private void RestoreFromBackground()
+        public Task<bool> WaitStartupCompleteAsync(TimeSpan timeout)
         {
-            _backgroundResident = false;
-            try
-            {
-                RestoreWindowState();
-                this.AppWindow.Show();
-                LogService.Write("QuickStart", "Background service window restored");
-            }
-            catch (Exception ex) { LogService.Write("QuickStart", "RestoreFromBackground failed", ex); }
+            if (_startupComplete) return Task.FromResult(true);
+            _startupCompletion ??= new TaskCompletionSource<bool>();
+            return WaitWithTimeoutAsync(_startupCompletion.Task, timeout);
+        }
+
+        private static async Task<bool> WaitWithTimeoutAsync(Task<bool> task, TimeSpan timeout)
+        {
+            var completed = await Task.WhenAny(task, Task.Delay(timeout));
+            if (completed != task) return false;
+            return await task;
+        }
+
+        private void MarkStartupComplete()
+        {
+            if (_startupComplete) return;
+            _startupComplete = true;
+            try { _startupCompletion?.TrySetResult(true); } catch { }
+            try { StartupComplete?.Invoke(); } catch (Exception ex) { LogService.Write("Startup", "StartupComplete handler failed", ex); }
+            LogService.Write("Startup", $"Main window startup complete duration={_startupOverlayStopwatch.ElapsedMilliseconds}ms");
         }
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
@@ -323,8 +334,84 @@ namespace EricGameLauncher
         private void StartMainView()
         {
             this.InitializeComponent();
-            Main.Start(this);
+            if (WarmupMode)
+            {
+                BeginMainView();
+                return;
+            }
+            _ = BeginMainViewAfterFirstFrameAsync();
+        }
+
+        private async Task BeginMainViewAfterFirstFrameAsync()
+        {
+            bool painted;
+            try
+            {
+                painted = await WaitForFirstFrameAsync();
+            }
+            catch (Exception ex)
+            {
+                painted = false;
+                LogService.Write("Startup", "First frame wait failed", ex);
+            }
+            LogService.Write("Startup", painted
+                ? $"Splash first frame rendered at {_startupOverlayStopwatch.ElapsedMilliseconds}ms"
+                : $"Splash first frame wait timed out at {_startupOverlayStopwatch.ElapsedMilliseconds}ms");
+
+            await WaitForStartupFadeInAsync();
+            BeginMainView();
+        }
+
+        private async Task WaitForStartupFadeInAsync()
+        {
+            var completion = _startupFadeInCompletion;
+            if (completion == null) return;
+            try { await completion.Task; }
+            catch (Exception ex) { LogService.Write("Startup", "Splash fade-in wait failed", ex); }
+        }
+
+        private void BeginMainView()
+        {
+            try
+            {
+                var main = new MainView();
+                RootGrid.Children.Insert(0, main);
+                main.Start(this);
+                LogService.Write("Startup", $"Main view created at {_startupOverlayStopwatch.ElapsedMilliseconds}ms");
+            }
+            catch (Exception ex) { LogService.Write("Startup", "BeginMainView failed", ex); }
             _ = EnforceStartupOverlayTimeoutAsync();
+        }
+
+        private async Task<bool> WaitForFirstFrameAsync()
+        {
+            var tcs = new TaskCompletionSource<bool>();
+            var timer = DispatcherQueue.CreateTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(150);
+            timer.IsRepeating = false;
+
+            void Cleanup()
+            {
+                Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnRendering;
+                try { timer.Stop(); } catch { }
+            }
+
+            void OnRendering(object? sender, object args)
+            {
+                Cleanup();
+                tcs.TrySetResult(true);
+            }
+
+            void OnTimeout(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+            {
+                Cleanup();
+                tcs.TrySetResult(false);
+            }
+
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnRendering;
+            timer.Tick += OnTimeout;
+            timer.Start();
+            return await tcs.Task;
         }
 
         public void ActivateAndFocus()
@@ -333,9 +420,6 @@ namespace EricGameLauncher
             {
                 DispatcherQueue.TryEnqueue(() =>
                 {
-                    if (_backgroundResident)
-                        RestoreFromBackground();
-
                     WindowActivator.Activate(WindowNative.GetWindowHandle(this));
                 });
             }
@@ -344,7 +428,32 @@ namespace EricGameLauncher
 
         public void SetSplashIcon()
         {
-            StartupOverlayIcon.Source = AppIconService.GetBitmapImage();
+            _ = ApplySplashIconAsync();
+        }
+
+        private bool _splashIconApplied;
+
+        private async Task ApplySplashIconAsync()
+        {
+            if (_splashIconApplied || StartupOverlayIcon.Source != null) return;
+            _splashIconApplied = true;
+            try
+            {
+                var bitmap = await AppIconService.LoadBitmapImageAsync();
+                if (bitmap == null)
+                {
+                    _splashIconApplied = false;
+                    LogService.Write("Startup", "Splash icon unavailable");
+                    return;
+                }
+                StartupOverlayIcon.Source = bitmap;
+                LogService.Write("Startup", "Splash icon applied");
+            }
+            catch (Exception ex)
+            {
+                _splashIconApplied = false;
+                LogService.Write("Startup", "Splash icon apply failed", ex);
+            }
         }
 
         public void MarkDataReady()
@@ -362,7 +471,67 @@ namespace EricGameLauncher
         private void StartupOverlay_Loaded(object sender, RoutedEventArgs e)
         {
             _startupOverlayLoaded = true;
+            SetSplashIcon();
+            StartStartupOverlayFadeIn();
             TryHideStartupOverlay();
+        }
+
+        private void StartStartupOverlayFadeIn()
+        {
+            var completion = new TaskCompletionSource<bool>();
+            _startupFadeInCompletion = completion;
+            try
+            {
+                if (WarmupMode)
+                {
+                    StartupOverlay.Opacity = 1;
+                    completion.TrySetResult(true);
+                    LogService.Write("Startup", "Warmup window splash shown without fade-in");
+                    return;
+                }
+
+                if (!ConfigService.SplashFadeInApplied)
+                {
+                    StartupOverlay.Opacity = 1;
+                    completion.TrySetResult(true);
+                    LogService.Write("Startup", "Splash fade-in skipped by configuration");
+                    return;
+                }
+
+                var fadeIn = new DoubleAnimation
+                {
+                    From = 0,
+                    To = 1,
+                    Duration = new Duration(TimeSpan.FromMilliseconds(200)),
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                };
+                var storyboard = new Storyboard();
+                Storyboard.SetTarget(fadeIn, StartupOverlay);
+                Storyboard.SetTargetProperty(fadeIn, "Opacity");
+                storyboard.Children.Add(fadeIn);
+                storyboard.Completed += (sender, args) =>
+                {
+                    storyboard.Stop();
+                    _startupFadeInStoryboard = null;
+                    StartupOverlay.Opacity = 1;
+                    completion.TrySetResult(true);
+                    LogService.Write("Startup", $"Splash fade-in finished at {_startupOverlayStopwatch.ElapsedMilliseconds}ms");
+                    if (_startupHidePending)
+                    {
+                        _startupHidePending = false;
+                        StartStartupOverlayFadeOut();
+                    }
+                };
+                _startupFadeInStoryboard = storyboard;
+                storyboard.Begin();
+                LogService.Write("Startup", $"Splash fade-in started duration=200ms at={_startupOverlayStopwatch.ElapsedMilliseconds}ms");
+            }
+            catch (Exception ex)
+            {
+                StartupOverlay.Opacity = 1;
+                completion.TrySetResult(true);
+                LogService.Write("Startup", "Splash fade-in failed", ex);
+            }
         }
 
         private void TryHideStartupOverlay()
@@ -383,6 +552,40 @@ namespace EricGameLauncher
                     ? $"Startup overlay hidden by timeout after {_startupOverlayStopwatch.ElapsedMilliseconds}ms data={_startupDataLoaded} ui={_startupUiLoaded} loaded={_startupOverlayLoaded}"
                     : $"Startup overlay hidden after {_startupOverlayStopwatch.ElapsedMilliseconds}ms");
 
+                MarkStartupComplete();
+
+                if (WarmupMode)
+                {
+                    StartupOverlay.Opacity = 0;
+                    StartupOverlay.Visibility = Visibility.Collapsed;
+                    LogService.Write("Startup", "Warmup window overlay collapsed without animation");
+                    return;
+                }
+
+                if (_startupFadeInStoryboard != null)
+                {
+                    _startupHidePending = true;
+                    LogService.Write("Startup", "Startup overlay fade-out deferred until splash fade-in finishes");
+                    return;
+                }
+
+                StartStartupOverlayFadeOut();
+            }
+            catch (Exception ex) { LogService.Write("Startup", "TryHideStartupOverlay failed", ex); }
+        }
+
+        private void StartStartupOverlayFadeOut()
+        {
+            try
+            {
+                if (!ConfigService.SplashFadeOutApplied)
+                {
+                    StartupOverlay.Opacity = 0;
+                    StartupOverlay.Visibility = Visibility.Collapsed;
+                    LogService.Write("Startup", "Startup overlay hidden without fade-out by configuration");
+                    return;
+                }
+
                 var fadeOut = new DoubleAnimation
                 {
                     To = 0,
@@ -397,8 +600,9 @@ namespace EricGameLauncher
                     StartupOverlay.Visibility = Visibility.Collapsed;
                 };
                 storyboard.Begin();
+                LogService.Write("Startup", $"Startup overlay fade-out started duration=500ms at={_startupOverlayStopwatch.ElapsedMilliseconds}ms");
             }
-            catch (Exception ex) { LogService.Write("Startup", "TryHideStartupOverlay failed", ex); }
+            catch (Exception ex) { LogService.Write("Startup", "Startup overlay fade-out failed", ex); }
         }
 
         private async Task EnforceStartupOverlayTimeoutAsync()

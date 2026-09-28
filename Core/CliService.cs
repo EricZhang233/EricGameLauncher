@@ -66,6 +66,7 @@ public static class CliService
                 "install" => await CmdInstall(parsed),
                 "uninstall" => await CmdUninstall(parsed),
                 "storage" => await CmdStorage(parsed),
+                "exit" => CmdExit(),
                 "skill" => CmdSkill(),
                 "version" => CmdVersion(),
                 _ => WriteHelp(string.Format(Text.Cli("ErrUnknownCommand"), command))
@@ -203,6 +204,7 @@ public static class CliService
             "install" => Text.Cli("Help_Install_Text"),
             "uninstall" => Text.Cli("Help_Uninstall_Text"),
             "storage" => Text.Cli("Help_Storage_Text"),
+            "exit" => Text.Cli("Help_Exit_Text"),
             "skill" => Text.Cli("Help_Skill_Text"),
             "version" => Text.Cli("Help_Version_Text"),
             _ => null
@@ -734,6 +736,9 @@ public static class CliService
                     quickStart = ConfigService.QuickStart,
                     quickStartRegistered = QuickStartService.IsAutoStartRegistered(),
                     quickStartCommand = QuickStartService.GetRegisteredCommand() ?? "",
+                    quickStartHostRunning = ServiceHost.IsHostRunning(),
+                    splashFadeIn = ConfigService.SplashFadeIn,
+                    splashFadeOut = ConfigService.SplashFadeOut,
                     iconSize = ConfigService.IconSize,
                     updateChannel = ConfigService.UpdateChannel,
                     githubToken = string.IsNullOrEmpty(ConfigService.GitHubToken) ? Text.Cli("LblNotSet") : Text.Cli("LblConfigured"),
@@ -763,6 +768,9 @@ public static class CliService
                     WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "closeAfterLaunch", ConfigService.CloseAfterLaunch));
                     WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "quickStart", ConfigService.QuickStart));
                     WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "quickStartRegistered", QuickStartService.IsAutoStartRegistered()));
+                    WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "quickStartHostRunning", ServiceHost.IsHostRunning()));
+                    WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "splashFadeIn", ConfigService.SplashFadeIn));
+                    WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "splashFadeOut", ConfigService.SplashFadeOut));
                     WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "iconSize", ConfigService.IconSize));
                     WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "updateChannel", ConfigService.UpdateChannel));
                     WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "githubToken", (string.IsNullOrEmpty(ConfigService.GitHubToken) ? Text.Cli("LblNotSet") : Text.Cli("LblConfigured"))));
@@ -836,6 +844,8 @@ public static class CliService
                     "launchmode" => ConfigService.LaunchMode,
                     "closeafterlaunch" => ConfigService.CloseAfterLaunch.ToString(),
                     "quickstart" => ConfigService.QuickStart.ToString(),
+                    "splashfadein" => ConfigService.SplashFadeIn.ToString(),
+                    "splashfadeout" => ConfigService.SplashFadeOut.ToString(),
                     "iconsize" => ConfigService.IconSize.ToString(),
                     "updatechannel" => ConfigService.UpdateChannel,
                     "githubtoken" => string.IsNullOrEmpty(ConfigService.GitHubToken) ? Text.Cli("LblNotSet") : Text.Cli("LblConfigured"),
@@ -887,6 +897,9 @@ public static class CliService
 
             if (opts.ContainsKey("repair"))
                 return await CmdUpdateRepair(channel);
+
+            if (opts.ContainsKey("history"))
+                return await CmdUpdateHistory();
 
             WriteLine(string.Format(Text.Cli("MsgCheckingUpdate"), channel), ConsoleColor.Cyan);
 
@@ -942,6 +955,45 @@ public static class CliService
             try { LogService.Write("CLI", "CmdUpdate failed", ex); } catch { }
             return 1;
         }
+    }
+
+    private static async Task<int> CmdUpdateHistory()
+    {
+        var entries = await UpdateService.GetReleaseHistoryAsync();
+        if (entries == null)
+        {
+            WriteLine(Text.Cli("ErrHistoryFetch"), ConsoleColor.Red);
+            return 1;
+        }
+
+        if (_jsonMode)
+        {
+            WriteJson(new
+            {
+                currentVersion = AppVersion.Version,
+                history = entries.Select(entry => new
+                {
+                    tag = entry.TagName,
+                    name = entry.Name,
+                    date = entry.PublishedAt?.ToLocalTime().ToString("yyyy-MM-dd"),
+                    body = entry.Body
+                })
+            });
+            return 0;
+        }
+
+        WriteLine(Text.Cli("LblHistoryHeader"), ConsoleColor.Cyan);
+        foreach (var entry in entries)
+        {
+            WriteLine();
+            string title = string.IsNullOrEmpty(entry.Name) ? entry.TagName : $"{entry.TagName} ({entry.Name})";
+            WriteLine(title, ConsoleColor.Green);
+            if (entry.PublishedAt != null)
+                WriteLine(string.Format(Text.Cli("LblHistoryDate"), entry.PublishedAt.Value.ToLocalTime().ToString("yyyy-MM-dd")));
+            WriteLine(new string('-', 40));
+            if (!string.IsNullOrEmpty(entry.Body)) WriteLine(entry.Body);
+        }
+        return 0;
     }
 
     private static async Task<int> CmdUpdateInstall(string channel)
@@ -1232,6 +1284,33 @@ public static class CliService
         }
     }
 
+    private static int CmdExit()
+    {
+        try
+        {
+            if (!ServiceHost.IsHostRunning())
+            {
+                WriteLine(Text.Cli("LblHostNotRunning"));
+                return 0;
+            }
+
+            if (!ServiceHost.NotifyExit())
+            {
+                WriteLine(Text.Cli("ErrExitFailed"), ConsoleColor.Red);
+                return 1;
+            }
+
+            WriteLine(Text.Cli("LblExitSent"), ConsoleColor.Green);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            WriteLine(string.Format(Text.Cli("ErrFmt"), ex.Message), ConsoleColor.Red);
+            try { LogService.Write("CLI", "CmdExit failed", ex); } catch { }
+            return 1;
+        }
+    }
+
     private static async Task<int> CmdUninstall(Dictionary<string, string> opts)
     {
         try
@@ -1376,11 +1455,12 @@ public static class CliService
         new("sort",           ["--list", "--id", "--move-up", "--move-down", "--swap-with", "--json"],
                                                                        "Help_CmdSortDesc",           "Help_Sort_Text"),
         new("settings",       ["--list", "--get", "--set", "--json"],  "Help_CmdSettingsDesc",       "Help_Settings_Text"),
-        new("update",         ["--check", "--install", "--repair", "--channel", "--json"],      "Help_CmdUpdateDesc",         "Help_Update_Text"),
+        new("update",         ["--check", "--install", "--repair", "--history", "--channel", "--json"],      "Help_CmdUpdateDesc",         "Help_Update_Text"),
         new("announcements",  ["--list", "--read", "--json"],          "Help_CmdAnnouncementsDesc",  "Help_Announcements_Text"),
         new("install",        [],                                       "Help_CmdInstallDesc",        "Help_Install_Text"),
         new("uninstall",      [],                                       "Help_CmdUninstallDesc",      "Help_Uninstall_Text"),
         new("storage",        ["--status", "--switch", "--json"],      "Help_CmdStorageDesc",        "Help_Storage_Text"),
+        new("exit",           [],                                       "Help_CmdExitDesc",           "Help_Exit_Text"),
         new("skill",          [],                                       "Help_CmdSkillDesc",          "Help_Skill_Text"),
         new("version",        [],                                       "Help_CmdVersionDesc",        "Help_Version_Text"),
         new("help",           [],                                       "Help_CmdHelpDesc",           ""),

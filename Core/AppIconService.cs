@@ -4,6 +4,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace EricGameLauncher;
@@ -165,6 +166,50 @@ public static class AppIconService
 
         _cachedPngPath = pngPath;
         return new BitmapImage(new Uri(pngPath));
+    }
+
+    public static string ResolvePngPath()
+    {
+        if (_cachedPngPath != null && File.Exists(_cachedPngPath))
+            return _cachedPngPath;
+
+        string path = GetIconPath();
+        if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            return string.Empty;
+
+        string pngPath = Path.ChangeExtension(path, ".png");
+        if (!File.Exists(pngPath) || new FileInfo(pngPath).Length == 0)
+        {
+            try
+            {
+                using var img = Image.FromFile(path);
+                img.Save(pngPath, ImageFormat.Png);
+                LogService.Write("App", $"AppIconService converted ico to png: {pngPath}");
+            }
+            catch (Exception ex)
+            {
+                LogService.Write("App", "AppIconService convert to png failed", ex);
+                pngPath = path;
+            }
+        }
+
+        _cachedPngPath = pngPath;
+        return pngPath;
+    }
+
+    public static async Task<BitmapImage?> LoadBitmapImageAsync()
+    {
+        try
+        {
+            string pngPath = ResolvePngPath();
+            if (string.IsNullOrEmpty(pngPath) || !File.Exists(pngPath)) return null;
+
+            using var stream = File.OpenRead(pngPath);
+            var image = new BitmapImage();
+            await image.SetSourceAsync(stream.AsRandomAccessStream());
+            return image;
+        }
+        catch (Exception ex) { LogService.Write("App", "AppIconService LoadBitmapImageAsync failed", ex); return null; }
     }
 
     [DllImport("shell32.dll", CharSet = CharSet.Auto)]

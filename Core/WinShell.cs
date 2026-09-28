@@ -587,6 +587,37 @@ public static class WindowActivator
     }
 }
 
+public static class WindowStyleHelper
+{
+    private const int GWL_EXSTYLE = -20;
+    private const int WS_EX_TOOLWINDOW = 0x00000080;
+    private const int WS_EX_APPWINDOW = 0x00040000;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    public static void HideFromTaskbar(IntPtr hWnd)
+    {
+        try
+        {
+            if (hWnd == IntPtr.Zero)
+                return;
+
+            int current = GetWindowLong(hWnd, GWL_EXSTYLE);
+            int updated = (current | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW;
+            if (updated == current)
+                return;
+
+            SetWindowLong(hWnd, GWL_EXSTYLE, updated);
+            LogService.Write("QuickStart", $"Window marked as tool window hwnd={hWnd} exStyle=0x{updated:X}");
+        }
+        catch (Exception ex) { LogService.Write("QuickStart", "WindowStyleHelper HideFromTaskbar failed", ex); }
+    }
+}
+
 public static class SystemGuard
 {
     private const uint MB_ICONERROR = 0x10;

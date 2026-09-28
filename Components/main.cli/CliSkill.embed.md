@@ -30,18 +30,21 @@ Use the CLI when the user wants to control their EricGameLauncher library from a
 - `search <query> [--json]` — search by title, path, pinyin, or pinyin initials
 - `sort --list | --id <id> --move-up | --move-down | --swap-with <id>` — reorder items
 - `settings --list | --get <key> | --set <key>=<value>` — view or modify settings
-- `update --check [--channel <stable|latest>] [--json] | --install | --repair [--channel <stable|latest>]` — check, install, or force-reinstall updates
+- `update --check [--channel <stable|latest>] [--json] | --install | --repair [--channel <stable|latest>] | --history [--json]` — check, install, or force-reinstall updates, or print the full update history (oldest first, requires network access to GitHub)
 - `announcements --list | --read <id>` — view server announcements
 - `install` / `uninstall` — create or remove desktop and start menu shortcuts
 - `storage --status | --switch <system|portable>` — view or switch storage mode
+- `exit` — stop the app and its background host (the quick start setting is kept)
 - `skill` — print this integration guide
 - `version` — show the version
 
 ## Settings keys
 
-`launchMode` (single|double), `closeAfterLaunch` (true|false), `quickStart` (true|false), `iconSize` (32-512), `updateChannel` (stable|latest), `githubToken`, `appIconPath`, `appTitle`, `lang` (Zh-CN|EN), `storageMode` (system|portable), `windowX`, `windowY`, `windowWidth`, `windowHeight`.
+`launchMode` (single|double), `closeAfterLaunch` (true|false), `quickStart` (true|false), `splashFadeIn` (true|false), `splashFadeOut` (true|false), `iconSize` (32-512), `updateChannel` (stable|latest), `githubToken`, `appIconPath`, `appTitle`, `lang` (Zh-CN|EN), `storageMode` (system|portable), `windowX`, `windowY`, `windowWidth`, `windowHeight`.
 
-`quickStart` makes the launcher run as a background service registered for auto start at sign-in; it is enabled by default. Closing the window then keeps it resident without any interface, so launching from the icon resumes in milliseconds. Use `settings --set quickStart=true|false` to control it; `settings --list` also reports `quickStartRegistered` and `quickStartCommand`.
+`quickStart` makes the launcher run as a background host registered for auto start at sign-in; it is enabled by default. The host preloads configuration data, validates and rebuilds icons, completes one warm UI pass and then releases the interface. The main window keeps normal window semantics — closing it closes the window — while the host stays resident with the warmed resources, so the next launch shows the window within a fraction of a second. Use `settings --set quickStart=true|false` to control it; `settings --list` also reports `quickStartRegistered`, `quickStartCommand` and `quickStartHostRunning`.
+
+`splashFadeIn` and `splashFadeOut` control the splash animations but apply only while `quickStart` is enabled; with quick start off the splash always animates.
 
 ## Examples
 
