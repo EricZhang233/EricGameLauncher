@@ -22,7 +22,7 @@
 
 **Bring Game Launching Back to Purity and Speed**
 
-<img alt="version" src="https://img.shields.io/badge/version-1.2.3-512BD4?logo=git&logoColor=white" />
+<img alt="version" src="https://img.shields.io/github/v/release/EricZhang233/EricGameLauncher?label=version&color=512BD4" />
 <img alt="downloads" src="https://img.shields.io/github/downloads/EricZhang233/EricGameLauncher/total?label=downloads&color=0078D4" />
 <img alt="stars" src="https://img.shields.io/github/stars/EricZhang233/EricGameLauncher?label=stars&color=E3B341" />
 
@@ -47,11 +47,11 @@
 
 |  |  |
 | :--- | :--- |
-| 🚀 **Millisecond re-launch** | After sign-in, a background host pre-reads your configuration, validates and warms up icons and the interface, so opening the launcher again feels instant. Turn it off whenever you like — nothing is left behind. |
-| 🧩 **End-to-end execution** | Five controllable paths — main program, manager, substitute launch, launch alongside, and custom context menu; plus EXE / LNK / URL protocol / web page / Store app targets, all of which can be elevated, given arguments, and use environment variables. |
-| 🗑️ **Three-stage deletion** | Deleting in the main window only moves an item to the Recycle Bin; deleting it there starts a 72-hour countdown; once it expires, the item is purged on the next launch. You can restore at any point in between. |
-| 🔍 **Find any game in a second** | Full Pinyin, Pinyin initials, Chinese, English and path matching. Type `yxlm` to jump straight to 英雄联盟 (League of Legends), or `部落` to reach 部落冲突 (Clash of Clans). |
-| 🎒 **Fully portable** | Keep configuration and icon cache inside the program folder and carry your library on a USB drive. One click migrates between system and portable modes — no reconfiguration needed. |
+| 🚀 **Millisecond re-launch** | After sign-in a background host pre-reads configuration and warms up icons and the interface, so every later launch appears almost instantly. Turn it off and the process exits right away. |
+| 🧩 **End-to-end execution** | Five configurable paths — main program, manager, substitute launch, launch alongside and custom context menu; EXE, shortcuts, URL protocols, web pages and Store apps all run directly. |
+| 🗑️ **Three-stage deletion** | Deleting in the main window only moves an item to the Recycle Bin; only deleting it there starts the 72-hour countdown, and it is purged on the next launch after that. A slip of the hand is recoverable. |
+| 🔍 **Find any game in a second** | Full Pinyin, Pinyin initials, Chinese, English and path matching: `yxlm` goes straight to 英雄联盟, `部落` to 部落冲突. |
+| 🎒 **Fully portable** | Configuration and icon cache can travel with the program — drop it on a USB drive and take your library anywhere. Switch between system and portable modes in one click. |
 | 💻 **Complete CLI** | Everything the desktop UI can do is available from the command line, with full documentation built into `-help` and the `skill` command for scripts and AI agents. |
 
 <a name="quickstart"></a>
@@ -64,7 +64,7 @@
 | :--- | :--- |
 | Operating system | Windows 11 24H2 (Build 26100) or later, x64 |
 | Runtime | [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) and [Windows App Runtime 1.8](https://aka.ms/windowsappsdk/1.8/latest/windowsappruntimeinstall-x64.exe) (already present on most systems; install them if prompted) |
-| Download size | About 13 MB. The launcher itself needs no installation — just extract and run |
+| Download size | Under 15 MB. The launcher itself needs no installation — just extract and run |
 
 ### Three steps
 
@@ -84,88 +84,57 @@
 
 ### Every game in one grid
 
-<div align="center">
-  <img src="readme.library.grid.png" width="100%" alt="Main window: the whole library in one screen" />
-</div>
-
-*   **No platform divide**: Steam, Epic Games, Xbox, WeGame, standalone executables, web links and Store apps all sit in the same grid, arranged however you like.
-*   **Continuously adjustable icons**: From a compact list to an immersive large grid, the slider applies instantly and your choice is remembered.
-*   **Multiple matching paths**: `yxlm` (Pinyin initials), `yingxionglianmeng` (full Pinyin), `部落` (Chinese) and `pcl` (path) all find their target.
-*   **Fully manual ordering**: Reorder in **More → Sort** with the move buttons or the `W` `S` `↑` `↓` keys.
-*   **Hover for details**: Rest the pointer for a moment and the full title appears — no more guessing long names.
-*   **Single or double click**: Switch the launch gesture in Settings and play the way you prefer.
-
-<div align="center">
-  <img src="readme.library.search.png" width="100%" alt="Search flyout with matching results" />
-  <br/>
-  <sub>Type Pinyin initials or a full Pinyin string to filter as you type</sub>
-</div>
+*   **No platform divide**: Steam, Epic Games, Xbox, WeGame, standalone executables, web links and Store apps share one grid, ordered exactly how you like.
+*   **Icons from small to huge**: Continuous scaling from a compact list to an immersive large grid, applied instantly and remembered next time.
+*   **Multiple matching paths**: `yxlm` (initials), `yingxionglianmeng` (full Pinyin), `部落` (Chinese) and `pcl` (path) all find their target.
+*   **Manual ordering**: Reorder in **More → Sort** with the move buttons or the `W` `S` `↑` `↓` keys.
+*   **Hover to fill in the blanks**: Rest the pointer for a moment and the full title appears — no more guessing long names.
+*   **Launch gesture**: Single or double click, switched whenever you like in Settings.
 
 ### End-to-end execution: more than a shortcut
-
-<div align="center">
-  <img src="readme.launch.contextmenu.png" width="100%" alt="Context menu: Run, Run Manager, Open File Location, Properties, Delete" />
-</div>
 
 Configuring a game means configuring a complete launch chain:
 
 | Capability | Description |
 | :--- | :--- |
-| **Main program** | Native `EXE`, `LNK` shortcuts, URL protocols such as `steam://` / `epic://` / `starward://`, web links, and `shell:AppsFolder\` Store apps. |
-| **Run as administrator** | Elevate the main program and the manager separately to solve permission-related launch failures. |
-| **Manager** | Configure the platform manager path separately so the game also brings up platform services correctly. |
+| **Main program** | Native `EXE`, `LNK` shortcuts, URL protocols such as `steam://` / `epic://` / `starward://`, web links and `shell:AppsFolder\` Store apps can all serve as the launch target. |
+| **Run as administrator** | Elevate the main program and the manager separately, which settles permission-related launch failures for good. |
+| **Manager** | Point at a platform manager path so platform services come up correctly alongside the game. |
 | **Substitute launch** | Let a custom command (for example `starward://`) fully take over the original executable's launch logic. |
-| **Launch alongside** | Open a translator, timer, performance monitor or key mapper together with the game in one click. |
-| **Custom context menu** | Up to 10 custom entries per item, each with its own title, command, arguments and elevation flag; deleting a middle entry shifts the rest up automatically. |
-| **Arguments and environment variables** | Every execution target accepts full arguments; variables such as `%AppData%` and `%LocalAppData%` expand automatically, and long paths with spaces need no manual quoting. |
+| **Launch alongside** | Start a translator, timer, performance monitor or key mapper together with the game in one click. |
+| **Custom context menu** | Up to 10 entries per item, each with its own title, command, arguments and elevation flag; deleting a middle entry shifts the rest up automatically. |
+| **Arguments and environment variables** | Every execution target accepts full arguments; `%AppData%`, `%LocalAppData%` and friends expand automatically; long paths with spaces need no manual quoting. |
 
 ### Quick Start: shrink the wait until it disappears
 
-<div align="center">
-  <img src="readme.settings.flyout.png" width="100%" alt="Settings flyout: Quick Start and splash animation switches" />
-  <br/>
-  <sub>Quick Start and the splash animation switches both live in Settings and can be turned off at any time</sub>
-</div>
-
-*   **Background host**: After sign-in a resident host pre-reads configuration and items, validates and rebuilds icons, completes a full warm-up pass of the interface, then releases it — leaving no window on screen.
-*   **Opening it again feels instant**: The resources are already warm, so the window appears in a flash.
-*   **Splash animation is optional**: Fade-in and fade-out can be toggled separately; when disabled the splash screen simply appears and disappears, making startup a little faster.
-*   **Want it gone completely?** **More → Exit** ends both the window and the background host immediately without changing the Quick Start setting. On Windows 11 24H2 and later you can also right-click the taskbar entry and choose "End task".
-*   **Don't want a background process?** Turn the switch off and the auto-start entry is removed right away.
+*   **Background host**: After sign-in a resident host pre-reads configuration and items, validates and rebuilds icons and completes a full warm-up pass of the interface, then releases it — leaving no window on screen.
+*   **Almost instant next time**: The resources are already warm, so the window appears in a flash.
+*   **Animation can be switched off**: Fade-in and fade-out are toggled separately; turned off, the splash screen simply appears and disappears, which starts a little faster.
+*   **To exit completely**: **More → Exit** ends the window and the background host right away without changing the Quick Start setting. On Windows 11 24H2 and later you can also right-click the taskbar entry and choose "End task".
+*   **No background process wanted**: Turn the switch off and the auto-start entry is removed immediately.
 
 ### Property panel: every detail is editable
 
-<div align="center">
-  <img src="readme.editor.panel.png" width="100%" alt="Property panel: display name, icon, four execution targets, elevation and custom context menu" />
-  <br/>
-  <sub>Main program, manager, substitute launch, alongside execution and up to 10 custom menu entries in one panel</sub>
-</div>
-
-*   **Display name and icon**: Rename anything at any time, or upload your own image as a cover.
-*   **Paths laid out in fields**: Main program, manager, substitute launch and alongside execution are independent, each with a file picker and argument splitting.
+*   **Name and icon**: Rename anything at any time, or upload your own image as a cover.
+*   **Four execution targets, one column each**: Main program, manager, substitute launch and alongside execution are independent rows, each with a file picker and argument splitting.
 *   **Visual custom menu editing**: Title, command and elevation flag line up in a column, up to 10 groups.
 *   **Save takes effect immediately**: Changes are written to the local configuration and the interface refreshes on the spot.
 
+<div align="center">
+  <img src="readme.editor.panel.png" width="49%" alt="Property panel: display name, icon, four execution targets, elevation and custom context menu" />
+  <img src="readme.scan.result.png" width="49%" alt="Scan results grouped into New, Existing and Invalid" />
+  <br/>
+  <sub>Left: property panel (every configurable field) — Right: scan results (New / Existing / Invalid)</sub>
+</div>
+
 ### One-click scan across three platforms
 
-<div align="center">
-  <img src="readme.scan.result.png" width="100%" alt="Scan results grouped into New, Existing and Invalid" />
-  <br/>
-  <sub>Results are grouped into New / Existing / Invalid, ready for one-click import or batch cleanup</sub>
-</div>
-
 *   **Automatic discovery**: Natively detects games installed through Steam, Epic Games and Xbox (Microsoft Store / UWP), extracting paths and fetching icons.
-*   **Grouped results**: Scan results are grouped into **New / Existing / Invalid**, and existing entries are never imported twice.
-*   **One-click import**: Select all or pick individual entries; Steam protocol games automatically receive their `steam://` launch address.
-*   **Invalid cleanup**: Games that were uninstalled or whose paths broke are listed together for batch removal.
+*   **Grouped results**: Results are listed as **New / Existing / Invalid**, and anything already in your library is never imported twice.
+*   **One-click import**: Select all or tick individual entries; Steam protocol games automatically receive their `steam://` launch address.
+*   **Invalid cleanup**: Uninstalled or broken-path entries are gathered together for batch removal.
 
 ### Three-stage deletion: a slip of the hand is still recoverable
-
-<div align="center">
-  <img src="readme.recycle.bin.png" width="100%" alt="Recycle Bin flyout and the edit flyout" />
-  <br/>
-  <sub>Restore or permanently delete from the Recycle Bin; expired entries are purged on the next launch</sub>
-</div>
 
 | Stage | Behavior |
 | :--- | :--- |
@@ -173,56 +142,26 @@ Configuring a game means configuring a complete launch chain:
 | Stage two | Delete in the Recycle Bin → a 72-hour countdown starts and the remaining time is shown in the interface. |
 | Stage three | The countdown ends → the item is purged automatically on the next launch. |
 
-The Recycle Bin also supports emptying in one click, restoring individual items, and permanent deletion.
+The Recycle Bin can also be emptied in one click, besides restoring or deleting items permanently.
 
 ### Updates and announcements
 
-<div align="center">
-  <img src="readme.update.dialog.png" width="100%" alt="Update prompt flyout" />
-  <br/>
-  <sub>When a new version appears you can update right away or open the full update history</sub>
-</div>
-
-<div align="center">
-  <img src="readme.update.history.png" width="100%" alt="Update history: version list on the left, full notes on the right" />
-  <br/>
-  <sub>Update history: version list on the left, complete notes on the right, with jump-to-version navigation</sub>
-</div>
-
-<div align="center">
-  <img src="readme.announcement.flyout.png" width="100%" alt="Announcement flyout and the More menu" />
-  <br/>
-  <sub>The announcement flyout and the More menu: unread items carry a red dot and bodies support Markdown</sub>
-</div>
-
-*   **Silent update checks**: GitHub Releases is checked on startup; when a new version exists the version number turns red with an update icon — never an intrusive pop-up.
+*   **Silent update checks**: GitHub Releases is queried on startup; when a new version exists the version number turns red with an update icon — no pop-ups interrupting you.
 *   **Two channels**: **Stable** receives only official releases, while **Latest** gets new builds first.
-*   **One-click download and install**: The launcher restarts and completes the replacement automatically; you can also force a reinstall whenever you want.
-*   **Update history**: A version list on the left and the full notes on the right, with jump-to-any-version navigation, sourced from GitHub release records. The command line equivalent is `update --history`.
-*   **Announcement center**: Cloud announcements are fetched on startup, the body supports Markdown, content is shown in Chinese and English, read state is persisted locally, and unread items carry a red dot.
+*   **One-click download and install**: The launcher restarts and completes the replacement automatically; you can also force a reinstall at any time.
+*   **Update history**: A version list on the left and the full notes on the right, with jump-to-any-version navigation, sourced from GitHub release records; `update --history` does the same from the command line.
+*   **Announcement center**: Cloud announcements are fetched on startup, bodies support Markdown in Chinese and English, read state is persisted locally, and unread items carry a red dot.
 
 <a name="settings"></a>
 
 ### Settings at a glance
 
-<div align="center">
-  <img src="readme.menu.iconsize.png" width="100%" alt="Icon size flyout and the shortcut submenu of the More menu" />
-  <br/>
-  <sub>The More menu: icon size adjusts live, and shortcuts can be created or removed in one click</sub>
-</div>
-
 *   **General**: Quick Start, splash animation (fade-in / fade-out), launch gesture (single / double click), and exit after launching.
-*   **Updates**: update channel (stable / latest) and GitHub token (raises the API rate limit; the token is stored locally, encrypted with DPAPI).
-*   **Data**: switch between portable and system storage with one-click migration, plus quick access to the configuration and cache folders.
-*   **Title bar**: icon size, sorting, Recycle Bin, shortcut creation and removal, privacy and permission notes, and update checks.
+*   **Updates**: Update channel (Stable / Latest) and a GitHub token, which raises the API rate limit and is encrypted with DPAPI before it is stored locally.
+*   **Data**: One-click migration of your data location (portable / system), plus quick access to the configuration and cache folders.
+*   **Title bar**: Icon size, sorting, Recycle Bin, shortcut creation and removal, privacy and permission notes, and update checks.
 
 Every setting has a "?" button beside it — hover for an explanation, click to pin it open.
-
-<div align="center">
-  <img src="readme.privacy.dialog.png" width="100%" alt="Privacy and permission notes flyout" />
-  <br/>
-  <sub>Privacy and permissions: data stays local, and network access is limited to update checks and announcements</sub>
-</div>
 
 
 ---
