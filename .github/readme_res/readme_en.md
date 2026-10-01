@@ -46,7 +46,7 @@
 ## Highlights
 
 *   🧩 **End-to-end execution**: Four configurable chains — main program, manager, substitute launch and launch alongside; EXE, shortcuts, URL protocols, web pages and Store apps all run directly.
-*   🖱️ **Adaptive context menu**: The menu grows and shrinks with each item — web pages and Store apps hide "Open File Location", detected platforms turn the entry into "Run Steam / Run Xbox", and every item can carry up to 10 further custom entries with their own title, command, arguments and elevation.
+*   🖱️ **Context menu: adaptive and customizable**: Entries grow and shrink with each item — web pages and Store apps hide "Open File Location", and a detected platform shows "Run Steam / Run Xbox". Every item can also carry up to 10 custom entries, each with its own title, command, arguments and elevation; cleared entries are skipped on save, so the list stays tight.
 *   🗂️ **One library, every platform**: Steam, Epic Games, Xbox, WeGame, standalone executables, web links and Store apps share a single grid in whatever order you choose.
 *   🔍 **Multiple search paths**: Full Pinyin, Pinyin initials, Chinese, English and paths all match at once — `yxlm` goes straight to 英雄联盟, `yingxionglianmeng` reaches the same item, and `pcl` digs the game out of its path.
 *   📥 **Scan and import**: Automatically detects games installed through Steam, Epic Games and Xbox, groups them into New / Existing / Invalid, and imports or cleans them up in bulk.
