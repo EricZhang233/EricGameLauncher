@@ -45,14 +45,12 @@
 
 ## Highlights
 
-|  |  |
-| :--- | :--- |
-| 🚀 **Millisecond re-launch** | After sign-in a background host pre-reads configuration and warms up icons and the interface, so every later launch appears almost instantly. Turn it off and the process exits right away. |
-| 🧩 **End-to-end execution** | Five configurable paths — main program, manager, substitute launch, launch alongside and custom context menu; EXE, shortcuts, URL protocols, web pages and Store apps all run directly. |
-| 🗑️ **Three-stage deletion** | Deleting in the main window only moves an item to the Recycle Bin; only deleting it there starts the 72-hour countdown, and it is purged on the next launch after that. A slip of the hand is recoverable. |
-| 🔍 **Find any game in a second** | Full Pinyin, Pinyin initials, Chinese, English and path matching: `yxlm` goes straight to 英雄联盟, `部落` to 部落冲突. |
-| 🎒 **Fully portable** | Configuration and icon cache can travel with the program — drop it on a USB drive and take your library anywhere. Switch between system and portable modes in one click. |
-| 💻 **Complete CLI** | Everything the desktop UI can do is available from the command line, with full documentation built into `-help` and the `skill` command for scripts and AI agents. |
+*   🚀 **Millisecond re-launch**: After sign-in a background host pre-reads configuration and warms up icons and the interface, so every later launch appears almost instantly. Turn it off and the process exits right away.
+*   🧩 **End-to-end execution**: Five configurable paths — main program, manager, substitute launch, launch alongside and custom context menu; EXE, shortcuts, URL protocols, web pages and Store apps all run directly.
+*   🗑️ **Three-stage deletion**: Deleting in the main window only moves an item to the Recycle Bin; only deleting it there starts the 72-hour countdown, and it is purged on the next launch after that. A slip of the hand is recoverable.
+*   🔍 **Find any game in a second**: Full Pinyin, Pinyin initials, Chinese, English and path matching — `yxlm` goes straight to 英雄联盟, `部落` to 部落冲突.
+*   🎒 **Fully portable**: Configuration and icon cache can travel with the program — drop it on a USB drive and take your library anywhere. Switch between system and portable modes in one click.
+*   💻 **Complete CLI**: Everything the desktop UI can do is available from the command line, with full documentation built into `-help` and the `skill` command for scripts and AI agents.
 
 <a name="quickstart"></a>
 
@@ -131,7 +129,7 @@ Configuring a game means configuring a complete launch chain:
 
 *   **Automatic discovery**: Natively detects games installed through Steam, Epic Games and Xbox (Microsoft Store / UWP), extracting paths and fetching icons.
 *   **Grouped results**: Results are listed as **New / Existing / Invalid**, and anything already in your library is never imported twice.
-*   **One-click import**: Select all or tick individual entries; Steam protocol games automatically receive their `steam://` launch address.
+*   **One-click import**: Select all or tick entries individually, then import them.
 *   **Invalid cleanup**: Uninstalled or broken-path entries are gathered together for batch removal.
 
 ### Three-stage deletion: a slip of the hand is still recoverable
