@@ -149,7 +149,7 @@ The Recycle Bin can also be emptied in one click, besides restoring or deleting 
 *   **Silent update checks**: GitHub Releases is queried on startup; when a new version exists the version number turns red with an update icon — no pop-ups interrupting you.
 *   **Two channels**: **Stable** receives only official releases, while **Latest** gets new builds first.
 *   **One-click download and install**: The launcher restarts and completes the replacement automatically; you can also force a reinstall at any time.
-*   **Update history**: A version list on the left and the full notes on the right, with jump-to-any-version navigation, sourced from GitHub release records; `update --history` does the same from the command line.
+*   **Update history**: A version list on the left and the full notes on the right, with jump-to-any-version navigation, sourced from GitHub release records.
 *   **Announcement center**: Cloud announcements are fetched on startup, bodies support Markdown in Chinese and English, read state is persisted locally, and unread items carry a red dot.
 
 <a name="settings"></a>
@@ -170,34 +170,16 @@ Every setting has a "?" button beside it — hover for an explanation, click to 
 
 ## Command line: everything the desktop UI can do
 
-`EricGameLauncher.Cli.exe` shares the same core logic as the desktop app, and both read and write the same data — a game added from the terminal appears in the interface right away.
+`EricGameLauncher.Cli.exe` shares one core with the desktop app and reads and writes the same data — a game added from the terminal appears in the interface right away.
+
+Two documents are built into the program, so there is nothing else to look up:
 
 ```powershell
-EricGameLauncher.Cli.exe list --json                 # print the library as JSON
-EricGameLauncher.Cli.exe search yxlm                 # search by Pinyin initials
-EricGameLauncher.Cli.exe launch --title "英雄联盟"     # launch a game
-EricGameLauncher.Cli.exe scan --all --import         # scan and import in one go
-EricGameLauncher.Cli.exe settings --set quickStart=true
+EricGameLauncher.Cli.exe -help     # every command and option
+EricGameLauncher.Cli.exe skill     # integration guide for scripts and AI agents
 ```
 
-| Command | Purpose |
-| :--- | :--- |
-| `list` | List the library or the Recycle Bin (`--recycle`), with `--json` support |
-| `launch` / `platform` | Launch a game, app or platform manager; accepts `--admin` `--alt` `--alongside` |
-| `add` / `edit` / `remove` | Add, edit or remove items (moved to the Recycle Bin by default) |
-| `search` | Search by title, path, Pinyin or initials |
-| `scan` | Scan Steam / Epic Games / Xbox with filtering, classification, import and invalid cleanup |
-| `sort` / `recycle` / `restore` | Reordering, Recycle Bin management and restoring |
-| `settings` | Read and modify every setting |
-| `update` | Check, install or force-reinstall updates; `--history` prints the complete update history |
-| `announcements` | Read cloud announcements and their read state |
-| `install` / `uninstall` | Create or remove desktop and Start menu shortcuts |
-| `storage` | Inspect or switch the data storage mode |
-| `exit` | Stop the window and the background host (keeping the Quick Start setting) |
-| `skill` | Print the built-in agent integration guide |
-
-> Global options: `-help` for help, `--json` for structured output, `-debug` to switch to an isolated data and cache directory.
-> Exit code `0` means success and `1` means failure, which makes scripting straightforward.
+`-help` covers every command and argument in the version you are running, and `skill` prints the complete integration guide for scripts and AI agents. Both ship and update with the program, so they always match the version in front of you — which is why this page does not repeat the command list.
 
 ---
 
