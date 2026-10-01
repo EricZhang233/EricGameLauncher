@@ -45,12 +45,13 @@
 
 ## Highlights
 
-*   🚀 **Millisecond re-launch**: After sign-in a background host pre-reads configuration and warms up icons and the interface, so every later launch appears almost instantly. Turn it off and the process exits right away.
 *   🧩 **End-to-end execution**: Five configurable paths — main program, manager, substitute launch, launch alongside and custom context menu; EXE, shortcuts, URL protocols, web pages and Store apps all run directly.
+*   🗂️ **One library, every platform**: Steam, Epic Games, Xbox, WeGame, standalone executables, web links and Store apps share a single grid in whatever order you choose; `yxlm`, `部落` and `pcl` all find their target.
+*   📥 **Scan and import**: Automatically detects games installed through Steam, Epic Games and Xbox, groups them into New / Existing / Invalid, and imports or cleans them up in bulk.
+*   💻 **Complete CLI & Skill**: Everything the desktop UI can do is available from the command line, with full documentation built into `-help` and the `skill` command for scripts and AI agents.
+*   🚀 **Quick Start**: A background host pre-reads configuration and warms up icons and the interface, so the next launch appears almost instantly. Turn it off and the process exits right away.
 *   🗑️ **Three-stage deletion**: Deleting in the main window only moves an item to the Recycle Bin; only deleting it there starts the 72-hour countdown, and it is purged on the next launch after that. A slip of the hand is recoverable.
-*   🔍 **Find any game in a second**: Full Pinyin, Pinyin initials, Chinese, English and path matching — `yxlm` goes straight to 英雄联盟, `部落` to 部落冲突.
 *   🎒 **Fully portable**: Configuration and icon cache can travel with the program — drop it on a USB drive and take your library anywhere. Switch between system and portable modes in one click.
-*   💻 **Complete CLI**: Everything the desktop UI can do is available from the command line, with full documentation built into `-help` and the `skill` command for scripts and AI agents.
 
 <a name="quickstart"></a>
 
