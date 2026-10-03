@@ -83,6 +83,12 @@
     <Message Importance="High" Text="Post-build cleanup: payload directory removed." />
   </Target>
 
+  <!-- 打包前剥离 UserInterface 下的 xbf 与目录本身 -->
+  <Target Name="StripUserInterfaceXbf" BeforeTargets="ZipReleaseBuild" Condition="'$(Configuration)' == 'Release'">
+    <RemoveDir Directories="$([System.IO.Path]::Combine('$(OutputPath)', 'UserInterface'))" />
+    <Message Importance="High" Text="Stripped UserInterface directory from output before packaging." />
+  </Target>
+
   <!-- Release 自动化打包流 -->
   <Target Name="ZipReleaseBuild" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
     <Message Importance="High" Text="Zipping Release artifacts to EricGameLauncher_$(ExtractedVersion).zip..." />
