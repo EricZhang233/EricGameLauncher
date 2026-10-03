@@ -22,7 +22,7 @@ public class AppSettings
     public bool CloseAfterLaunch { get; set; } = false;
 
     [YamlMember(Alias = "quickStart")]
-    public bool QuickStart { get; set; } = true;
+    public bool QuickStart { get; set; } = false;
 
     [YamlMember(Alias = "splashFadeIn")]
     public bool SplashFadeIn { get; set; } = true;
@@ -624,7 +624,7 @@ public static class ConfigService
 
     public static bool QuickStart
     {
-        get => _settings?.QuickStart ?? true;
+        get => _settings?.QuickStart ?? false;
         set { if (_settings != null) { LogService.Write("Config", $"QuickStart changed to={value}"); _settings.QuickStart = value; } }
     }
 
