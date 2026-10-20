@@ -2,12 +2,36 @@
     x:Class="EricGameLauncher.SearchFlyoutControl"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <Button x:Name="SearchButton" ToolTipService.ToolTip="" CornerRadius="4">
-        <FontIcon Glyph="&#xE721;"/>
-        <Button.Flyout>
-            <Flyout x:Name="SearchFlyout" Placement="BottomEdgeAlignedRight" Opened="SearchFlyout_Opened" Closing="SearchFlyout_Closing">
-                <AutoSuggestBox x:Name="SearchBox" QueryIcon="Find" PlaceholderText="" Width="280" TextChanged="SearchBox_TextChanged"/>
-            </Flyout>
-        </Button.Flyout>
-    </Button>
+    <Grid x:Name="SearchRoot" Width="44" Height="32" SizeChanged="SearchRoot_SizeChanged">
+        <Button x:Name="SearchButton" Style="{StaticResource TitleBarButtonStyle}"
+                Width="Auto" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                Click="SearchButton_Click"/>
+        <Grid x:Name="SearchEditor" Margin="34,0,34,0" Visibility="Collapsed" Opacity="0">
+            <TextBox x:Name="SearchBox" MinWidth="0" MinHeight="0" Padding="2,5,2,5"
+                     Background="Transparent" BorderThickness="0"
+                     IsSpellCheckEnabled="False" IsTextPredictionEnabled="False"
+                     TextChanged="SearchBox_TextChanged" KeyDown="SearchBox_KeyDown">
+                <TextBox.Template>
+                    <ControlTemplate TargetType="TextBox">
+                        <ScrollViewer x:Name="ContentElement"
+                                      HorizontalScrollMode="Auto" HorizontalScrollBarVisibility="Hidden"
+                                      VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Hidden"
+                                      IsTabStop="False" ZoomMode="Disabled"
+                                      Padding="{TemplateBinding Padding}"/>
+                    </ControlTemplate>
+                </TextBox.Template>
+            </TextBox>
+            <TextBlock x:Name="SearchPlaceholder" Margin="2,0,2,0" VerticalAlignment="Center"
+                       Foreground="{ThemeResource TextControlPlaceholderForeground}"
+                       IsHitTestVisible="False" TextTrimming="CharacterEllipsis"/>
+        </Grid>
+        <Button x:Name="SearchCloseButton" Width="30" Height="30" MinWidth="0" MinHeight="0"
+                HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,1,0"
+                Padding="0" Background="Transparent" BorderThickness="0"
+                Visibility="Collapsed" Opacity="0" Click="SearchCloseButton_Click">
+            <FontIcon Glyph="&#xE711;" FontSize="12"/>
+        </Button>
+        <FontIcon Glyph="&#xE721;" FontSize="16" Width="20" Margin="12,0,0,0"
+                  HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False"/>
+    </Grid>
 </UserControl>

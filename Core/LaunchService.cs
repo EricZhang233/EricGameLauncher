@@ -24,28 +24,31 @@ public static class LaunchService
         return null;
     }
 
-    public static void Launch(AppItem item, bool useAlt = false)
+    public static LaunchResult Launch(AppItem item, bool useAlt = false)
     {
         using (LogService.StartOperation("Launch", $"Launch {item.Title}"))
         {
             var (path, admin) = GetLaunchTarget(item, useAlt);
-            if (string.IsNullOrEmpty(path)) return;
+            if (string.IsNullOrEmpty(path)) return new(false, Text.T("Launch_Failed"));
 
-            ProcessRunner.Run(path, admin);
+            var result = ProcessRunner.Run(path, admin);
+            if (!result.Success) return result;
 
             var alongside = GetAlongsideTarget(item);
             if (alongside.HasValue)
-                ProcessRunner.Run(alongside.Value.path, alongside.Value.admin);
+                return ProcessRunner.Run(alongside.Value.path, alongside.Value.admin);
+            return result;
         }
     }
 
-    public static void LaunchManager(AppItem item)
+    public static LaunchResult LaunchManager(AppItem item)
     {
         using (LogService.StartOperation("Launch", $"LaunchManager {item.Title}"))
         {
             var mgr = GetManagerTarget(item);
             if (mgr.HasValue)
-                ProcessRunner.Run(mgr.Value.path, mgr.Value.admin);
+                return ProcessRunner.Run(mgr.Value.path, mgr.Value.admin);
+            return new(false, Text.T("Launch_Failed"));
         }
     }
 

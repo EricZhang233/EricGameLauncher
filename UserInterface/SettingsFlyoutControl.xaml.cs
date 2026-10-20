@@ -9,6 +9,7 @@ public sealed partial class SettingsFlyoutControl : UserControl
 {
     public event Action<string>? LaunchModeChanged;
     public event Action? UpdateChannelChanged;
+    public event Action<Exception>? OperationFailed;
     private const string GitHubTokenUrl = "https://github.com/settings/personal-access-tokens";
     private bool _syncingQuickStart = false;
     private bool _syncingSplashAnimation = false;
@@ -121,7 +122,10 @@ public sealed partial class SettingsFlyoutControl : UserControl
     private void ToggleCloseAfterLaunch_Toggled(object sender, RoutedEventArgs e)
     {
         if (sender is ToggleSwitch toggle && ConfigService.CloseAfterLaunch != toggle.IsOn)
+        {
             ConfigService.CloseAfterLaunch = toggle.IsOn;
+            PersistSettings();
+        }
     }
 
     private void ToggleQuickStart_Toggled(object sender, RoutedEventArgs e)
@@ -130,7 +134,9 @@ public sealed partial class SettingsFlyoutControl : UserControl
         if (sender is not ToggleSwitch toggle) return;
         if (ConfigService.QuickStart == toggle.IsOn) return;
 
-        bool applied = QuickStartService.SetEnabled(toggle.IsOn);
+        bool applied;
+        try { applied = QuickStartService.SetEnabled(toggle.IsOn); }
+        catch (Exception ex) { OperationFailed?.Invoke(ex); applied = false; }
         if (!applied)
         {
             _syncingQuickStart = true;
@@ -164,7 +170,7 @@ public sealed partial class SettingsFlyoutControl : UserControl
         if (sender is not ToggleSwitch toggle) return;
         if (ConfigService.SplashFadeIn == toggle.IsOn) return;
         ConfigService.SplashFadeIn = toggle.IsOn;
-        ConfigService.SaveAll();
+        PersistSettings();
         LogService.Write("UI", $"SettingsFlyoutControl splash fade-in changed to={toggle.IsOn}");
     }
 
@@ -174,7 +180,7 @@ public sealed partial class SettingsFlyoutControl : UserControl
         if (sender is not ToggleSwitch toggle) return;
         if (ConfigService.SplashFadeOut == toggle.IsOn) return;
         ConfigService.SplashFadeOut = toggle.IsOn;
-        ConfigService.SaveAll();
+        PersistSettings();
         LogService.Write("UI", $"SettingsFlyoutControl splash fade-out changed to={toggle.IsOn}");
     }
 
@@ -183,6 +189,7 @@ public sealed partial class SettingsFlyoutControl : UserControl
         if (ComboLaunchMode.SelectedItem is ComboBoxItem item && item.Tag is string val)
         {
             ConfigService.LaunchMode = val;
+            PersistSettings();
             LaunchModeChanged?.Invoke(val);
             LogService.Write("UI", $"SettingsFlyoutControl launch mode changed to={val}");
         }
@@ -196,6 +203,7 @@ public sealed partial class SettingsFlyoutControl : UserControl
             if (ConfigService.UpdateChannel != newChannel)
             {
                 ConfigService.UpdateChannel = newChannel;
+                PersistSettings();
                 UpdateChannelChanged?.Invoke();
                 LogService.Write("UI", $"SettingsFlyoutControl update channel changed to={newChannel}");
             }
@@ -218,7 +226,7 @@ public sealed partial class SettingsFlyoutControl : UserControl
         if (ConfigService.GitHubToken != newValue)
         {
             ConfigService.GitHubToken = newValue;
-            ConfigService.SaveAll();
+            if (!PersistSettings()) return;
             LogService.Write("UI", "GitHubTokenSaveBtn: token updated");
         }
         SwitchToTokenView();
@@ -276,8 +284,14 @@ public sealed partial class SettingsFlyoutControl : UserControl
                 UpdateStorageModeUI();
                 LogService.Write("Config", $"SwitchStorageMode completed target={(switchToSystemMode ? "System" : "Portable")}");
             }
-            catch (Exception ex) { LogService.Write("Config", "BtnSwitchStorageMode_Click failed", ex); }
+            catch (Exception ex) { OperationFailed?.Invoke(ex); }
         }
+    }
+
+    private bool PersistSettings()
+    {
+        try { ConfigService.SaveSettings(); return true; }
+        catch (Exception ex) { OperationFailed?.Invoke(ex); return false; }
     }
 
     private void UpdateStorageModeUI()

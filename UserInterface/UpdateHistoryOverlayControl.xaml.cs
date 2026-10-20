@@ -44,6 +44,8 @@ public sealed partial class UpdateHistoryOverlayControl : UserControl
 
     private WebView2? _webView;
     private bool _suppressScroll;
+    private int _requestVersion;
+    private CancellationTokenSource? _requestCancellation;
 
     public UpdateHistoryOverlayControl()
     {
@@ -63,10 +65,15 @@ public sealed partial class UpdateHistoryOverlayControl : UserControl
             ApplyLocalization();
             Visibility = Visibility.Visible;
             ResetContent();
+            int version = ++_requestVersion;
+            _requestCancellation?.Cancel();
+            _requestCancellation?.Dispose();
+            _requestCancellation = new CancellationTokenSource();
 
             try
             {
-                var entries = await UpdateService.GetReleaseHistoryAsync();
+                var entries = await UpdateService.GetReleaseHistoryAsync().WaitAsync(_requestCancellation.Token);
+                if (version != _requestVersion) return;
                 if (entries == null)
                 {
                     LogService.Write("Update", "History overlay load failed: releases unavailable");
@@ -76,10 +83,11 @@ public sealed partial class UpdateHistoryOverlayControl : UserControl
 
                 LogService.Write("Update", $"History overlay loaded entries={entries.Count}");
                 BuildList(entries);
-                await RenderAsync(entries);
+                await RenderAsync(entries, version);
             }
             catch (Exception ex)
             {
+                if (version != _requestVersion) return;
                 LogService.Write("Update", "History overlay failed", ex);
                 ShowMessage(Text.T("Update_HistoryFailed"));
             }
@@ -88,6 +96,8 @@ public sealed partial class UpdateHistoryOverlayControl : UserControl
 
     public void Hide()
     {
+        _requestVersion++;
+        _requestCancellation?.Cancel();
         Visibility = Visibility.Collapsed;
         foreach (var child in HistoryViewHost.Children)
         {
@@ -103,6 +113,7 @@ public sealed partial class UpdateHistoryOverlayControl : UserControl
 
     private void ResetContent()
     {
+        foreach (var child in HistoryViewHost.Children.OfType<WebView2>()) try { child.Close(); } catch { }
         _webView = null;
         _suppressScroll = true;
         try { HistoryList.Items.Clear(); }
@@ -134,6 +145,13 @@ public sealed partial class UpdateHistoryOverlayControl : UserControl
             HistoryList.SelectedIndex = entries.Count > 0 ? entries.Count - 1 : -1;
         }
         finally { _suppressScroll = false; }
+        int version = _requestVersion;
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (version != _requestVersion || Visibility != Visibility.Visible) return;
+            RevealSelectedHistoryItem();
+            LogService.Write("Update", $"History list revealed initial index={HistoryList.SelectedIndex}");
+        });
     }
 
     private static ListViewItem BuildListItem(UpdateService.ReleaseHistoryEntry entry)
@@ -163,7 +181,7 @@ public sealed partial class UpdateHistoryOverlayControl : UserControl
         return new ListViewItem { Content = panel, HorizontalContentAlignment = HorizontalAlignment.Stretch };
     }
 
-    private async Task RenderAsync(List<UpdateService.ReleaseHistoryEntry> entries)
+    private async Task RenderAsync(List<UpdateService.ReleaseHistoryEntry> entries, int version)
     {
         if (entries.Count == 0)
         {
@@ -173,6 +191,7 @@ public sealed partial class UpdateHistoryOverlayControl : UserControl
 
         var (html, plainText) = BuildMarkup(entries);
         var (view, webView) = await HtmlViewBuilder.CreateAsync(this, html, plainText, 0, 0, SpyScript);
+        if (version != _requestVersion) { webView?.Close(); return; }
         _webView = webView;
 
         if (webView?.CoreWebView2 != null)
@@ -199,15 +218,21 @@ public sealed partial class UpdateHistoryOverlayControl : UserControl
     private void SelectFromScroll(int index)
     {
         if (index < 0 || index >= HistoryList.Items.Count) return;
-        if (HistoryList.SelectedIndex == index) return;
 
         _suppressScroll = true;
         try
         {
-            HistoryList.SelectedIndex = index;
-            HistoryList.ScrollIntoView(HistoryList.Items[index]);
+            if (HistoryList.SelectedIndex != index) HistoryList.SelectedIndex = index;
+            RevealSelectedHistoryItem();
         }
         finally { _suppressScroll = false; }
+    }
+
+    private void RevealSelectedHistoryItem()
+    {
+        if (HistoryList.SelectedItem == null) return;
+        HistoryList.UpdateLayout();
+        HistoryList.ScrollIntoView(HistoryList.SelectedItem);
     }
 
     private void HistoryList_SelectionChanged(object sender, SelectionChangedEventArgs e)

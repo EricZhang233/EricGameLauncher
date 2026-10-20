@@ -143,7 +143,7 @@ public static class ServerConfigManager
         }
     }
 
-    public static async Task FetchConfigAsync()
+    public static async Task FetchConfigAsync(CancellationToken cancellationToken = default)
     {
         using (LogService.StartOperation("Config", "FetchConfigAsync"))
         {
@@ -152,7 +152,7 @@ public static class ServerConfigManager
             {
                 LogService.Write("Network", "ServerConfig Fetch Start");
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("EricGameLauncher");
-                var content = await client.GetStringAsync("https://raw.githubusercontent.com/EricZhang233/EricGameLauncher/master/ServerCfg.yaml");
+                var content = await client.GetStringAsync("https://raw.githubusercontent.com/EricZhang233/EricGameLauncher/master/ServerCfg.yaml", cancellationToken);
 
                 var deserializer = new DeserializerBuilder()
                     .IgnoreUnmatchedProperties()
@@ -251,6 +251,11 @@ public static class ConfigService
     private static AppSettings? _settings;
     private static ItemsData? _itemsData;
     private static string _memoryToken = "";
+    private static string _tokenBaseline = "";
+    private static AppSettings? _settingsBaseline;
+    private static bool _settingsInvalid;
+    private static bool _itemsInvalid;
+    public static string? LoadError { get; private set; }
 
     public static string LaunchMode
     {
@@ -281,14 +286,15 @@ public static class ConfigService
             return;
         }
 
-        if (!Directory.Exists(SystemBasePath)) Directory.CreateDirectory(SystemBasePath);
-
         string portableSettingsPath = Path.Combine(PortableBasePath, SettingsFileName);
         string portableItemsPath = Path.Combine(PortableBasePath, ItemsFileName);
         string systemSettingsPath = Path.Combine(SystemBasePath, SettingsFileName);
         string systemItemsPath = Path.Combine(SystemBasePath, ItemsFileName);
 
-        if (File.Exists(portableSettingsPath) || File.Exists(portableItemsPath))
+        string mode = File.Exists(StorageMigration.ModeFile) ? File.ReadAllText(StorageMigration.ModeFile).Trim() : "";
+        if (mode == "system") CurrentDataPath = SystemBasePath;
+        else if (mode == "portable") CurrentDataPath = PortableBasePath;
+        else if (File.Exists(portableSettingsPath) || File.Exists(portableItemsPath))
             CurrentDataPath = PortableBasePath;
         else if (File.Exists(systemSettingsPath) || File.Exists(systemItemsPath))
             CurrentDataPath = SystemBasePath;
@@ -336,71 +342,94 @@ public static class ConfigService
 
     public static void SwitchStorageMode(bool useSystemPath)
     {
-        try
+        lock (ConfigPersistence.Gate)
         {
             string newPath = useSystemPath ? SystemBasePath : PortableBasePath;
             if (CurrentDataPath == newPath) return;
-
             SaveAll();
-
-            string[] fileNames = { SettingsFileName, ItemsFileName };
-            foreach (var fn in fileNames)
-            {
-                string oldPath = Path.Combine(CurrentDataPath, fn);
-                string newFilePath = Path.Combine(newPath, fn);
-                if (File.Exists(oldPath))
-                {
-                    if (!Directory.Exists(newPath)) Directory.CreateDirectory(newPath);
-                    File.Copy(oldPath, newFilePath, true);
-                    File.Delete(oldPath);
-                }
-            }
-
-            string oldIconPath = Path.Combine(CurrentDataPath, IconFolderName);
-            string newIconPath = Path.Combine(newPath, IconFolderName);
-            if (Directory.Exists(oldIconPath))
-            {
-                if (!Directory.Exists(newIconPath)) Directory.CreateDirectory(newIconPath);
-                foreach (var iconFile in Directory.GetFiles(oldIconPath))
-                {
-                    string fileName = Path.GetFileName(iconFile);
-                    string destFile = Path.Combine(newIconPath, fileName);
-                    File.Copy(iconFile, destFile, true);
-                }
-                try { Directory.Delete(oldIconPath, true); } catch (Exception ex) { LogService.Write("Config", "Delete old icon path failed", ex); }
-            }
-
+            StorageMigration.Transfer(CurrentDataPath, newPath, useSystemPath);
             CurrentDataPath = newPath;
             SteamHelper.ClearCache();
             LoadConfigData();
         }
-        catch (Exception ex) { LogService.Write("Config", "SwitchStorageMode failed", ex); }
+        DataChanged?.Invoke();
     }
 
     public static Task SwitchStorageModeAsync(bool useSystemPath) => Task.Run(() => SwitchStorageMode(useSystemPath));
 
     public static void SaveItems(List<AppItem> items, List<AppItem> recycleItems, bool triggerEvent = true)
     {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        if (_itemsData == null) return;
-        LogService.Write("Config", $"SaveItems Start items={items.Count} recycle={recycleItems.Count}");
-        lock (_itemsData)
+        MutateItems((current, recycled) =>
         {
-            foreach (var item in items)
-            {
-                item.Status = (int)AppItemStatus.Normal;
-                item.DeletedAt = null;
-            }
-            _itemsData.Items = items.Select(AppItemDto.FromViewModel).ToList();
-            _itemsData.RecycleBinItems = recycleItems.Select(AppItemDto.FromViewModel).ToList();
-            SaveItemsData();
+            var expected = _itemsData ?? new ItemsData();
+            MergeItems(current, items, expected.Items);
+            MergeItems(recycled, recycleItems, expected.RecycleBinItems);
+        }, triggerEvent);
+    }
+
+    private static void MergeItems(List<AppItem> current, List<AppItem> proposed, List<AppItemDto> baseline)
+    {
+        var before = baseline.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
+        var after = proposed.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
+        current.RemoveAll(x => before.ContainsKey(x.Id) && !after.ContainsKey(x.Id));
+        foreach (var item in proposed)
+        {
+            if (before.TryGetValue(item.Id, out var old) && ConfigPersistence.Equal(old, AppItemDto.FromViewModel(item))) continue;
+            int index = current.FindIndex(x => x.Id.Equals(item.Id, StringComparison.OrdinalIgnoreCase));
+            if (index >= 0) current[index] = item;
+            else if (!before.ContainsKey(item.Id)) current.Add(item);
+        }
+    }
+
+    public static void MutateItems(Action<List<AppItem>, List<AppItem>> change, bool triggerEvent = true)
+    {
+        lock (ConfigPersistence.Gate)
+        {
+            FollowStorageMode();
+            using var lease = ConfigPersistence.Enter(CurrentDataPath);
+            if (_blockSaving) throw new DataFileException(ItemsFilePath);
+            var data = ReadItems();
+            var items = data.Items.Select(x => x.ToViewModel(FixedCachePath)).ToList();
+            var recycled = data.RecycleBinItems.Select(x => x.ToViewModel(FixedCachePath)).ToList();
+            change(items, recycled);
+            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in items.Concat(recycled))
+                if (!ids.Add(item.Id)) throw new InvalidOperationException(Text.Cli("ErrDuplicatePath"));
+            foreach (var item in items) { item.Status = 0; item.DeletedAt = null; }
+            var updated = new ItemsData { Items = items.Select(AppItemDto.FromViewModel).ToList(), RecycleBinItems = recycled.Select(AppItemDto.FromViewModel).ToList() };
+            if (!ConfigPersistence.Equal(data, updated)) AtomicFile.Write(ItemsFilePath, ConfigPersistence.Serializer.Serialize(updated));
+            _itemsData = updated;
+            _itemsInvalid = false;
         }
         if (triggerEvent) DataChanged?.Invoke();
-        LogService.Write("Config", $"SaveItems End duration={sw.ElapsedMilliseconds}ms");
+    }
+
+    private static ItemsData ReadItems()
+    {
+        var data = ConfigPersistence.Read<ItemsData>(ItemsFilePath);
+        if (data.Version != CurrentConfigVersion) throw new DataFileException(ItemsFilePath);
+        data.Items ??= [];
+        data.RecycleBinItems ??= [];
+        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in data.Items.Concat(data.RecycleBinItems))
+            if (string.IsNullOrWhiteSpace(item.Id) || !ids.Add(item.Id)) throw new DataFileException(ItemsFilePath);
+        return data;
+    }
+
+    private static void RefreshItemsCache()
+    {
+        lock (ConfigPersistence.Gate)
+        {
+            FollowStorageMode();
+            if (_blockSaving) return;
+            try { _itemsData = ReadItems(); _itemsInvalid = false; if (!_settingsInvalid) LoadError = null; }
+            catch (Exception ex) { _itemsInvalid = true; LoadError = ex.Message; LogService.Write("Config", "Items reload failed; original file preserved", ex); }
+        }
     }
 
     public static List<AppItem> LoadItems()
     {
+        RefreshItemsCache();
         var dtos = _itemsData?.Items ?? [];
         LogService.Write("Config", $"LoadItems count={dtos.Count}");
         var items = dtos.Select(dto => dto.ToViewModel(FixedCachePath)).ToList();
@@ -413,6 +442,7 @@ public static class ConfigService
 
     public static List<AppItem> LoadRecycleBinItems()
     {
+        RefreshItemsCache();
         var dtos = _itemsData?.RecycleBinItems ?? [];
         LogService.Write("Config", $"LoadRecycleBinItems count={dtos.Count}");
         var items = dtos.Select(dto => dto.ToViewModel(FixedCachePath)).ToList();
@@ -425,6 +455,15 @@ public static class ConfigService
 
     private static void LoadConfigData()
     {
+        lock (ConfigPersistence.Gate)
+        {
+        using var lease = ConfigPersistence.Enter(CurrentDataPath);
+        Text.Load(Language);
+        LoadError = null;
+        _settingsInvalid = false;
+        _itemsInvalid = false;
+        RequiresMigration = false;
+        _blockSaving = false;
         try
         {
             LogService.Write("Config", "LoadConfigData Start");
@@ -438,11 +477,14 @@ public static class ConfigService
                 try
                 {
                     string settingsYaml = File.ReadAllText(settingsPath);
+                    if (string.IsNullOrWhiteSpace(settingsYaml)) throw new InvalidDataException();
                     var deserializer = new DeserializerBuilder()
                         .WithNamingConvention(CamelCaseNamingConvention.Instance)
                         .IgnoreUnmatchedProperties()
                         .Build();
-                    _settings = deserializer.Deserialize<AppSettings>(settingsYaml) ?? new AppSettings();
+                    _settings = deserializer.Deserialize<AppSettings>(settingsYaml) ?? throw new InvalidDataException();
+                    _settingsBaseline = ConfigPersistence.Clone(_settings);
+                    _memoryToken = "";
                     string loadedToken = _settings.GitHubToken ?? "";
                     if (!string.IsNullOrEmpty(loadedToken))
                     {
@@ -451,19 +493,22 @@ public static class ConfigService
                         {
                             _memoryToken = decrypted;
                         }
-                        else
+                        else if (loadedToken.StartsWith("ghp_", StringComparison.Ordinal) || loadedToken.StartsWith("github_pat_", StringComparison.Ordinal))
                         {
                             _memoryToken = loadedToken;
-                            SaveSettingsData();
                             LogService.Write("Config", "LoadConfigData migrated legacy plaintext token");
                         }
+                        else LogService.Write("Config", "Token cannot be decrypted; encrypted value preserved");
                     }
+                    _tokenBaseline = _memoryToken;
                 }
-                catch (Exception ex) { LogService.Write("Config", "LoadConfigData settings load failed", ex); _settings = new AppSettings(); }
+                catch (Exception ex) { LogService.Write("Config", "LoadConfigData settings load failed", ex); _settings ??= new AppSettings(); _settingsInvalid = true; LoadError = string.Format(Text.T("DataFile_Error"), settingsPath); }
             }
             else
             {
                 _settings = new AppSettings();
+                _settingsBaseline = ConfigPersistence.Clone(_settings);
+                _memoryToken = _tokenBaseline = "";
             }
 
             if (File.Exists(itemsPath))
@@ -471,20 +516,18 @@ public static class ConfigService
                 try
                 {
                     string itemsYaml = File.ReadAllText(itemsPath);
-                    var deserializer = new DeserializerBuilder()
-                        .WithNamingConvention(CamelCaseNamingConvention.Instance)
-                        .IgnoreUnmatchedProperties()
-                        .Build();
-                    _itemsData = deserializer.Deserialize<ItemsData>(itemsYaml) ?? new ItemsData();
+                    var deserializer = ConfigPersistence.Deserializer;
+                    if (string.IsNullOrWhiteSpace(itemsYaml)) throw new InvalidDataException();
+                    _itemsData = deserializer.Deserialize<ItemsData>(itemsYaml) ?? throw new InvalidDataException();
                 }
-                catch (Exception ex) { LogService.Write("Config", "LoadConfigData items load failed", ex); _itemsData = new ItemsData(); }
+                catch (Exception ex) { LogService.Write("Config", "LoadConfigData items load failed", ex); _itemsData ??= new ItemsData(); _itemsInvalid = true; LoadError = string.Format(Text.T("DataFile_Error"), itemsPath); }
             }
             else
             {
                 _itemsData = new ItemsData();
             }
 
-            if (_itemsData.Version < CurrentConfigVersion)
+            if (_itemsData.Version != CurrentConfigVersion)
             {
                 RequiresMigration = true;
                 _blockSaving = true;
@@ -495,6 +538,7 @@ public static class ConfigService
 
             _settings ??= new AppSettings();
             _itemsData ??= new ItemsData();
+            if (_itemsInvalid) return;
             _itemsData.Items ??= [];
             _itemsData.RecycleBinItems ??= [];
 
@@ -506,6 +550,15 @@ public static class ConfigService
                 _itemsData.RecycleBinItems = recycleItems;
             }
             bool normalized = false;
+            foreach (var dto in _itemsData.Items.Concat(_itemsData.RecycleBinItems))
+            {
+                if (!string.IsNullOrEmpty(dto.Id)) continue;
+                dto.Id = string.IsNullOrWhiteSpace(dto.Actions?.Main?.Path) ? Guid.NewGuid().ToString("N")[..16] : PathHashHelper.GetPathHash(dto.Actions.Main.Path);
+                normalized = true;
+            }
+            var uniqueIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var dto in _itemsData.Items.Concat(_itemsData.RecycleBinItems))
+                if (!uniqueIds.Add(dto.Id)) { _itemsInvalid = true; throw new DataFileException(itemsPath); }
             if (_itemsData.Items.Any(x => x.Status != (int)AppItemStatus.Normal))
             {
                 var recycleIds = new HashSet<string>(_itemsData.RecycleBinItems.Select(x => x.Id));
@@ -540,6 +593,8 @@ public static class ConfigService
             LogService.Write("Config", $"LoadConfigData failed", ex);
             _settings ??= new AppSettings();
             _itemsData ??= new ItemsData();
+            LoadError = ex.Message;
+        }
         }
     }
 
@@ -552,9 +607,17 @@ public static class ConfigService
         }
         LogService.Write("Config", "SaveAll Start");
         SaveSettingsData();
-        SaveItemsData();
+        if (_itemsInvalid) throw new DataFileException(ItemsFilePath);
         LogService.Write("Config", "SaveAll End");
     }
+
+    public static bool TrySaveAll()
+    {
+        try { SaveAll(); return true; }
+        catch (Exception ex) { LoadError = ex.Message; LogService.Write("Config", "Save failed; original preserved", ex); return false; }
+    }
+
+    public static void SaveSettings() => SaveSettingsData();
 
     private static void NormalizeSettingsFile()
     {
@@ -581,33 +644,65 @@ public static class ConfigService
 
     private static void SaveSettingsData()
     {
-        try
+        lock (ConfigPersistence.Gate)
         {
             if (string.IsNullOrEmpty(CurrentDataPath) || _settings == null) return;
-            _settings.GitHubToken = EncryptToken(_memoryToken);
-            string path = Path.Combine(CurrentDataPath, SettingsFileName);
-            var serializer = new SerializerBuilder().Build();
-            string yaml = serializer.Serialize(_settings);
-            if (!Directory.Exists(CurrentDataPath)) Directory.CreateDirectory(CurrentDataPath);
-            File.WriteAllText(path, yaml);
+            FollowStorageMode();
+            using var lease = ConfigPersistence.Enter(CurrentDataPath);
+            if (_settingsInvalid) throw new DataFileException(SettingsFilePath);
+            var latest = ConfigPersistence.Read<AppSettings>(SettingsFilePath);
+            var baseline = _settingsBaseline ?? new AppSettings();
+            foreach (var property in typeof(AppSettings).GetProperties())
+            {
+                if (property.Name == nameof(AppSettings.GitHubToken)) continue;
+                if (property.Name == nameof(AppSettings.Window))
+                {
+                    latest.Window ??= new();
+                    foreach (var coordinate in typeof(WindowBoundsInfo).GetProperties())
+                    {
+                        object? proposed = coordinate.GetValue(_settings.Window ?? new());
+                        object? before = coordinate.GetValue(baseline.Window ?? new());
+                        if (!Equals(proposed, before)) coordinate.SetValue(latest.Window, proposed);
+                    }
+                    continue;
+                }
+                if (!ConfigPersistence.Equal(property.GetValue(_settings), property.GetValue(baseline)))
+                    property.SetValue(latest, property.GetValue(_settings));
+            }
+            if (_memoryToken != _tokenBaseline || (!string.IsNullOrEmpty(_memoryToken) && !string.IsNullOrEmpty(baseline.GitHubToken) && (baseline.GitHubToken.StartsWith("ghp_") || baseline.GitHubToken.StartsWith("github_pat_"))))
+                latest.GitHubToken = EncryptToken(_memoryToken);
+            string yaml = ConfigPersistence.Serializer.Serialize(latest);
+            if (!File.Exists(SettingsFilePath) || File.ReadAllText(SettingsFilePath) != yaml) AtomicFile.Write(SettingsFilePath, yaml);
+            _settings = latest;
+            _settingsBaseline = ConfigPersistence.Clone(latest);
+            _memoryToken = DecryptToken(latest.GitHubToken);
+            _tokenBaseline = _memoryToken;
             LogService.Write("Config", "SaveSettingsData written");
         }
-        catch (Exception ex) { LogService.Write("Config", "SaveSettingsData failed", ex); }
+    }
+
+    private static void FollowStorageMode()
+    {
+        if (_debugModeApplied || !File.Exists(StorageMigration.ModeFile)) return;
+        string mode = File.ReadAllText(StorageMigration.ModeFile).Trim();
+        if (mode == "system") CurrentDataPath = SystemBasePath;
+        else if (mode == "portable") CurrentDataPath = PortableBasePath;
     }
 
     private static void SaveItemsData()
     {
-        try
+        lock (ConfigPersistence.Gate)
         {
             if (string.IsNullOrEmpty(CurrentDataPath) || _itemsData == null) return;
+            if (_itemsInvalid || _blockSaving) throw new DataFileException(ItemsFilePath);
+            using var lease = ConfigPersistence.Enter(CurrentDataPath);
             string path = Path.Combine(CurrentDataPath, ItemsFileName);
             var serializer = new SerializerBuilder().Build();
             string yaml = serializer.Serialize(_itemsData);
             if (!Directory.Exists(CurrentDataPath)) Directory.CreateDirectory(CurrentDataPath);
-            File.WriteAllText(path, yaml);
+            AtomicFile.Write(path, yaml);
             LogService.Write("Config", "SaveItemsData written");
         }
-        catch (Exception ex) { LogService.Write("Config", "SaveItemsData failed", ex); }
     }
 
     public static bool CloseAfterLaunch
@@ -723,14 +818,21 @@ public static class ConfigService
 
             if (modified)
             {
-                SaveItemsData();
+                MutateItems((active, recycled) =>
+                {
+                    foreach (var recovered in items.Concat(recycleItems))
+                    {
+                        var target = active.Concat(recycled).FirstOrDefault(x => x.Id == recovered.Id && x.ExePath == recovered.Actions?.Main?.Path);
+                        if (target != null && string.IsNullOrEmpty(target.Platform)) target.Platform = recovered.Platform;
+                    }
+                });
             }
             LogService.Write("Config", "Reconstruct End");
             return modified;
         }
     }
 
-    public static async Task RefreshGlobalAsync()
+    public static async Task RefreshGlobalAsync(CancellationToken cancellationToken = default)
     {
         using (LogService.StartOperation("Config", "RefreshGlobalAsync"))
         {
@@ -742,6 +844,7 @@ public static class ConfigService
             LogService.Write("Config", $"RefreshGlobal AfterLoadItems {sw.ElapsedMilliseconds}ms");
             var rebuildTasks = new List<Task>();
             int successfulRebuilds = 0;
+            using var iconConcurrency = new SemaphoreSlim(4);
 
             foreach (var item in allItems)
             {
@@ -749,8 +852,10 @@ public static class ConfigService
                 {
                     rebuildTasks.Add(Task.Run(async () =>
                     {
+                        await iconConcurrency.WaitAsync(cancellationToken);
                         try
                         {
+                            cancellationToken.ThrowIfCancellationRequested();
                             string? sourcePath = item.ExePath;
                             string? resolvedPath = null;
 
@@ -814,6 +919,7 @@ public static class ConfigService
                             }
                         }
                         catch (Exception ex) { LogService.Write("Config", "RefreshGlobal rebuild task failed", ex); }
+                        finally { iconConcurrency.Release(); }
                     }));
                 }
             }
@@ -825,7 +931,14 @@ public static class ConfigService
                 LogService.Write("Config", $"RefreshGlobal AfterRebuildAwait {sw.ElapsedMilliseconds}ms");
                 if (successfulRebuilds > 0)
                 {
-                    SaveItems(items, recycleItems, false);
+                    MutateItems((current, recycled) =>
+                    {
+                        foreach (var rebuilt in allItems)
+                        {
+                            var target = current.Concat(recycled).FirstOrDefault(x => x.Id == rebuilt.Id && x.ExePath == rebuilt.ExePath);
+                            if (target != null && (string.IsNullOrEmpty(target.IconPath) || !File.Exists(target.IconPath)) && !string.IsNullOrEmpty(rebuilt.IconPath)) target.IconPath = rebuilt.IconPath;
+                        }
+                    }, false);
                 }
             }
 
@@ -914,7 +1027,7 @@ public static class ConfigService
         }
 
         SaveAll();
-        LogService.Write("Config", $"SetSetting {key}={value}");
+        LogService.Write("Config", $"SetSetting {key}={SensitiveText.SettingValue(key, value)}");
         return null;
     }
 

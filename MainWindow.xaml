@@ -10,7 +10,7 @@
     <Grid x:Name="RootGrid">
         <Grid x:Name="StartupOverlay"
               Canvas.ZIndex="3000"
-              Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+              Background="Transparent"
               Opacity="0"
               IsHitTestVisible="True"
               Loaded="StartupOverlay_Loaded">

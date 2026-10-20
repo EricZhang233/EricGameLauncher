@@ -40,10 +40,9 @@ namespace EricGameLauncher
 
         private FrameworkElement CreateSplashContent()
         {
-            var background = Application.Current.Resources["ApplicationPageBackgroundThemeBrush"] as Brush;
             return new Grid
             {
-                Background = background,
+                Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
                 Children =
                 {
                     new StackPanel
@@ -77,7 +76,8 @@ namespace EricGameLauncher
         {
             try
             {
-                this.SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
+                this.SystemBackdrop = new DesktopAcrylicBackdrop();
+                LogService.Write("UI", "Desktop acrylic system backdrop applied");
                 this.ExtendsContentIntoTitleBar = true;
 
                 this.Title = ConfigService.AppTitle;
@@ -128,6 +128,7 @@ namespace EricGameLauncher
                     {
                         SendMessage(_hWnd, WM_SETICON, ICON_BIG, hIcon);
                         SendMessage(_hWnd, WM_SETICON, ICON_SMALL, hIcon);
+                        _customIconHandle = hIcon;
                         LogService.Write("App", "SetAppIcon via file WM_SETICON success");
                     }
                     else
@@ -251,10 +252,10 @@ namespace EricGameLauncher
                     this.AppWindow.Resize(new Windows.Graphics.SizeInt32(950, 650));
                 }
 
-                if (x >= 0 && y >= 0)
+                if (x != -1 || y != -1)
                 {
-                    var displayArea = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(
-                        this.AppWindow.Id, Microsoft.UI.Windowing.DisplayAreaFallback.Primary);
+                    var displayArea = Microsoft.UI.Windowing.DisplayArea.GetFromRect(
+                        new Windows.Graphics.RectInt32(x, y, Math.Max(400, width), Math.Max(300, height)), Microsoft.UI.Windowing.DisplayAreaFallback.Nearest);
 
                     var work = displayArea.WorkArea;
                     int workLeft = work.X;
@@ -262,7 +263,7 @@ namespace EricGameLauncher
                     int workRight = work.X + work.Width;
                     int workBottom = work.Y + work.Height;
 
-                    int targetX = Math.Clamp(x, workLeft, Math.Max(workRight - 100, workLeft));
+                    int targetX = Math.Clamp(x, workLeft - Math.Max(0, width - 100), Math.Max(workRight - 100, workLeft));
                     int targetY = Math.Clamp(y, workTop, Math.Max(workBottom - 100, workTop));
 
                     this.AppWindow.Move(new Windows.Graphics.PointInt32(targetX, targetY));

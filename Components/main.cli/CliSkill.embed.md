@@ -15,6 +15,9 @@ Use the CLI when the user wants to control their EricGameLauncher library from a
 3. Exit code `0` means success, `1` means error. Do not ignore the exit code.
 4. Running the CLI with no recognized command prints the help screen.
 5. The `-debug` flag switches to local data and cache paths.
+6. In JSON mode stdout contains JSON only; diagnostics and progress go to stderr. Mutation commands return a JSON success/exitCode result. Unknown commands return a nonzero exit code.
+7. Item IDs remain stable when paths are edited. Add, edit and scan import check active and recycled paths for duplicates. A failed launch returns an error; it does not mean the game was started.
+8. A corrupt configuration is preserved and writes fail explicitly. Restore its `.bak` or repair it before retrying. Concurrent item modifications are serialized across processes.
 
 ## Commands
 
@@ -29,6 +32,8 @@ Use the CLI when the user wants to control their EricGameLauncher library from a
 - `scan [--steam | --epic | --xbox | --all] [--classify] [--invalid] [--delete-invalid] [--import] [--json]` — scan for installed games
 - `search <query> [--json]` — search by title, path, pinyin, or pinyin initials
 - `sort --list | --id <id> --move-up | --move-down | --swap-with <id>` — reorder items
+
+Update installation and repair verify the downloaded ZIP against the GitHub asset SHA256 digest before proceeding. A missing or invalid digest, a hash mismatch, or an updater failure returns an error without reporting the update as ready.
 - `settings --list | --get <key> | --set <key>=<value>` — view or modify settings
 - `update --check [--channel <stable|latest>] [--json] | --install | --repair [--channel <stable|latest>] | --history [--json]` — check, install, or force-reinstall updates, or print the full update history (oldest first, requires network access to GitHub)
 - `announcements --list | --read <id>` — view server announcements

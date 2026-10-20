@@ -1,0 +1,58 @@
+name: EricGameLauncher-BuildRelease
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+    outputs:
+      version:
+        value: ${{ jobs.build.outputs.version }}
+      artifact_name:
+        value: ${{ jobs.build.outputs.artifact_name }}
+      package_name:
+        value: ${{ jobs.build.outputs.package_name }}
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag, for example v1.2.4'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: startsWith(inputs.tag, 'v')
+    runs-on: windows-2025
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.package.outputs.version }}
+      artifact_name: ${{ steps.package.outputs.artifact_name }}
+      package_name: ${{ steps.package.outputs.package_name }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          global-json-file: global.json
+      - name: Build tagged project and validate package
+        id: package
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $packageDirectory = Join-Path $env:RUNNER_TEMP ('EGL.Release.' + [guid]::NewGuid().ToString('N'))
+          ./.github/scripts/build-release.ps1 -Tag $env:RELEASE_TAG -PackageDirectory $packageDirectory
+      - name: Store freshly built release package
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: ${{ steps.package.outputs.package_path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7

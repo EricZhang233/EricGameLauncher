@@ -158,6 +158,7 @@ public static class SteamHelper
     private static readonly string[] DefaultSteamPaths = ["Program Files (x86)\\Steam", "Program Files\\Steam", "Steam"];
     private static string? _cachedSteamPath;
     private static List<string>? _cachedLibraryFolders;
+    private static DateTime _libraryStamp;
 
     public static int? ExtractAppIdFromUrl(string url)
     {
@@ -193,12 +194,14 @@ public static class SteamHelper
 
     public static List<string> GetLibraryFolders()
     {
-        if (_cachedLibraryFolders != null) return _cachedLibraryFolders;
         var folders = new List<string>();
         string? steamPath = DetectSteamPath();
         if (string.IsNullOrEmpty(steamPath)) return folders;
         folders.Add(steamPath);
         string vdfPath = Path.Combine(steamPath, "steamapps", "libraryfolders.vdf");
+        DateTime stamp = File.GetLastWriteTimeUtc(vdfPath);
+        if (_cachedLibraryFolders != null && _libraryStamp == stamp) return _cachedLibraryFolders;
+        _libraryStamp = stamp;
         if (!File.Exists(vdfPath)) return _cachedLibraryFolders = folders;
         try
         {
@@ -211,7 +214,7 @@ public static class SteamHelper
             }
         }
         catch (Exception) { }
-        return _cachedLibraryFolders = folders;
+        return _cachedLibraryFolders = folders.Where(Directory.Exists).ToList();
     }
 
     public static SteamGameInfo? GetGameInfo(int appId)
@@ -520,9 +523,12 @@ public static class StoreHelper
         {
             string aumid = path.Substring(LauncherConstants.UwpAppsFolderPrefix.Length);
             string pfn = aumid.Contains("!") ? aumid.Split('!')[0] : aumid;
-            var package = _packageManager.FindPackageForUser("", pfn);
+            var package = _packageManager.FindPackagesForUser("", pfn).FirstOrDefault();
             if (package != null) return true;
-
+        }
+        catch (Exception ex) { LogService.Write("Store", "Package query failed, trying Shell", ex); }
+        try
+        {
             int hr = SHCreateItemFromParsingName(path, IntPtr.Zero, typeof(IShellItem).GUID, out var shellItem);
             if (hr == 0 && shellItem != null)
             {
@@ -600,7 +606,7 @@ public static class StoreHelper
             try
             {
                 string pfn = aumid.Contains("!") ? aumid.Split('!')[0] : aumid;
-                var package = _packageManager.FindPackageForUser("", pfn);
+                var package = _packageManager.FindPackagesForUser("", pfn).FirstOrDefault();
                 if (package == null) return false;
 
                 string manifestPath = Path.Combine(package.InstalledLocation.Path, "AppxManifest.xml");
@@ -656,6 +662,7 @@ public static class StoreHelper
         {
             var packages = _packageManager.FindPackagesForUser(string.Empty);
             var tasks = new List<Task<ScannedGame?>>();
+            using var concurrency = new SemaphoreSlim(4);
 
             foreach (var package in packages)
             {
@@ -663,6 +670,7 @@ public static class StoreHelper
 
                 tasks.Add(Task.Run(async () =>
                 {
+                    await concurrency.WaitAsync();
                     try
                     {
                         var entries = await package.GetAppListEntriesAsync();
@@ -683,6 +691,7 @@ public static class StoreHelper
                         }
                     }
                     catch { }
+                    finally { concurrency.Release(); }
                     return null;
                 }));
             }

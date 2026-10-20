@@ -1,16 +1,23 @@
-DEVELOPMENT ENVIRONMENT REQUIREMENTS (WINDOWS 11 25H2 & .NET 10)
+BUILD REQUIREMENTS
 
-1. SYSTEM REQUIREMENTS
-- OS: Windows 11 (Build 26200 or higher)
-- IDE: Visual Studio
+- Windows x64 with PowerShell 7 (pwsh.exe).
+- .NET SDK selected by global.json: 10.0.4xx, with patch roll-forward.
+- Windows SDK 10.0.26100.0 and the WinUI/XAML build tools used by Microsoft.WindowsAppSDK.
+- Node.js for the release-workflow contract tests.
 
-2. VISUAL STUDIO WORKLOADS
-- .NET Desktop Development
-- Desktop development with C++ (Required for WinUI 3 build tools)
-- Universal Windows Platform development
+BUILD ENTRY POINTS
 
-3. INDIVIDUAL COMPONENTS
-- .NET 10.0 SDK
-- Windows 11 SDK (10.0.26100.0)
-- Windows 11 Insider SDK (10.0.26200.0) (Download from Microsoft Insider website)
-- Single-project MSIX Packaging Tools
+- dotnet build -c Debug
+- dotnet build -c Release
+- dotnet test
+- dotnet clean
+
+Visual Studio is optional. Build Tools may provide the required Windows and XAML components without the IDE.
+This unpackaged project does not require the 26200 Insider SDK or MSIX packaging tools.
+GitHub uses windows-2025 and installs the SDK from global.json.
+
+USER RUNTIME REQUIREMENTS
+
+- Windows 11 24H2 (build 26100) or newer, x64.
+- .NET 10 Desktop Runtime.
+- Windows App SDK 1.8 runtime, installed separately as with v1.2.4.

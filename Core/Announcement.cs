@@ -1,11 +1,27 @@
 using System;
 using System.ComponentModel;
+using System.Collections.ObjectModel;
 using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
 using Windows.UI.Text;
 using YamlDotNet.Serialization;
 
 namespace EricGameLauncher;
+
+internal sealed class AnnouncementListState
+{
+    internal ObservableCollection<AnnouncementListItem> Items { get; } = new();
+
+    internal bool Refresh(IEnumerable<Announcement> announcements)
+    {
+        var replacements = announcements.Select(AnnouncementListItem.FromAnnouncement).ToArray();
+        if (Items.Select(x => (x.Id, x.Title, x.Body, x.TimeText, x.MarkerGlyph, x.IsRead)).SequenceEqual(replacements.Select(x => (x.Id, x.Title, x.Body, x.TimeText, x.MarkerGlyph, x.IsRead)))) return false;
+        string? expanded = Items.FirstOrDefault(x => x.IsExpanded)?.Id;
+        Items.Clear();
+        foreach (var item in replacements) { item.IsExpanded = item.Id == expanded; Items.Add(item); }
+        return true;
+    }
+}
 
 public class Announcement
 {
@@ -184,7 +200,12 @@ public sealed class AnnouncementListItem : INotifyPropertyChanged
         bool isRead = ServerConfigManager.IsRead(announcement.Id);
         string position = announcement.GetPosition();
         bool hasMarker = position == "top" || position == "bottom";
-        string markerGlyph = position == "bottom" ? "\u21A7" : "\uE718";
+        string markerGlyph = position switch
+        {
+            "top" => "\uE718",
+            "bottom" => "\uE896",
+            _ => string.Empty
+        };
 
         return new AnnouncementListItem(
             announcement,

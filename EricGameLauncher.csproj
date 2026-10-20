@@ -12,6 +12,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>false</SelfContained>
+    <WindowsAppSDKSelfContained Condition="'$(WindowsAppSDKSelfContained)' == ''">false</WindowsAppSDKSelfContained>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <ErrorOnUnsupportedTargetingPlatformVersion>false</ErrorOnUnsupportedTargetingPlatformVersion>
     <AppxPackage>false</AppxPackage>
@@ -22,42 +23,29 @@
     <ApplicationIcon>ico.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <ReleasePackageDirectory Condition="'$(ReleasePackageDirectory)' == ''">output</ReleasePackageDirectory>
 
     <!-- 彻底排除源码与中间产物，防止递归扫描 -->
     <DefaultItemExcludes>
-      $(DefaultItemExcludes);Components\updater.main\**;output\**;Components\updater.cfgver\**;Components\main.cli\**</DefaultItemExcludes>
-  </PropertyGroup>
-
-  <!-- 2. 自动化版本计算 (Version Calculus) -->
-  <PropertyGroup>
-    <!-- 从 Version.cs 中实时提取版本号，供构建系统全局调用 -->
-    <VersionFileContent>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\Version.cs'))</VersionFileContent>
-    <ExtractedVersion>$([System.Text.RegularExpressions.Regex]::Match($(VersionFileContent),
-      `Version\s*=\s*"([^"]+)"`).Groups[1].Value)</ExtractedVersion>
+      $(DefaultItemExcludes);Components\updater.main\**;output\**;Components\updater.cfgver\**;Components\main.cli\**;Test\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <!-- 3. 构建生命周期管理：构建前阶段 (Pre-Build Context) -->
 
-  <!-- 同步版本号至程序集属性 -->
-  <Target Name="SyncVersion" BeforeTargets="BeforeBuild">
-    <PropertyGroup Condition="'$(ExtractedVersion)' != ''">
-      <Version>$(ExtractedVersion)</Version>
-      <AssemblyVersion>$(ExtractedVersion)</AssemblyVersion>
-      <FileVersion>$(ExtractedVersion)</FileVersion>
-    </PropertyGroup>
-    <Message Importance="High" Text="Synced Version from Version.cs: $(ExtractedVersion) (Native)" />
-  </Target>
-
   <!-- 强制预编译并发布 MainUpdater 影子组件 -->
-  <Target Name="BuildMainUpdater" BeforeTargets="BeforeBuild">
+  <ItemGroup>
+    <_MainUpdaterSource Include="Components\updater.main\*.cs;Components\updater.main\*.csproj;Core\UpdatePackageIntegrity.cs" />
+    <_CfgUpdaterSource Include="Components\updater.cfgver\*.cs;Components\updater.cfgver\*.csproj;Components\updater.cfgver\*.yaml" />
+  </ItemGroup>
+  <Target Name="BuildMainUpdater" BeforeTargets="BeforeBuild" Inputs="@(_MainUpdaterSource);Build\Version.props;Version.cs" Outputs="Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.dll;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.runtimeconfig.json;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.exe;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.deps.json;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\YamlDotNet.dll">
     <Message Importance="High" Text="Publishing MainUpdater ($(Configuration)) to intermediate directory..." />
-    <MSBuild Projects="Components\updater.main\updater.main.csproj" Targets="Restore;Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=false;PublishDir=$(MSBuildProjectDirectory)\payload\updater.main\" />
+    <MSBuild Projects="Components\updater.main\updater.main.csproj" Targets="Restore;Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=false;NuGetAudit=$(NuGetAudit)" />
   </Target>
 
   <!-- 强制预编译并发布 CfgUpdater 影子组件 -->
-  <Target Name="BuildCfgUpdater" BeforeTargets="BeforeBuild">
+  <Target Name="BuildCfgUpdater" BeforeTargets="BeforeBuild" Inputs="@(_CfgUpdaterSource);Build\Version.props;Version.cs" Outputs="Components\updater.cfgver\bin\$(Configuration)\net10.0\win-x64\publish\updater.cfgver.dll;Components\updater.cfgver\bin\$(Configuration)\net10.0\win-x64\publish\updater.cfgver.runtimeconfig.json;Components\updater.cfgver\bin\$(Configuration)\net10.0\win-x64\publish\updater.cfgver.exe;Components\updater.cfgver\bin\$(Configuration)\net10.0\win-x64\publish\updater.cfgver.deps.json;Components\updater.cfgver\bin\$(Configuration)\net10.0\win-x64\publish\YamlDotNet.dll">
     <Message Importance="High" Text="Publishing CfgUpdater ($(Configuration)) to intermediate directory..." />
-    <MSBuild Projects="Components\updater.cfgver\updater.cfgver.csproj" Targets="Restore;Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=false;PublishDir=$(MSBuildProjectDirectory)\payload\updater.cfgver\" />
+    <MSBuild Projects="Components\updater.cfgver\updater.cfgver.csproj" Targets="Restore;Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=false;NuGetAudit=$(NuGetAudit)" />
   </Target>
 
   <!-- 强制编译 CLI 组件并复制到输出目录 -->
@@ -66,7 +54,7 @@
       <_CliMainDll>$([System.IO.Path]::GetFullPath('$(OutputPath)'))EricGameLauncher.dll</_CliMainDll>
     </PropertyGroup>
     <Message Importance="High" Text="Building CLI ($(Configuration)) mainDll=$(_CliMainDll)..." />
-    <MSBuild Projects="Components\main.cli\cli.csproj" Targets="Restore;Build" Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;MainDllPath=$(_CliMainDll)" />
+    <MSBuild Projects="Components\main.cli\cli.csproj" Targets="Restore;Build" Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;MainDllPath=$(_CliMainDll);NuGetAudit=$(NuGetAudit)" />
     <ItemGroup>
       <_CliOutput Include="Components\main.cli\bin\$(Configuration)\net10.0-windows10.0.26100\win-x64\EricGameLauncher.Cli.*" />
     </ItemGroup>
@@ -91,42 +79,15 @@
 
   <!-- Release 自动化打包流 -->
   <Target Name="ZipReleaseBuild" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
-    <Message Importance="High" Text="Zipping Release artifacts to EricGameLauncher_$(ExtractedVersion).zip..." />
-    <MakeDir Directories="output" />
-    <ZipDirectory SourceDirectory="$(OutputPath)" DestinationFile="output\EricGameLauncher_$(ExtractedVersion).zip" Overwrite="true" />
-  </Target>
-
-  <!-- 极致 Release 清理：压缩包生成后物理抹除所有项目缓存 -->
-  <Target Name="ReleasePostCleanPayload" AfterTargets="ZipReleaseBuild" Condition="'$(Configuration)' == 'Release'">
-    <RemoveDir Directories="bin" />
-    <RemoveDir Directories="obj" />
-    <RemoveDir Directories="Components\updater.main\bin" />
-    <RemoveDir Directories="Components\updater.main\obj" />
-    <RemoveDir Directories="Components\updater.cfgver\bin" />
-    <RemoveDir Directories="Components\updater.cfgver\obj" />
-    <RemoveDir Directories="Components\main.cli\bin" />
-    <RemoveDir Directories="Components\main.cli\obj" />
-    <RemoveDir Directories="payload" />
-    <Message Importance="High" Text="Release post-build cleanup: payload and binary directories removed." />
-  </Target>
-
-  <!-- 5. 全量硬核 Clean 操作集成 (Hard Clean Integration) -->
-  <Target Name="CleanAllPayload" AfterTargets="Clean">
-    <RemoveDir Directories="bin" />
-    <RemoveDir Directories="obj" />
-    <RemoveDir Directories="Components\updater.main\bin" />
-    <RemoveDir Directories="Components\updater.main\obj" />
-    <RemoveDir Directories="Components\updater.cfgver\bin" />
-    <RemoveDir Directories="Components\updater.cfgver\obj" />
-    <RemoveDir Directories="Components\main.cli\bin" />
-    <RemoveDir Directories="Components\main.cli\obj" />
-    <RemoveDir Directories="payload" />
-    <Message Importance="High" Text="Hard Clean: Physically removed all build and payload directories." />
+    <Message Importance="High" Text="Zipping Release artifacts to $(ReleasePackageFileName)..." />
+    <MakeDir Directories="$(ReleasePackageDirectory)" />
+    <ZipDirectory SourceDirectory="$(OutputPath)" DestinationFile="$(ReleasePackageDirectory)\$(ReleasePackageFileName)" Overwrite="true" />
   </Target>
 
   <!-- 6. 依赖与资源管理 (Dependencies & Resources) -->
 
   <ItemGroup>
+    <Compile Include="Test\ProductionAccess.cs" />
     <PackageReference Include="CommunityToolkit.WinUI.UI.Controls" Version="7.1.2" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260101001" />
     <PackageReference Include="WinUIEx" Version="2.4.0" />
@@ -138,7 +99,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Package.appxmanifest" />
     <Content Include=".install.cmd">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
@@ -169,8 +129,8 @@
   <!-- 动态嵌入 payload 资源：BuildMainUpdater(BeforeTargets=BeforeBuild) 早于 AssignTargetPaths -->
   <Target Name="EmbedPayloadResources" BeforeTargets="AssignTargetPaths">
     <ItemGroup>
-      <_PayloadMain Include="payload\updater.main\*.*" />
-      <_PayloadCfg Include="payload\updater.cfgver\*.*" />
+      <_PayloadMain Include="Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\*.*" />
+      <_PayloadCfg Include="Components\updater.cfgver\bin\$(Configuration)\net10.0\win-x64\publish\*.*" />
     </ItemGroup>
     <ItemGroup>
       <EmbeddedResource Include="@(_PayloadMain)" LogicalName="EricGameLauncher.updater.main.%(Filename)%(Extension)" />
@@ -179,4 +139,6 @@
     <Message Importance="High" Text="Dynamically embedded @(EmbeddedResource->Count()) payload resources for MainUpdater/CfgUpdater." />
   </Target>
 
+  <Import Project="Test\Test.targets" />
+  <Import Project="Build\Build.targets" />
 </Project>

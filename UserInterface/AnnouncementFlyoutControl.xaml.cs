@@ -9,7 +9,8 @@ namespace EricGameLauncher;
 
 public sealed partial class AnnouncementFlyoutControl : UserControl
 {
-    private readonly ObservableCollection<AnnouncementListItem> _items = new();
+    private readonly AnnouncementListState _state = new();
+    private ObservableCollection<AnnouncementListItem> _items => _state.Items;
 
     public AnnouncementFlyoutControl()
     {
@@ -22,6 +23,7 @@ public sealed partial class AnnouncementFlyoutControl : UserControl
         AnnouncementsTitleText.Text = Text.T("Announcements_Title");
         AnnouncementsEmptyText.Text = Text.T("Announcements_None");
         ToolTipService.SetToolTip(AnnouncementButton, Text.T("Menu_Announcements"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(AnnouncementButton, Text.T("Menu_Announcements"));
     }
 
     public void Refresh()
@@ -29,14 +31,11 @@ public sealed partial class AnnouncementFlyoutControl : UserControl
         try
         {
             var activeAnnouncements = ServerConfigManager.GetActiveAnnouncements();
-            var dataKey = string.Join("|", activeAnnouncements.Select(item => item.Id));
-            if (_items.Count > 0 && dataKey == string.Join("|", _items.Select(item => item.Id))) return;
-            _items.Clear();
-            foreach (var item in activeAnnouncements)
-                _items.Add(AnnouncementListItem.FromAnnouncement(item));
+            bool changed = _state.Refresh(activeAnnouncements);
             AnnouncementsListView.Visibility = _items.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
             AnnouncementsEmptyText.Visibility = _items.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
             UpdateIndicator();
+            if (!changed) return;
             LogService.Write("Announcement", $"Announcement list refreshed total={_items.Count} unread={_items.Count(item => !item.IsRead)}");
         }
         catch (Exception ex) { LogService.Write("Announcement", "AnnouncementFlyoutControl refresh failed", ex); }
@@ -77,27 +76,40 @@ public sealed partial class AnnouncementFlyoutControl : UserControl
         {
             if (sender is not RichTextBlock rich || rich.DataContext is not AnnouncementListItem item) return;
             rich.Blocks.Clear();
-            string text = item.Body ?? string.Empty;
+            string text = item.Body;
             var paragraph = new Paragraph();
             int lastIndex = 0;
-            foreach (Match match in Regex.Matches(text, @"(https?://[\w\-\./?%&=#]+)"))
+            foreach (Match match in Regex.Matches(text, @"https?://[^\s<>]+"))
             {
-                if (match.Index > lastIndex)
-                    paragraph.Inlines.Add(new Run { Text = text.Substring(lastIndex, match.Index - lastIndex) });
-                var link = new Hyperlink();
-                link.Inlines.Add(new Run { Text = match.Value });
-                string url = match.Value;
-                link.Click += async (s, args) =>
+                AddText(paragraph, text[lastIndex..match.Index]);
+                if (Uri.TryCreate(match.Value, UriKind.Absolute, out var uri))
                 {
-                    try { await Windows.System.Launcher.LaunchUriAsync(new Uri(url)); } catch { }
-                };
-                paragraph.Inlines.Add(link);
+                    var link = new Hyperlink();
+                    link.Inlines.Add(new Run { Text = match.Value });
+                    link.Click += async (_, _) =>
+                    {
+                        try { await Windows.System.Launcher.LaunchUriAsync(uri); }
+                        catch (Exception ex) { LogService.Write("Announcement", "Open link failed", ex); }
+                    };
+                    paragraph.Inlines.Add(link);
+                }
+                else AddText(paragraph, match.Value);
                 lastIndex = match.Index + match.Length;
             }
-            if (lastIndex < text.Length)
-                paragraph.Inlines.Add(new Run { Text = text[lastIndex..] });
+            AddText(paragraph, text[lastIndex..]);
             rich.Blocks.Add(paragraph);
         }
         catch (Exception ex) { LogService.Write("Announcement", "Announcement body rendering failed", ex); }
     }
+
+    private static void AddText(Paragraph paragraph, string text)
+    {
+        string[] lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+        for (int index = 0; index < lines.Length; index++)
+        {
+            if (index > 0) paragraph.Inlines.Add(new LineBreak());
+            if (lines[index].Length > 0) paragraph.Inlines.Add(new Run { Text = lines[index] });
+        }
+    }
+
 }

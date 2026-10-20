@@ -4,11 +4,16 @@ using System.Text;
 
 namespace EricGameLauncher;
 
+public sealed record LaunchResult(bool Success, string? Error = null)
+{
+    public void EnsureSuccess() { if (!Success) throw new InvalidOperationException(Error ?? Text.T("Launch_Failed")); }
+}
+
 public static class ProcessRunner
 {
-    public static void Run(string path, bool admin)
+    public static LaunchResult Run(string path, bool admin)
     {
-        if (string.IsNullOrEmpty(path)) return;
+        if (string.IsNullOrEmpty(path)) return new(false, Text.T("Launch_Failed"));
 
         using (LogService.StartOperation("App", $"RunProcess {path}"))
         {
@@ -40,7 +45,7 @@ public static class ProcessRunner
                         psi.Arguments = $"\"{path.Replace("\"", "\\\"")}\"";
                     }
                 }
-                else if (path.Contains("://"))
+                else if (System.Text.RegularExpressions.Regex.IsMatch(path, @"^[a-zA-Z][a-zA-Z0-9+.-]*://"))
                 {
                     psi.FileName = path;
                 }
@@ -71,6 +76,8 @@ public static class ProcessRunner
                         LogService.Write("App", $"RunProcess started pid={process.Id} file={psi.FileName} args={psi.Arguments}");
                     else
                         LogService.Write("App", $"RunProcess start returned null for file={psi.FileName} args={psi.Arguments}");
+                    process?.Dispose();
+                    return new(true);
                 }
                 catch (Exception ex)
                 {
@@ -78,7 +85,7 @@ public static class ProcessRunner
                     throw;
                 }
             }
-            catch (Exception ex) { LogService.Write("App", "RunProcess failed", ex); }
+            catch (Exception ex) { LogService.Write("App", "RunProcess failed", ex); return new(false, Text.T("Launch_Failed") + " " + ex.Message); }
         }
     }
 

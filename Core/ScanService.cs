@@ -2,13 +2,13 @@ namespace EricGameLauncher;
 
 public static class ScanService
 {
-    public static async Task<List<ScannedGame>> ScanAllAsync()
+    public static async Task<List<ScannedGame>> ScanAllAsync(CancellationToken cancellationToken = default)
     {
-        var games = new List<ScannedGame>();
-        games.AddRange(ScanSteam());
-        games.AddRange(ScanEpic());
-        games.AddRange(await ScanXboxAsync());
-        return games;
+        var steam = Task.Run(ScanSteam, cancellationToken);
+        var epic = Task.Run(ScanEpic, cancellationToken);
+        var xbox = ScanXboxAsync();
+        var groups = await Task.WhenAll(steam, epic, xbox).WaitAsync(cancellationToken);
+        return groups.SelectMany(x => x).ToList();
     }
 
     public static List<ScannedGame> ScanSteam()

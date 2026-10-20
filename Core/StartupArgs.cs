@@ -40,7 +40,7 @@ internal static class StartupArgs
         try
         {
             var argsPart = string.Join(" ", _rawArgs.Skip(1).Select(a => a.Contains(' ') ? $"\"{a}\"" : a));
-            LogService.Write("Startup", $"CommandLine={Environment.ProcessPath} {argsPart}".TrimEnd());
+            LogService.Write("Startup", SensitiveText.Redact($"CommandLine={Environment.ProcessPath} {argsPart}".TrimEnd()));
             LogService.Write("Startup", $"WorkDir={Directory.GetCurrentDirectory()}");
             LogService.Write("Startup", $"Settings={ConfigService.SettingsFilePath} (exists={File.Exists(ConfigService.SettingsFilePath)}) Items={ConfigService.ItemsFilePath} (exists={File.Exists(ConfigService.ItemsFilePath)})");
             LogService.Write("Startup", $"DataPath={ConfigService.CurrentDataPath}");

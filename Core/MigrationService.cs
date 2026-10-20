@@ -6,7 +6,7 @@ namespace EricGameLauncher;
 
 public static class MigrationService
 {
-    public static async Task RunMigrationAndRestart()
+    public static async Task RunMigrationAsync()
     {
         using (LogService.StartOperation("Migration", "Run"))
         {
@@ -43,7 +43,9 @@ public static class MigrationService
                     UseShellExecute = false
                 };
                 psi.ArgumentList.Add(configPath);
-                var process = Process.Start(psi);
+                psi.ArgumentList.Add("--target-version");
+                psi.ArgumentList.Add(ConfigService.CurrentConfigVersion.ToString());
+                using var process = Process.Start(psi);
                 if (process == null)
                 {
                     migrationFailed = true;
@@ -70,45 +72,15 @@ public static class MigrationService
             if (migrationFailed)
             {
                 LogService.Write("Migration", $"CfgUpdater migration failed: {failureDetail}", null, null, LogService.LogLevel.Error);
-                QuarantineOldConfig(configPath);
+                throw new DataFileException(configPath);
             }
             else
             {
                 LogService.Write("Migration", "CfgUpdater migration completed");
             }
 
-            try
-            {
-                string? currentExe = Process.GetCurrentProcess().MainModule?.FileName;
-                if (!string.IsNullOrEmpty(currentExe))
-                {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = currentExe,
-                        WorkingDirectory = Path.GetDirectoryName(currentExe),
-                        UseShellExecute = true
-                    });
-                }
-            }
-            catch (Exception ex) { LogService.Write("Migration", "Restart failed", ex, null, LogService.LogLevel.Error); }
-
-            LogService.Write("Migration", "Exit requested");
-            Environment.Exit(0);
+            ConfigService.Reload();
         }
     }
 
-    private static void QuarantineOldConfig(string configPath)
-    {
-        try
-        {
-            if (string.IsNullOrEmpty(configPath) || !File.Exists(configPath)) return;
-            string quarantinePath = $"{configPath}.failed.{DateTime.Now:yyyyMMdd-HHmmss}";
-            File.Move(configPath, quarantinePath);
-            LogService.Write("Migration", $"Old config quarantined to {quarantinePath}");
-        }
-        catch (Exception ex)
-        {
-            LogService.Write("Migration", "Quarantine old config failed", ex, null, LogService.LogLevel.Error);
-        }
-    }
 }

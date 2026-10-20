@@ -85,135 +85,15 @@ namespace updater.cfgver
                 try { currentVersion = Convert.ToInt32(verObj); } catch { currentVersion = 1; }
             }
 
-            bool migratedAny = false;
+            int targetVersion = args.Length >= 3 && args[1] == "--target-version" && int.TryParse(args[2], out int requested) ? requested : 1;
             int startVersion = currentVersion;
+            bool migratedAny;
+            try { migratedAny = MigrationRules.Apply(configRoot, rulesList, targetVersion); }
+            catch (Exception ex) { Log($"MigrationFailed {ex}"); return 11; }
+            if (!migratedAny) return 0;
 
-            while (true)
-            {
-                Dictionary<object, object>? matchingRule = null;
-                foreach (var r in rulesList)
-                {
-                    if (r is Dictionary<object, object> rule)
-                    {
-                        int fromVer = 0;
-                        if (rule.TryGetValue("from", out var fv) && fv != null)
-                            try { fromVer = Convert.ToInt32(fv); } catch { }
-                        if (fromVer == currentVersion)
-                        {
-                            matchingRule = rule;
-                            break;
-                        }
-                    }
-                }
 
-                if (matchingRule == null) break;
-
-                int nextVersion = 0;
-                if (matchingRule.TryGetValue("to", out var tv) && tv != null)
-                    try { nextVersion = Convert.ToInt32(tv); } catch { }
-
-                if (matchingRule.TryGetValue("transformations", out var tfsObj) && tfsObj is List<object> transformations)
-                {
-                    if (configRoot.TryGetValue("items", out var itemsObj) && itemsObj is List<object> itemsArr)
-                    {
-                        foreach (var itemNode in itemsArr)
-                        {
-                            if (itemNode is not Dictionary<object, object> itemObj) continue;
-                            foreach (var tf in transformations)
-                            {
-                                if (tf is not Dictionary<object, object> tfObj) continue;
-                                if (!tfObj.TryGetValue("type", out var typeObj)) continue;
-                                string tfType = typeObj?.ToString() ?? "";
-
-                                if (tfType == "MoveAndGroup")
-                                {
-                                    string targetObjName = "";
-                                    if (tfObj.TryGetValue("target", out var tgt) && tgt != null) targetObjName = tgt.ToString() ?? "";
-                                    if (tfObj.TryGetValue("sourceFields", out var sfObj) && sfObj is Dictionary<object, object> sourceFields)
-                                    {
-                                        if (!string.IsNullOrEmpty(targetObjName))
-                                        {
-                                            var newDict = new Dictionary<object, object>();
-                                            bool hasAnyField = false;
-
-                                            foreach (var field in sourceFields)
-                                            {
-                                                string newPropName = field.Key?.ToString() ?? "";
-                                                string oldPropName = field.Value?.ToString() ?? "";
-
-                                                if (itemObj.TryGetValue(oldPropName, out var oldPropValue) && oldPropValue != null)
-                                                {
-                                                    hasAnyField = true;
-                                                    newDict[newPropName] = DeepCopyYaml(oldPropValue);
-                                                    itemObj.Remove(oldPropName);
-                                                }
-                                            }
-
-                                            if (hasAnyField)
-                                            {
-                                                itemObj[targetObjName] = newDict;
-                                            }
-                                        }
-                                    }
-                                }
-                                else if (tfType == "SplitRecycleBin")
-                                {
-                                    string itemsKey = "items";
-                                    if (tfObj.TryGetValue("itemsKey", out var ik) && ik != null) itemsKey = ik.ToString() ?? "items";
-                                    string recycleKey = "recycleBin";
-                                    if (tfObj.TryGetValue("recycleKey", out var rk) && rk != null) recycleKey = rk.ToString() ?? "recycleBin";
-                                    string statusField = "status";
-                                    if (tfObj.TryGetValue("statusField", out var sf) && sf != null) statusField = sf.ToString() ?? "status";
-                                    int normalValue = 0;
-                                    if (tfObj.TryGetValue("normalValue", out var nv) && nv != null) try { normalValue = Convert.ToInt32(nv); } catch { }
-
-                                    if (configRoot.TryGetValue(itemsKey, out var itemsRoot) && itemsRoot is List<object> itemsArray)
-                                    {
-                                        List<object> recycleArray;
-                                        if (configRoot.TryGetValue(recycleKey, out var recycleRoot) && recycleRoot is List<object> existingRecycle)
-                                        {
-                                            recycleArray = existingRecycle;
-                                        }
-                                        else
-                                        {
-                                            recycleArray = new List<object>();
-                                            configRoot[recycleKey] = recycleArray;
-                                        }
-
-                                        for (int i = itemsArray.Count - 1; i >= 0; i--)
-                                        {
-                                            if (itemsArray[i] is not Dictionary<object, object> obj) continue;
-                                            int statusValue = normalValue;
-                                            if (obj.TryGetValue(statusField, out var statusNode) && statusNode != null)
-                                            {
-                                                try { statusValue = Convert.ToInt32(statusNode); } catch (Exception ex) { Log($"ParseStatusFailed {ex}"); statusValue = normalValue; }
-                                            }
-
-                                            if (statusValue != normalValue)
-                                            {
-                                                recycleArray.Add(DeepCopyYaml(obj));
-                                                itemsArray.RemoveAt(i);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                currentVersion = nextVersion;
-                migratedAny = true;
-                configRoot["version"] = currentVersion;
-            }
-
-            if (!migratedAny)
-            {
-                Log("NoRuleApplied");
-                return 10;
-            }
-
-            string backupPath = $"{inputPath}.bak.v{startVersion}";
+            string backupPath = $"{inputPath}.bak.v{startVersion}.{Guid.NewGuid():N}";
             try
             {
                 File.Copy(inputPath, backupPath, true);
@@ -224,7 +104,17 @@ namespace updater.cfgver
             {
                 var serializer = new SerializerBuilder().Build();
                 string newYaml = serializer.Serialize(configRoot);
-                File.WriteAllText(inputPath, newYaml);
+                string temporary = inputPath + ".tmp." + Guid.NewGuid().ToString("N");
+                try
+                {
+                    using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                    {
+                        byte[] bytes = System.Text.Encoding.UTF8.GetBytes(newYaml);
+                        file.Write(bytes); file.Flush(true);
+                    }
+                    File.Replace(temporary, inputPath, null);
+                }
+                finally { if (File.Exists(temporary)) File.Delete(temporary); }
             }
             catch (Exception ex) { Log($"WriteFailed info={ex}"); return 9; }
             Log($"End duration={sw.ElapsedMilliseconds}ms modified={(migratedAny ? "yes" : "no")}");
