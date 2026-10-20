@@ -1,59 +1,113 @@
 name: EricGameLauncher-PostRelease
+
 on:
   release:
     types: [published]
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
 
 jobs:
-  upload_asset:
+  prepare_release:
+    if: startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-      
-      - name: Extract base version from tag
-        id: get_version
-        run: |
-          if [[ "${{ github.event.release.tag_name }}" != v* ]]; then
-            echo "Skipping because tag does not start with 'v'"
-            exit 0
-          fi
-          BASE_VERSION=${{ github.event.release.tag_name }}
-          BASE_VERSION=${BASE_VERSION#v}
-          echo "VERSION=$BASE_VERSION" >> $GITHUB_OUTPUT
-          echo "Expected version is $BASE_VERSION"
-
-
-      - name: Check Zip File Existence
-        if: steps.get_version.outputs.VERSION != ''
-        run: |
-          ZIP_PATH="output/EricGameLauncher_${{ steps.get_version.outputs.VERSION }}.zip"
-          if [ ! -f "$ZIP_PATH" ]; then
-            echo "❌ Error: Could not find zip file at $ZIP_PATH"
-            exit 1
-          else
-            echo "✅ Found zip file: $ZIP_PATH"
-          fi
-
-      - name: Upload Asset to Release
-        if: steps.get_version.outputs.VERSION != ''
-        uses: softprops/action-gh-release@v1
+      - name: Show release preparation message
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         with:
-          body_path: .releasenote.md
-          files: output/EricGameLauncher_${{ steps.get_version.outputs.VERSION }}.zip
-
-      - name: Cleanup output directory
-        if: steps.get_version.outputs.VERSION != ''
-        run: |
-          git config user.name "eric-bot"
-          git config user.email "ericzhang233@outlook.com"
-          git fetch origin master
-          git checkout master
-          if [ -d "output" ]; then
-            git rm -r output/
-            git commit -m "chore: auto-remove output directory after release"
-            git pull --rebase origin master
-            git push origin master
-          fi
+          script: |
+            const {owner, repo} = context.repo;
+            const release = context.payload.release;
+            if (!release?.id || !release.tag_name.startsWith('v')) throw new Error('Missing release identity.');
+            const {data: current} = await github.rest.repos.getRelease({owner, repo, release_id: release.id});
+            if (current.id !== release.id || current.tag_name !== release.tag_name || current.published_at !== release.published_at || current.draft) throw new Error('Release state changed; refusing to replace body.');
+            await github.rest.repos.updateRelease({owner, repo, release_id: release.id, body: '正在自动化测试和构建，稍后将在此显示更新日志和软件包'});
+  validate:
+    needs: prepare_release
+    uses: ./.github/workflows/validate.yml
+    with:
+      tag: ${{ github.event.release.tag_name }}
+  build:
+    needs: validate
+    uses: ./.github/workflows/build_release.yml
+    with:
+      tag: ${{ github.event.release.tag_name }}
+  upload_asset:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: refs/tags/${{ github.event.release.tag_name }}
+          persist-credentials: false
+      - name: Download this run's release package
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: ${{ runner.temp }}/egl-release-package
+      - name: Upload package to matching Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: ${{ runner.temp }}/egl-release-package/${{ needs.build.outputs.package_name }}
+          fail_on_unmatched_files: true
+  publish_notes:
+    needs: upload_asset
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: refs/tags/${{ github.event.release.tag_name }}
+          persist-credentials: false
+      - name: Publish final release notes after asset upload
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const release = context.payload.release;
+            if (!release?.id || !release.tag_name.startsWith('v')) throw new Error('Missing release identity.');
+            const {data: current} = await github.rest.repos.getRelease({owner, repo, release_id: release.id});
+            if (current.id !== release.id || current.tag_name !== release.tag_name || current.published_at !== release.published_at || current.draft) throw new Error('Release state changed; refusing to publish notes.');
+            const body = require('fs').readFileSync('.releasenote.md', 'utf8');
+            if (!body.trim()) throw new Error('Tagged release notes are empty.');
+            await github.rest.repos.updateRelease({owner, repo, release_id: release.id, body});
+  draft_failed_release:
+    needs: [prepare_release, validate, build, upload_asset, publish_notes]
+    if: ${{ always() && startsWith(github.event.release.tag_name, 'v') && (needs.prepare_release.result != 'success' || needs.validate.result != 'success' || needs.build.result != 'success' || needs.upload_asset.result != 'success' || needs.publish_notes.result != 'success') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Return failed release to draft
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const release = context.payload.release;
+            if (!release?.id || !release.tag_name.startsWith('v')) throw new Error('Missing release identity.');
+            let current;
+            try {
+              current = (await github.rest.repos.getRelease({owner, repo, release_id: release.id})).data;
+            } catch (error) {
+              if (error.status === 404) { core.info('Release was already removed.'); return; }
+              throw error;
+            }
+            if (current.id !== release.id || current.tag_name !== release.tag_name) throw new Error('Release identity changed; refusing to change draft state.');
+            if (current.draft) { core.info('Release is already a draft.'); return; }
+            if (current.published_at !== release.published_at) {
+              core.info('Release has been republished; ignoring this older failed run.');
+              return;
+            }
+            const {data: draft} = await github.rest.repos.updateRelease({owner, repo, release_id: release.id, draft: true});
+            if (!draft.draft) throw new Error('Release did not return to draft state.');
+            core.info(`Returned failed release ${release.tag_name} to draft; description, assets, tag and Actions reports retained.`);

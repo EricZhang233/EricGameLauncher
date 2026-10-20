@@ -11,6 +11,7 @@ public static class Program
     private static int Main(string[] args)
     {
         StartupArgs.Parse();
+        DebugPaths.ApplyIfDebug();
 
         if (!StartupArgs.IsServiceStart)
         {
@@ -41,7 +42,7 @@ public static class Program
             SynchronizationContext.SetSynchronizationContext(context);
             _ = new App();
         });
-
+        LogService.FlushAndStop();
         return 0;
     }
 }

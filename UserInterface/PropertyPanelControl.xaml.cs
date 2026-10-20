@@ -15,6 +15,7 @@ public sealed partial class PropertyPanelControl : UserControl
     private AppItem? _editingItem;
     private bool _isNewItemMode = false;
     private CancellationTokenSource? _platformDetectCts;
+    private readonly PropertyDraftSession _draftSession = new();
 
     private readonly StackPanel[] _customSections;
     private readonly TextBox[] _customTitles;
@@ -37,6 +38,8 @@ public sealed partial class PropertyPanelControl : UserControl
     public PropertyPanelControl()
     {
         InitializeComponent();
+        foreach (var menu in new[] { MenuExeStartMenu, MenuExeDesktop, MenuAltStartMenu, MenuAltDesktop, MenuAlongStartMenu, MenuAlongDesktop, MenuMgrStartMenu, MenuMgrDesktop }) HookLazyMenu(menu);
+        Unloaded += (_, _) => { _platformDetectCts?.Cancel(); _draftSession.Advance(); };
 
         _customSections = new StackPanel[] { PropCustomSection1, PropCustomSection2, PropCustomSection3, PropCustomSection4, PropCustomSection5, PropCustomSection6, PropCustomSection7, PropCustomSection8, PropCustomSection9, PropCustomSection10 };
         _customTitles = new TextBox[] { PropCustomTitle1, PropCustomTitle2, PropCustomTitle3, PropCustomTitle4, PropCustomTitle5, PropCustomTitle6, PropCustomTitle7, PropCustomTitle8, PropCustomTitle9, PropCustomTitle10 };
@@ -59,6 +62,7 @@ public sealed partial class PropertyPanelControl : UserControl
             try
             {
                 _platformDetectCts?.Cancel();
+                _platformDetectCts?.Dispose();
                 _platformDetectCts = new CancellationTokenSource();
                 var token = _platformDetectCts.Token;
                 string path = PropExePath.Text?.Trim() ?? "";
@@ -179,7 +183,9 @@ public sealed partial class PropertyPanelControl : UserControl
     {
         try
         {
-            _editingItem = item;
+            _platformDetectCts?.Cancel();
+            _draftSession.Advance();
+            _editingItem = AppItemDto.FromViewModel(item).ToViewModel(ConfigService.FixedCachePath);
             _isNewItemMode = isNew;
 
             LoadUI();
@@ -273,14 +279,14 @@ public sealed partial class PropertyPanelControl : UserControl
                 MenuMgrStartMenu.Items.Clear();
                 MenuMgrDesktop.Items.Clear();
 
-                PopulateMenuItems(MenuExeStartMenu, startMenuItems, PropExePath);
-                PopulateMenuItems(MenuExeDesktop, desktopItems, PropExePath);
-                PopulateMenuItems(MenuAltStartMenu, startMenuItems, PropAlternativeLaunchCommand);
-                PopulateMenuItems(MenuAltDesktop, desktopItems, PropAlternativeLaunchCommand);
-                PopulateMenuItems(MenuAlongStartMenu, startMenuItems, PropAlongsideCommand);
-                PopulateMenuItems(MenuAlongDesktop, desktopItems, PropAlongsideCommand);
-                PopulateMenuItems(MenuMgrStartMenu, startMenuItems, PropMgrPath);
-                PopulateMenuItems(MenuMgrDesktop, desktopItems, PropMgrPath);
+                PrepareLazyMenu(MenuExeStartMenu, startMenuItems, PropExePath);
+                PrepareLazyMenu(MenuExeDesktop, desktopItems, PropExePath);
+                PrepareLazyMenu(MenuAltStartMenu, startMenuItems, PropAlternativeLaunchCommand);
+                PrepareLazyMenu(MenuAltDesktop, desktopItems, PropAlternativeLaunchCommand);
+                PrepareLazyMenu(MenuAlongStartMenu, startMenuItems, PropAlongsideCommand);
+                PrepareLazyMenu(MenuAlongDesktop, desktopItems, PropAlongsideCommand);
+                PrepareLazyMenu(MenuMgrStartMenu, startMenuItems, PropMgrPath);
+                PrepareLazyMenu(MenuMgrDesktop, desktopItems, PropMgrPath);
 
                 LogService.Write("UI", "PopulateShortcutMenus populated standard menus and custom browse flyouts");
 
@@ -294,8 +300,9 @@ public sealed partial class PropertyPanelControl : UserControl
 
                     browseItem.Click += (s, e) => BtnBrowseCustom_Click(index);
 
-                    PopulateMenuItems(startMenuSub, startMenuItems, _customCommands[i]);
-                    PopulateMenuItems(desktopSub, desktopItems, _customCommands[i]);
+                    HookLazyMenu(startMenuSub); HookLazyMenu(desktopSub);
+                    PrepareLazyMenu(startMenuSub, startMenuItems, _customCommands[i]);
+                    PrepareLazyMenu(desktopSub, desktopItems, _customCommands[i]);
 
                     LogService.Write("UI", $"PopulateShortcutMenus custom browse index={index} startCount={startMenuItems?.Count ?? 0} desktopCount={desktopItems?.Count ?? 0}");
 
@@ -322,28 +329,8 @@ public sealed partial class PropertyPanelControl : UserControl
             PropIsMgrAdmin.IsChecked = _editingItem.IsMgrAdmin;
             PropDisplayNameLabel.Text = Text.T("Property_DisplayName");
 
-            string? exePathSnapshot = _editingItem.ExePath;
-            _ = Task.Run(async () =>
-            {
-                var platform = await GamePlatformHelper.DetectPlatformAsync(exePathSnapshot ?? "");
-                DispatcherQueue.TryEnqueue(() =>
-                {
-                    if (platform != null)
-                    {
-                        PropPlatformBadge.Text = platform.PlatformName;
-                        PropPlatformBadgeContainer.Visibility = Visibility.Visible;
-                    }
-                    else if (!string.IsNullOrEmpty(exePathSnapshot))
-                    {
-                        PropPlatformBadge.Text = "User";
-                        PropPlatformBadgeContainer.Visibility = Visibility.Visible;
-                    }
-                    else
-                    {
-                        PropPlatformBadgeContainer.Visibility = Visibility.Collapsed;
-                    }
-                });
-            });
+            PropPlatformBadge.Text = _editingItem.PlatformName ?? "User";
+            PropPlatformBadgeContainer.Visibility = string.IsNullOrEmpty(_editingItem.ExePath) ? Visibility.Collapsed : Visibility.Visible;
 
             PropUseAlternativeLaunch.IsChecked = _editingItem.UseAlternativeLaunch;
             PropAlternativeLaunchCommand.Text = _editingItem.AlternativeLaunchCommand ?? "";
@@ -478,6 +465,9 @@ public sealed partial class PropertyPanelControl : UserControl
 
     private void HidePanel()
     {
+        _platformDetectCts?.Cancel();
+        _draftSession.Advance();
+        int closingSession = _draftSession.Generation;
         var transform = PropertyPanel.RenderTransform as TranslateTransform;
         if (transform == null)
         {
@@ -510,6 +500,7 @@ public sealed partial class PropertyPanelControl : UserControl
 
         storyboard.Completed += (s, e) =>
         {
+            if (closingSession != _draftSession.Generation) return;
             PropertyPanel.Visibility = Visibility.Collapsed;
             PropertyPanel.RenderTransform = null;
             PropertyPanel.Opacity = 1;
@@ -570,7 +561,9 @@ public sealed partial class PropertyPanelControl : UserControl
                             LogService.Write("UI", "BtnChangeIcon_Click aborted: no current editing item");
                             return;
                         }
-                        newPath = await IconHelper.GetIconPathAsync(filePath, _editingItem.Id, forceExtract: true);
+                        int session = _draftSession.Generation;
+                        newPath = await GetDraftIconAsync(filePath);
+                        if (session != _draftSession.Generation) return;
                         LogService.Write("UI", $"BtnChangeIcon_Click GetIconPathAsync returned newPath={newPath}");
                     }
                     catch (Exception ex)
@@ -600,6 +593,29 @@ public sealed partial class PropertyPanelControl : UserControl
             }
             catch (Exception ex) { LogService.Write("UI", "BtnChangeIcon_Click failed", ex); }
         }
+    }
+
+    private sealed record MenuSource(List<ShortcutScanner.FileItem>? Items, TextBox Target);
+
+    private void HookLazyMenu(MenuFlyoutSubItem menu)
+    {
+        menu.PointerEntered += (_, _) => BuildLazyMenu(menu);
+        menu.GotFocus += (_, _) => BuildLazyMenu(menu);
+    }
+
+    private static void PrepareLazyMenu(MenuFlyoutSubItem menu, List<ShortcutScanner.FileItem>? items, TextBox target)
+    {
+        menu.Tag = new MenuSource(items, target);
+        menu.Items.Clear();
+        menu.Items.Add(new MenuFlyoutItem { Text = Text.T("Source_Loading"), IsEnabled = false });
+    }
+
+    private void BuildLazyMenu(MenuFlyoutSubItem menu)
+    {
+        if (menu.Tag is not MenuSource source) return;
+        menu.Tag = null;
+        menu.Items.Clear();
+        PopulateMenuItems(menu, source.Items, source.Target);
     }
 
     private void PopulateMenuItems(MenuFlyoutSubItem parent, List<ShortcutScanner.FileItem>? items, TextBox? targetTextBox)
@@ -668,7 +684,7 @@ public sealed partial class PropertyPanelControl : UserControl
                         if (!string.IsNullOrEmpty(steamExePath) && File.Exists(steamExePath))
                         {
                             LogService.Write("UI", $"OnShortcutMenuItemClick extracting icon from steamExePath={steamExePath}");
-                            iconPath = await IconHelper.GetIconPathAsync(steamExePath, _editingItem.Id, forceExtract: true);
+                        iconPath = await GetDraftIconAsync(steamExePath);
                             LogService.Write("UI", $"OnShortcutMenuItemClick steam iconPath={iconPath}");
                         }
                     }
@@ -699,7 +715,7 @@ public sealed partial class PropertyPanelControl : UserControl
                         }
 
                         LogService.Write("UI", $"OnShortcutMenuItemClick calling GetIconPathAsync iconSource={iconSource} shouldExtractFromLnk={shouldExtractFromLnk}");
-                        iconPath = await IconHelper.GetIconPathAsync(iconSource, _editingItem.Id, forceExtract: true);
+                        iconPath = await GetDraftIconAsync(iconSource);
                         LogService.Write("UI", $"OnShortcutMenuItemClick GetIconPathAsync returned iconPath={iconPath}");
                     }
 
@@ -719,6 +735,15 @@ public sealed partial class PropertyPanelControl : UserControl
     {
         BrowseFile(_customCommands[index], Win32FileDialog.BuildFilter(Win32FileDialog.FilterAll));
     }
+
+    private string DraftIconId() => "draft-" + Guid.NewGuid().ToString("N");
+
+    public void CommitDraft()
+    {
+        _draftSession.Commit(_editingItem?.IconPath);
+    }
+
+    private Task<string?> GetDraftIconAsync(string source) => _draftSession.TrackAsync(() => IconHelper.GetIconPathAsync(source, DraftIconId(), forceExtract: true));
 
     private async void BrowseFile(TextBox target, string? filter = null)
     {
@@ -774,7 +799,7 @@ public sealed partial class PropertyPanelControl : UserControl
                             if (!string.IsNullOrEmpty(steamExePath) && File.Exists(steamExePath))
                             {
                                 LogService.Write("UI", $"BrowseFile extracting steam icon from {steamExePath}");
-                                iconPath = await IconHelper.GetIconPathAsync(steamExePath, _editingItem.Id, forceExtract: true);
+                                iconPath = await GetDraftIconAsync(steamExePath);
                                 LogService.Write("UI", $"BrowseFile steam iconPath={iconPath}");
                             }
                         }
@@ -799,7 +824,7 @@ public sealed partial class PropertyPanelControl : UserControl
                                 iconSource = filePath;
                             }
                             LogService.Write("UI", $"BrowseFile calling GetIconPathAsync iconSource={iconSource}");
-                            iconPath = await IconHelper.GetIconPathAsync(iconSource, _editingItem.Id, forceExtract: true);
+                            iconPath = await GetDraftIconAsync(iconSource);
                             LogService.Write("UI", $"BrowseFile GetIconPathAsync returned iconPath={iconPath}");
                         }
 

@@ -3,8 +3,8 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="using:EricGameLauncher">
-    <Button x:Name="AnnouncementButton" ToolTipService.ToolTip="" CornerRadius="4">
-        <FontIcon x:Name="AnnouncementButtonIcon" Glyph="&#xE789;"/>
+    <Button x:Name="AnnouncementButton" ToolTipService.ToolTip="" Style="{StaticResource TitleBarButtonStyle}">
+        <FontIcon x:Name="AnnouncementButtonIcon" Glyph="&#xE789;" FontSize="16"/>
         <Button.Flyout>
             <Flyout x:Name="AnnouncementFlyout" Placement="BottomEdgeAlignedRight" Opened="AnnouncementFlyout_Opened">
                 <Flyout.FlyoutPresenterStyle>
@@ -34,12 +34,18 @@
                                             <TextBlock Text="{Binding Title}" FontWeight="{Binding TitleWeight}" TextWrapping="Wrap" MaxLines="{Binding TitleMaxLines}" TextTrimming="CharacterEllipsis"/>
                                             <TextBlock Text="{Binding TimeText}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{ThemeResource CaptionTextBlockStyle}"/>
                                         </StackPanel>
-                                        <StackPanel Grid.Column="1" Width="12">
-                                            <FontIcon Glyph="{Binding MarkerGlyph}" FontSize="12" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Visibility="{Binding HasMarker, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                            <Ellipse Width="7" Height="7" Fill="Red" HorizontalAlignment="Center" Visibility="{Binding IsUnread, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                        <StackPanel Grid.Column="1" Width="16" Spacing="4">
+                                            <Grid Width="16" Height="16" Visibility="{Binding HasMarker, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <FontIcon Glyph="{Binding MarkerGlyph}" FontSize="12" IsTextScaleFactorEnabled="False"
+                                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                                            </Grid>
+                                            <Grid Width="16" Height="16" Visibility="{Binding IsUnread, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <Ellipse Width="8" Height="8" Fill="Red" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Grid>
                                         </StackPanel>
                                     </Grid>
-                                    <RichTextBlock TextWrapping="Wrap" Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibilityConverter}}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" IsTextSelectionEnabled="True" Loaded="BodyRichText_Loaded"/>
+                                    <RichTextBlock Loaded="BodyRichText_Loaded" TextWrapping="Wrap" Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibilityConverter}}" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                 </StackPanel>
                             </DataTemplate>
                         </ListView.ItemTemplate>

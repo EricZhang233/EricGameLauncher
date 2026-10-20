@@ -123,8 +123,16 @@ public static class QuickStartService
 
     public static bool SetEnabled(bool enabled)
     {
+        if (DebugPaths.IsDebug())
+        {
+            ConfigService.QuickStart = enabled;
+            ConfigService.SaveSettings();
+            EnabledChanged?.Invoke(enabled);
+            return true;
+        }
         using (LogService.StartOperation("QuickStart", "SetEnabled"))
         {
+            bool previous = ConfigService.QuickStart;
             bool applied = enabled ? Register() : Unregister();
             if (!applied)
             {
@@ -133,7 +141,13 @@ public static class QuickStartService
             }
 
             ConfigService.QuickStart = enabled;
-            ConfigService.SaveAll();
+            try { ConfigService.SaveSettings(); }
+            catch
+            {
+                ConfigService.QuickStart = previous;
+                if (previous) Register(); else Unregister();
+                throw;
+            }
             LogService.Write("QuickStart", $"SetEnabled applied enabled={enabled} command={BuildAutoStartCommand()}");
             try { EnabledChanged?.Invoke(enabled); } catch (Exception ex) { LogService.Write("QuickStart", "EnabledChanged handler failed", ex); }
             return true;
@@ -142,6 +156,7 @@ public static class QuickStartService
 
     public static void SyncAutoStart()
     {
+        if (DebugPaths.IsDebug()) return;
         using (LogService.StartOperation("QuickStart", "SyncAutoStart"))
         {
             try

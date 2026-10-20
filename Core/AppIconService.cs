@@ -122,8 +122,11 @@ public static class AppIconService
 
         try
         {
-            string pngPath = Path.Combine(ConfigService.SystemCachePath, "CustomIcon_TitleBar.png");
-            if (!File.Exists(pngPath) || new FileInfo(pngPath).Length == 0)
+            string source = Environment.ExpandEnvironmentVariables(ConfigService.AppIconPath);
+            if (!File.Exists(source) && source.LastIndexOf(',') > 0) source = source[..source.LastIndexOf(',')];
+            string key = ((uint)ConfigService.AppIconPath.GetHashCode(StringComparison.Ordinal)).ToString("x") + "-" + File.GetLastWriteTimeUtc(source).Ticks;
+            string pngPath = Path.Combine(ConfigService.SystemCachePath, "CustomIcon_TitleBar-" + key + ".png");
+            if (!File.Exists(pngPath))
             {
                 if (!Directory.Exists(ConfigService.SystemCachePath))
                     Directory.CreateDirectory(ConfigService.SystemCachePath);

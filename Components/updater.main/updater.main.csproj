@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\Core\UpdatePackageIntegrity.cs" Link="UpdatePackageIntegrity.cs" />
     <PackageReference Include="YamlDotNet" Version="12.0.2" />
   </ItemGroup>
 </Project>

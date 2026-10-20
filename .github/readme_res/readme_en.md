@@ -64,13 +64,13 @@
 | Item | Requirement |
 | :--- | :--- |
 | Operating system | Windows 11 24H2 (Build 26100) or later, x64 |
-| Runtime | [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) and [Windows App Runtime 1.8](https://aka.ms/windowsappsdk/1.8/latest/windowsappruntimeinstall-x64.exe) (already present on most systems; install them if prompted) |
+| Runtime | [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) and Windows App SDK 1.8 runtime, installed separately |
 | Download size | Under 15 MB. The launcher itself needs no installation — just extract and run |
 
 ### Three steps
 
 1. **Download**: Grab the latest archive from [Releases](https://github.com/EricZhang233/EricGameLauncher/releases) and extract it anywhere (paths with spaces or non-ASCII characters are fine).
-2. **Run**: Double-click `EricGameLauncher.exe`; initialization happens automatically on first launch. Want desktop and Start menu shortcuts as well? Run `install.cmd` instead.
+2. **Run**: Double-click `EricGameLauncher.exe`; initialization happens automatically on first launch. Want desktop and Start menu shortcuts as well? Run `.install.cmd` instead.
 3. **Fill your library**: Click **More → Scan** in the top-right corner to detect installed games and import them in one click, or use **More → Add** to point at an exe, shortcut, web page or Store app.
 
 > 💡 Turn on **Settings → Quick Start** and the launcher warms up in the background after sign-in, so every later launch appears almost instantly.
@@ -88,7 +88,7 @@
 *   **No platform divide**: Steam, Epic Games, Xbox, WeGame, standalone executables, web links and Store apps share one grid, ordered exactly how you like.
 *   **Icons from small to huge**: Continuous scaling from a compact list to an immersive large grid, applied instantly and remembered next time.
 *   **Multiple matching paths**: `yxlm` (initials), `yingxionglianmeng` (full Pinyin), `部落` (Chinese) and `pcl` (path) all find their target.
-*   **Manual ordering**: Reorder in **More → Sort** with the move buttons or the `W` `S` `↑` `↓` keys.
+*   **Manual ordering**: Enable **More → Sort**, then drag items in the grid. Turn off the sorting switch at the left of the title-bar buttons to resume launching. Sorting mode resets at each launch.
 *   **Hover to fill in the blanks**: Rest the pointer for a moment and the full title appears — no more guessing long names.
 *   **Launch gesture**: Single or double click, switched whenever you like in Settings.
 
@@ -152,6 +152,9 @@ The Recycle Bin can also be emptied in one click, besides restoring or deleting 
 *   **One-click download and install**: The launcher restarts and completes the replacement automatically; you can also force a reinstall at any time.
 *   **Update history**: A version list on the left and the full notes on the right, with jump-to-any-version navigation, sourced from GitHub release records.
 *   **Announcement center**: Cloud announcements are fetched on startup, bodies support Markdown in Chinese and English, read state is persisted locally, and unread items carry a red dot.
+*   **Update protection**: The downloaded ZIP must match the GitHub asset SHA256 before the launcher exits and installation begins. Verification failures can be retried or dismissed. Installation failures trigger rollback; failed rollback preserves the recovery backup.
+*   **Configuration protection**: Atomic replacement retains a `.bak` file. Corrupt configuration cannot be silently overwritten with an empty library. GUI and CLI item changes use transactions across processes.
+*   **Deletion scope**: GUI recycle-bin deletion retains items for 72 hours. CLI `remove --permanent` and `recycle --purge` explicitly delete immediately.
 
 <a name="settings"></a>
 

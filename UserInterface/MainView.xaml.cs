@@ -4,6 +4,9 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.UI.Xaml.Hosting;
+using Microsoft.UI.Composition;
+using System.Numerics;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -21,9 +24,13 @@ namespace EricGameLauncher
 {
     public sealed partial class MainView : UserControl, INotifyPropertyChanged
     {
-        private ObservableCollection<AppItem> _allItems = new();
-        private ObservableCollection<AppItem> _recycleItems = new();
-        private ObservableCollection<AppItem> _viewItems = new();
+        private readonly ObservableCollection<AppItem> _allItems = new();
+        private readonly ObservableCollection<AppItem> _recycleItems = new();
+        private readonly ObservableCollection<AppItem> _viewItems = new();
+        private readonly CancellationTokenSource _lifetime = new();
+        private Microsoft.UI.Dispatching.DispatcherQueueTimer? _externalRefreshTimer;
+        private string _externalStamp = "";
+        private string _lastGridConfigStamp = "";
         private RecycleBinFlyoutControl? _recycleBinControl;
         private SettingsFlyoutControl? _settingsControl;
         private SettingsFlyoutControl SettingsControl => _settingsControl ??= CreateSettingsControl();
@@ -34,6 +41,7 @@ namespace EricGameLauncher
             var control = new SettingsFlyoutControl();
             control.LaunchModeChanged += SettingsControl_LaunchModeChanged;
             control.UpdateChannelChanged += SettingsControl_UpdateChannelChanged;
+            control.OperationFailed += ShowOperationError;
             LogService.Write("UI", "Settings control created on demand");
             return control;
         }
@@ -73,19 +81,6 @@ namespace EricGameLauncher
                     OnPropertyChanged(nameof(IsFiltered));
 
 
-                    if (SearchControl != null)
-                    {
-                        if (value)
-                        {
-
-                            SearchControl.Button.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 196, 43, 28));
-                        }
-                        else
-                        {
-
-                            SearchControl.Button.ClearValue(Button.BackgroundProperty);
-                        }
-                    }
                 }
             }
         }
@@ -100,6 +95,15 @@ namespace EricGameLauncher
         private UpdateService.ReleaseInfo? _pendingUpdate;
         private bool _isUserInteracting = false;
         private bool _isRefreshPending = false;
+        private bool _isDraggingItems;
+        private bool _isSortMode;
+        private readonly Dictionary<FrameworkElement, Visual> _sortWiggles = new();
+        private readonly HashSet<FrameworkElement> _realizedItemPanels = new();
+        private readonly Windows.UI.ViewManagement.UISettings _animationSettings = new();
+        private bool _sortAnimationsEnabled;
+        private int _refreshQueued;
+        private readonly HashSet<string> _draggingItemIds = new();
+        private string[]? _dragOrder;
         private DateTime _lastLaunchTime = DateTime.MinValue;
         private bool _isRootLoaded = false;
         private bool _pendingInitialRefresh = false;
@@ -111,6 +115,8 @@ namespace EricGameLauncher
         private IntPtr _oldWndProc;
         private WndProc? _wndProcDelegate;
         private FrameworkElement? _closeAfterLaunchInputRoot;
+        private XamlRoot? _titleBarXamlRoot;
+        public IList<UIElement> TitleBarActions => TitleBarActionsPanel.Children;
         private DispatcherTimer? _closeAfterLaunchTimer;
         private bool _closeAfterLaunchPending = false;
         private Action? _languageChangedHandler;
@@ -134,6 +140,24 @@ namespace EricGameLauncher
 
             SetupWindowShell();
             WireControls();
+            _externalRefreshTimer = DispatcherQueue.CreateTimer();
+            _externalRefreshTimer.Interval = TimeSpan.FromSeconds(2);
+            _externalRefreshTimer.Tick += (_, _) =>
+            {
+                if (_lifetime.IsCancellationRequested || _isDraggingItems) return;
+                try
+                {
+                    string stamp = GetConfigStamp();
+                    if (stamp == _externalStamp) return;
+                    _externalStamp = stamp;
+                    ConfigService.SaveSettings();
+                    if (stamp != _lastGridConfigStamp) QueueRefreshView();
+                    LoadSettings();
+                    _settingsControl?.Sync();
+                }
+                catch (Exception ex) { ShowOperationError(ex); }
+            };
+            if (!WarmupMode) _externalRefreshTimer.Start();
             _ = InitializeAfterActivationAsync();
         }
 
@@ -147,7 +171,10 @@ namespace EricGameLauncher
 
             TitleBarText.Text = _window.Title;
 
-            _window.SetTitleBar(TitleBarGrid);
+            _window.SetTitleBar(TitleBarDragRegion);
+            TitleBarGrid.Loaded += TitleBarGrid_Loaded;
+            TitleBarGrid.SizeChanged += TitleBarGrid_SizeChanged;
+            LogService.Write("UI", $"Title bar drag region covers title and middle space; automatic action group count={TitleBarActions.Count}");
 
             _window.Closed += HostWindow_Closed;
 
@@ -155,12 +182,38 @@ namespace EricGameLauncher
             LogService.Write("Startup", $"Ctor End duration={sw.ElapsedMilliseconds}ms");
         }
 
+        private void TitleBarGrid_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (_titleBarXamlRoot != null) _titleBarXamlRoot.Changed -= TitleBarXamlRoot_Changed;
+            _titleBarXamlRoot = TitleBarGrid.XamlRoot;
+            if (_titleBarXamlRoot != null) _titleBarXamlRoot.Changed += TitleBarXamlRoot_Changed;
+            UpdateTitleBarInsets();
+        }
+
+        private void TitleBarGrid_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateTitleBarInsets();
+
+        private void TitleBarXamlRoot_Changed(XamlRoot sender, XamlRootChangedEventArgs args) => UpdateTitleBarInsets();
+
+        private void UpdateTitleBarInsets()
+        {
+            if (_window == null || TitleBarGrid.XamlRoot == null || _lifetime.IsCancellationRequested) return;
+            try
+            {
+                double scale = TitleBarGrid.XamlRoot.RasterizationScale;
+                if (scale <= 0) return;
+                double right = _window.AppWindow.TitleBar.RightInset / scale + 12;
+                if (Math.Abs(TitleBarActionsPanel.Margin.Right - right) < 0.1) return;
+                TitleBarActionsPanel.Margin = new Thickness(0, 0, right, 0);
+                LogService.Write("UI", $"Title bar caption inset updated right={right:F1} scale={scale:F2}");
+            }
+            catch (Exception ex) { LogService.Write("UI", "Title bar caption inset update failed", ex); }
+        }
+
         private void WireControls()
         {
             LogService.Write("Startup", "Main view initialize start");
             SearchControl.QueryChanged += SearchBox_TextChanged;
             IconSizeControl.IconSizeChanged += IconSizeControl_SizeChanged;
-            OrderControl.OrderCommitted += OrderControl_OrderCommitted;
             PropertyControl.SaveRequested += PropertyPanel_SaveRequested;
             PropertyControl.DeleteRequested += PropertyPanel_DeleteRequested;
             PropertyControl.MenusRequested += PropertyPanel_MenusRequested;
@@ -242,7 +295,7 @@ namespace EricGameLauncher
                 ServerConfigManager.AnnouncementsUpdated += OnAnnouncementsUpdated;
 
                 ConfigService.IconSize = ConfigService.IconSize;
-                _dataChangedHandler = () => DispatcherQueue.TryEnqueue(() => RefreshView());
+                _dataChangedHandler = QueueRefreshView;
                 ConfigService.DataChanged += _dataChangedHandler;
 
                 _quickStartChangedHandler = enabled => DispatcherQueue.TryEnqueue(() => UpdateMenuExitVisibility());
@@ -320,7 +373,7 @@ namespace EricGameLauncher
                 .Where(path => !string.IsNullOrEmpty(path) && File.Exists(path))
                 .Cast<string>()
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
+                .Take(24).ToList();
 
             var converter = new ImagePathConverter();
             var preloadTasks = paths.Select(path => PreloadStartupIconAsync(converter, path)).ToList();
@@ -362,12 +415,13 @@ namespace EricGameLauncher
                 using (LogService.StartOperation("Startup", "InitializeNetworkTasksAsync"))
                 {
                     LogService.Write("Startup", "InitializeNetwork Start");
-                    await ServerConfigManager.FetchConfigAsync();
+                    await ServerConfigManager.FetchConfigAsync(_lifetime.Token);
                     LogService.Write("Startup", $"InitializeNetwork AfterFetch {sw.ElapsedMilliseconds}ms");
                     _ = CheckForUpdatesInBackgroundAsync();
                     LogService.Write("Startup", $"InitializeNetwork BackgroundCheckScheduled {sw.ElapsedMilliseconds}ms");
                 }
             }
+            catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
             finally
             {
                 LogService.StartupExit();
@@ -381,14 +435,14 @@ namespace EricGameLauncher
                 using (LogService.StartOperation("Update", "BackgroundCheck"))
                 {
                     LogService.Write("Update", "BackgroundCheck Start - scheduled for later");
-                    await Task.Delay(5000);
+                    await Task.Delay(5000, _lifetime.Token);
                     LogService.Write("Update", "BackgroundCheck AfterDelay - now checking for updates");
                     await CheckForUpdatesQuietlyAsync(skipDelay: true);
                 }
             }
             catch (Exception ex)
             {
-                LogService.Write("Update", "BackgroundCheck Failed", ex);
+                if (!_lifetime.IsCancellationRequested) LogService.Write("Update", "BackgroundCheck Failed", ex);
             }
         }
 
@@ -405,7 +459,8 @@ namespace EricGameLauncher
                 {
                     LogService.Write("Update", $"QuietCheck Start skipDelay={skipDelay}");
 
-                    var status = await UpdateService.CheckUpdateStatusAsync(ConfigService.UpdateChannel);
+                    var status = await UpdateService.CheckUpdateStatusAsync(ConfigService.UpdateChannel).WaitAsync(_lifetime.Token);
+                    if (_lifetime.IsCancellationRequested) return;
                     if (status.HasUpdate && status.Release != null)
                     {
                         var release = status.Release;
@@ -433,18 +488,26 @@ namespace EricGameLauncher
             }
             catch (Exception ex)
             {
-                LogService.Write("Update", "QuietCheck Failed", ex);
+                if (!_lifetime.IsCancellationRequested) LogService.Write("Update", "QuietCheck Failed", ex);
             }
         }
 
         private async void MenuCheckUpdate_Click(object sender, RoutedEventArgs e)
         {
+            try { await ManualCheckAsync(); }
+            catch (Exception ex) { if (!_lifetime.IsCancellationRequested) ShowOperationError(ex); }
+        }
+
+        private async Task ManualCheckAsync()
+        {
+            UpdateService.InvalidateCache();
             _pendingUpdate = null;
             HasUpdate = false;
             using (LogService.StartOperation("Update", "ManualCheck"))
             {
                 LogService.Write("Update", "ManualCheck Start");
-                var status = await UpdateService.CheckUpdateStatusAsync(ConfigService.UpdateChannel);
+                var status = await UpdateService.CheckUpdateStatusAsync(ConfigService.UpdateChannel).WaitAsync(_lifetime.Token);
+                if (_lifetime.IsCancellationRequested) return;
                 if (status.Release != null)
                 {
                     if (status.HasUpdate)
@@ -556,7 +619,7 @@ namespace EricGameLauncher
             {
                 LogService.Write("App", $"LoadSettings Start CloseAfterLaunch={ConfigService.CloseAfterLaunch} LaunchMode={ConfigService.LaunchMode} IconSize={ConfigService.IconSize}");
 
-                AppGrid.IsItemClickEnabled = ConfigService.LaunchMode != "double";
+                UpdateGridInteraction();
 
                 IconSizeControl.SetValue(ConfigService.IconSize);
                 IconSize = IconSizeControl.Value;
@@ -564,6 +627,19 @@ namespace EricGameLauncher
             }
             catch (Exception ex) { LogService.Write("App", "LoadSettings failed", ex); }
             }
+        }
+
+        private static string GetConfigStamp() =>
+            $"{File.GetLastWriteTimeUtc(ConfigService.SettingsFilePath).Ticks}:{File.GetLastWriteTimeUtc(ConfigService.ItemsFilePath).Ticks}:{File.GetLastWriteTimeUtc(StorageMigration.ModeFile).Ticks}";
+
+        private void QueueRefreshView()
+        {
+            if (_lifetime.IsCancellationRequested || Interlocked.Exchange(ref _refreshQueued, 1) != 0) return;
+            if (!DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                Interlocked.Exchange(ref _refreshQueued, 0);
+                if (!_lifetime.IsCancellationRequested) RefreshView();
+            })) Interlocked.Exchange(ref _refreshQueued, 0);
         }
 
         private void RefreshView()
@@ -579,7 +655,7 @@ namespace EricGameLauncher
                         return;
                     }
 
-                    if (_isUserInteracting)
+                    if (_isUserInteracting || _isDraggingItems)
                     {
                         _isRefreshPending = true;
                         LogService.Write("App", "RefreshView postponed due to user interaction");
@@ -589,9 +665,12 @@ namespace EricGameLauncher
 
                     List<AppItem> items;
                     List<AppItem> recycleItems;
+                    string stamp = GetConfigStamp();
                     items = ConfigService.LoadItems();
                     recycleItems = ConfigService.LoadRecycleBinItems();
                     ApplyItemData(items, recycleItems);
+                    _lastGridConfigStamp = stamp;
+                    if (ConfigService.LoadError != null) ShowOperationError(new IOException(ConfigService.LoadError));
                 }
                 catch (Exception ex) { LogService.Write("App", "RefreshView failed", ex); }
             }
@@ -607,10 +686,9 @@ namespace EricGameLauncher
             if (hasChanges)
             {
                 LogService.Write("App", $"ApplyItemData DataChanged - rebuilding collections");
-                _allItems = new ObservableCollection<AppItem>(normalItems);
-                _recycleItems = new ObservableCollection<AppItem>(normalizedRecycle);
-                _viewItems = new ObservableCollection<AppItem>(_allItems);
-                AppGrid.ItemsSource = _viewItems;
+                SyncCollection(_allItems, normalItems, true);
+                SyncCollection(_recycleItems, normalizedRecycle, true);
+                RefreshGridItems();
             }
             else
             {
@@ -642,8 +720,14 @@ namespace EricGameLauncher
 
         private void OnPropertyChanged(string propertyName)
         {
-            try { LogService.Write("App", $"OnPropertyChanged {propertyName}"); } catch { }
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        private void ShowOperationError(Exception error)
+        {
+            LogService.Write("UI", "Operation failed", error);
+            OperationErrorBar.Message = error.Message;
+            OperationErrorBar.IsOpen = true;
         }
 
         private async Task LoadData()
@@ -663,12 +747,12 @@ namespace EricGameLauncher
                     }
                     MigrationOverlayControl.Visibility = Visibility.Visible;
                     await Task.Delay(200);
-                    await MigrationService.RunMigrationAndRestart();
-                    return;
+                    await MigrationService.RunMigrationAsync();
+                    MigrationOverlayControl.Visibility = Visibility.Collapsed;
                 }
 
                 LogService.Write("Startup", $"LoadData BeforeRefreshGlobal {sw.ElapsedMilliseconds}ms");
-                await ConfigService.RefreshGlobalAsync();
+                await ConfigService.RefreshGlobalAsync(_lifetime.Token);
                 LogService.Write("Startup", $"LoadData AfterRefreshGlobal {sw.ElapsedMilliseconds}ms");
 
                 var loadedItems = ConfigService.LoadItems();
@@ -677,19 +761,35 @@ namespace EricGameLauncher
                 AppGrid.ItemsSource = _viewItems;
                 LogService.Write("Startup", $"LoadData PopulatedCollections all={_allItems.Count} recycle={_recycleItems.Count}");
 
-                _preloadedStartMenuTask = Task.Run(() => ShortcutScanner.GetStartMenuItems());
-                _preloadedDesktopTask = Task.Run(() => ShortcutScanner.GetDesktopItems());
                     LogService.Write("Startup", $"LoadData AfterPreloadTasks {sw.ElapsedMilliseconds}ms");
                 }
             }
-            catch (Exception ex) { LogService.Write("App", "LoadData failed", ex); }
+            catch (Exception ex) { if (!_lifetime.IsCancellationRequested) { MigrationOverlayControl.Visibility = Visibility.Collapsed; ShowOperationError(ex); } }
         }
 
         private void SyncFromCore()
         {
-            _allItems = new ObservableCollection<AppItem>(ConfigService.LoadItems());
-            _recycleItems = new ObservableCollection<AppItem>(ConfigService.LoadRecycleBinItems());
+            SyncCollection(_allItems, ConfigService.LoadItems(), true);
+            SyncCollection(_recycleItems, ConfigService.LoadRecycleBinItems(), true);
             RefreshGridItems();
+        }
+
+        private static void SyncCollection(ObservableCollection<AppItem> target, IEnumerable<AppItem> source, bool update)
+        {
+            var desired = source.ToList();
+            var ids = desired.Select(x => x.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            for (int i = target.Count - 1; i >= 0; i--) if (!ids.Contains(target[i].Id)) target.RemoveAt(i);
+            for (int i = 0; i < desired.Count; i++)
+            {
+                int existing = -1;
+                for (int j = i; j < target.Count; j++) if (target[j].Id == desired[i].Id) { existing = j; break; }
+                if (existing < 0) target.Insert(i, desired[i]);
+                else
+                {
+                    if (existing != i) target.Move(existing, i);
+                    if (update && !ReferenceEquals(target[i], desired[i])) ItemService.CopyContent(target[i], desired[i]);
+                }
+            }
         }
 
         private void RefreshGridItems()
@@ -699,8 +799,8 @@ namespace EricGameLauncher
                 ? _allItems
                 : ItemService.Search(_allItems, query.ToLowerInvariant());
 
-            _viewItems = new ObservableCollection<AppItem>(items);
-            AppGrid.ItemsSource = _viewItems;
+            SyncCollection(_viewItems, items, false);
+            if (!ReferenceEquals(AppGrid.ItemsSource, _viewItems)) AppGrid.ItemsSource = _viewItems;
             IsFiltered = !string.IsNullOrEmpty(query);
             UpdateEmptyState();
             LogService.Write("App", $"RefreshGridItems applied count={_viewItems.Count} filtered={IsFiltered}");
@@ -809,9 +909,9 @@ namespace EricGameLauncher
             {
             try
             {
-                if (ConfigService.LaunchMode == "double")
+                if (_isSortMode || _isDraggingItems || ConfigService.LaunchMode == "double")
                 {
-                    LogService.Write("App", "AppGrid_ItemClick ignored due to double launch mode");
+                    LogService.Write("App", "AppGrid_ItemClick ignored due to sorting or double launch mode");
                     return;
                 }
                 var item = e.ClickedItem as AppItem;
@@ -847,9 +947,9 @@ namespace EricGameLauncher
             {
             try
             {
-                if (ConfigService.LaunchMode != "double")
+                if (_isSortMode || _isDraggingItems || ConfigService.LaunchMode != "double")
                 {
-                    LogService.Write("App", "AppGrid_DoubleTapped ignored because launch mode != double");
+                    LogService.Write("App", "AppGrid_DoubleTapped ignored due to sorting or single launch mode");
                     return;
                 }
                 if (AppGrid.SelectedItem is AppItem item)
@@ -877,12 +977,12 @@ namespace EricGameLauncher
 
             try
             {
+                LaunchService.Launch(item, item.UseAlternativeLaunch).EnsureSuccess();
                 TriggerItemLoadingAnimation(item);
-                LaunchService.Launch(item, item.UseAlternativeLaunch);
                 if (ConfigService.CloseAfterLaunch)
                     StartCloseAfterLaunchTimer();
             }
-            catch (Exception ex) { LogService.Write("App", "LaunchItem failed", ex); }
+            catch (Exception ex) { ShowOperationError(ex); }
         }
 
         private AppItem? GetTag(object sender)
@@ -1057,9 +1157,9 @@ namespace EricGameLauncher
                 _lastLaunchTime = DateTime.Now;
 
                 TriggerItemLoadingAnimation(item);
-                LaunchService.LaunchManager(item);
+                LaunchService.LaunchManager(item).EnsureSuccess();
             }
-            catch (Exception ex) { LogService.Write("App", "MenuRunMgr_Click failed", ex); }
+            catch (Exception ex) { ShowOperationError(ex); }
         }
 
         private void TriggerItemLoadingAnimation(AppItem item)
@@ -1141,7 +1241,8 @@ namespace EricGameLauncher
 
                 var dialogTask = scannerControl.ShowAsync();
 
-                var scannedGames = await ScanService.ScanAllAsync();
+                var scannedGames = await ScanService.ScanAllAsync(_lifetime.Token);
+                if (_lifetime.IsCancellationRequested) return;
 
                 LogService.Write("Scan", $"MenuScan_Click scannedGamesCount={scannedGames?.Count ?? 0}");
 
@@ -1161,7 +1262,8 @@ namespace EricGameLauncher
                     LogService.Write("Scan", "Scan Complete");
                 }
             }
-            catch (Exception ex) { LogService.Write("Scan", "Scan failed", ex); }
+            catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+            catch (Exception ex) { LogService.Write("Scan", "Scan failed", ex); ShowOperationError(ex); }
         }
 
         private ScannerDialogControl CreateScannerControl()
@@ -1264,10 +1366,11 @@ namespace EricGameLauncher
 
                     SyncFromCore();
                     RefreshView();
+                    PropertyControl.CommitDraft();
                     PropertyControl.ClosePanel();
                     LogService.Write("App", $"PropertyPanel_SaveRequested completed id={item.Id} isNew={isNew}");
                 }
-                catch (Exception ex) { LogService.Write("App", "PropertyPanel_SaveRequested failed", ex); }
+                catch (Exception ex) { ShowOperationError(ex); }
             }
         }
 
@@ -1340,7 +1443,7 @@ namespace EricGameLauncher
             }
             catch (Exception ex) { LogService.Write("Announcement", "RefreshAnnouncementList failed", ex); }
         }
-        private void SearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+        private void SearchBox_TextChanged(TextBox sender, TextChangedEventArgs args)
         {
             try
             {
@@ -1352,26 +1455,146 @@ namespace EricGameLauncher
                     ? _allItems
                     : ItemService.Search(_allItems, query);
 
-                _viewItems = new ObservableCollection<AppItem>(filtered);
-                AppGrid.ItemsSource = _viewItems;
+                SyncCollection(_viewItems, filtered, false);
+                if (!ReferenceEquals(AppGrid.ItemsSource, _viewItems)) AppGrid.ItemsSource = _viewItems;
 
                 IsFiltered = !string.IsNullOrEmpty(query);
                 UpdateEmptyState();
             }
-            catch (Exception ex) { LogService.Write("App", "EditOrderFlyout_Opening failed", ex); }
+            catch (Exception ex) { LogService.Write("App", "SearchBox_TextChanged failed", ex); }
         }
 
-        private void OrderControl_OrderCommitted(IReadOnlyList<AppItem> newOrder)
+        private void UpdateGridInteraction()
         {
+            bool sorting = _isSortMode;
+            ExitSortButton.Visibility = sorting ? Visibility.Visible : Visibility.Collapsed;
+            AppGrid.CanDragItems = sorting;
+            AppGrid.CanReorderItems = sorting;
+            AppGrid.ReorderMode = sorting ? ListViewReorderMode.Enabled : ListViewReorderMode.Disabled;
+            AppGrid.AllowDrop = sorting;
+            AppGrid.IsItemClickEnabled = !sorting && ConfigService.LaunchMode != "double";
+            AppGrid.SelectionMode = sorting ? ListViewSelectionMode.Single : ListViewSelectionMode.None;
+            _sortAnimationsEnabled = sorting && _animationSettings.AnimationsEnabled;
+            UpdateSortWiggles();
+        }
+
+        private void ItemPanel_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement panel)
+            {
+                _realizedItemPanels.Add(panel);
+                UpdateSortWiggle(panel);
+            }
+        }
+
+        private void ItemPanel_Unloaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement panel)
+            {
+                _realizedItemPanels.Remove(panel);
+                StopSortWiggle(panel);
+            }
+        }
+
+        private void ItemPanel_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (sender is FrameworkElement panel && _sortWiggles.TryGetValue(panel, out var visual))
+                visual.CenterPoint = new Vector3((float)e.NewSize.Width / 2, (float)e.NewSize.Height / 2, 0);
+        }
+
+        private void UpdateSortWiggles()
+        {
+            foreach (var panel in _realizedItemPanels) UpdateSortWiggle(panel);
+        }
+
+        private void UpdateSortWiggle(FrameworkElement panel)
+        {
+            bool dragging = panel.DataContext is AppItem item && _draggingItemIds.Contains(item.Id);
+            if (!_sortAnimationsEnabled || dragging || !panel.IsLoaded)
+            {
+                StopSortWiggle(panel);
+                return;
+            }
+            if (_sortWiggles.ContainsKey(panel)) return;
+
+            float amplitude = 1.2f + (float)Random.Shared.NextDouble() * 0.4f;
+            if (Random.Shared.Next(2) == 0) amplitude = -amplitude;
+            double period = 0.30 + Random.Shared.NextDouble() * 0.10;
+            var visual = ElementCompositionPreview.GetElementVisual(panel);
+            visual.RotationAxis = Vector3.UnitZ;
+            visual.CenterPoint = new Vector3((float)panel.ActualWidth / 2, (float)panel.ActualHeight / 2, 0);
+            using var animation = visual.Compositor.CreateScalarKeyFrameAnimation();
+            animation.InsertKeyFrame(0, 0);
+            animation.InsertKeyFrame(0.25f, amplitude);
+            animation.InsertKeyFrame(0.5f, 0);
+            animation.InsertKeyFrame(0.75f, -amplitude);
+            animation.InsertKeyFrame(1, 0);
+            animation.Duration = TimeSpan.FromSeconds(period);
+            animation.IterationBehavior = AnimationIterationBehavior.Forever;
+            _sortWiggles.Add(panel, visual);
+            visual.StartAnimation(nameof(Visual.RotationAngleInDegrees), animation);
+        }
+
+        private void StopSortWiggle(FrameworkElement panel)
+        {
+            if (_sortWiggles.Remove(panel, out var visual))
+            {
+                visual.StopAnimation(nameof(Visual.RotationAngleInDegrees));
+                visual.RotationAngleInDegrees = 0;
+            }
+        }
+
+        private void AppGrid_DragItemsStarting(object sender, DragItemsStartingEventArgs e)
+        {
+            using var operation = LogService.StartOperation("Sort", "DragPickup");
+            if (!_isSortMode || _isDraggingItems)
+            {
+                e.Cancel = true;
+                return;
+            }
+
+            HideCustomToolTip();
+            _dragOrder = _viewItems.Select(item => item.Id).ToArray();
+            _isDraggingItems = true;
+            foreach (var item in e.Items.OfType<AppItem>()) _draggingItemIds.Add(item.Id);
+            foreach (var panel in _realizedItemPanels)
+                if (panel.DataContext is AppItem item && _draggingItemIds.Contains(item.Id)) StopSortWiggle(panel);
+            e.Data.RequestedOperation = DataPackageOperation.Move;
+            LogService.Write("Sort", $"Grid drag started count={e.Items.Count}");
+        }
+
+        private void AppGrid_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
+        {
+            using var operation = LogService.StartOperation("Sort", "DragDrop");
             try
             {
-                _allItems.Clear();
-                foreach (var item in newOrder)
-                    _allItems.Add(item);
-                RefreshGridItems();
-                LogService.Write("App", $"OrderControl applied order count={newOrder.Count}");
+                var order = _viewItems.Select(item => item.Id).ToArray();
+                if (_isSortMode && _dragOrder != null && !_dragOrder.SequenceEqual(order))
+                {
+                    ItemService.SaveVisibleOrder(order);
+                    _isRefreshPending = true;
+                    LogService.Write("Sort", $"Grid reorder committed count={order.Length}");
+                }
+                else
+                {
+                    LogService.Write("Sort", "Grid drag completed without an order change");
+                }
             }
-            catch (Exception ex) { LogService.Write("App", "OrderControl_OrderCommitted failed", ex); }
+            catch (Exception ex)
+            {
+                _isRefreshPending = true;
+                LogService.Write("Sort", "Grid reorder failed", ex);
+            }
+            finally
+            {
+                _dragOrder = null;
+                _isDraggingItems = false;
+                var draggedPanels = _realizedItemPanels.Where(panel => panel.DataContext is AppItem item && _draggingItemIds.Contains(item.Id)).ToArray();
+                _draggingItemIds.Clear();
+                foreach (var panel in draggedPanels) UpdateSortWiggle(panel);
+                if (_isRefreshPending)
+                    QueueRefreshView();
+            }
         }
 
         private void BtnAdd_Click(object sender, RoutedEventArgs e)
@@ -1405,11 +1628,18 @@ namespace EricGameLauncher
 
         private void MenuSort_Click(object sender, RoutedEventArgs e)
         {
-            LogService.Write("UI", "MenuSort_Click invoked");
-            OrderControl.Open(_allItems);
-            OrderControl.ApplyLocalization();
-            OrderControl.Flyout.ShowAt(BtnMore);
-            LogService.Write("UI", "MenuSort_Click showed OrderFlyoutControl");
+            HideCustomToolTip();
+            _isSortMode = true;
+            UpdateGridInteraction();
+            LogService.Write("Sort", "Grid sorting enabled from menu");
+        }
+
+        private void ExitSortButton_Click(object sender, RoutedEventArgs e)
+        {
+            HideCustomToolTip();
+            _isSortMode = false;
+            UpdateGridInteraction();
+            LogService.Write("Sort", "Grid sorting disabled from title bar button");
         }
 
         private void MenuRecycleBin_Click(object sender, RoutedEventArgs e)
@@ -1459,7 +1689,7 @@ namespace EricGameLauncher
 
         private void SettingsControl_LaunchModeChanged(string mode)
         {
-            AppGrid.IsItemClickEnabled = mode != "double";
+            UpdateGridInteraction();
             LogService.Write("UI", $"SettingsControl launch mode applied to grid mode={mode}");
         }
 
@@ -1506,7 +1736,10 @@ namespace EricGameLauncher
             if (args.InRecycleQueue) return;
 
             if (args.ItemContainer is GridViewItem gvi)
+            {
+                gvi.AllowDrop = false;
                 ApplySizeToContainer(gvi, IconSize);
+            }
         }
 
         private void ApplySizeToContainer(GridViewItem container, double size)
@@ -1571,11 +1804,14 @@ namespace EricGameLauncher
                 AnnouncementControl?.ApplyLocalization();
                 SearchControl?.ApplyLocalization();
                 ToolTipService.SetToolTip(BtnMore, Text.T("TitleBar_More"));
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(BtnMore, Text.T("TitleBar_More"));
                 MenuIconSizeItem.Text = Text.T("Menu_IconSize");
                 MenuAddItem.Text = Text.T("Menu_Add");
                 if (MenuScanItem != null) MenuScanItem.Text = Text.T("Menu_Scan");
                 _scannerControl?.ApplyLocalization();
                 MenuSortItem.Text = Text.T("Menu_Sort");
+                ExitSortButton.Content = Text.T("Sort_Exit");
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(ExitSortButton, Text.T("Sort_Exit"));
                 MenuRecycleBinItem.Text = Text.T("Menu_RecycleBin");
                 _recycleBinControl?.ApplyLocalization();
                 MenuSettingsItem.Text = Text.T("Menu_Settings");
@@ -1587,9 +1823,8 @@ namespace EricGameLauncher
                 MenuInstallItem.Text = Text.T("Menu_Install");
                 MenuUninstallItem.Text = Text.T("Menu_Uninstall");
                 IconSizeControl?.ApplyLocalization();
-                OrderControl?.ApplyLocalization();
-                SettingsControl?.ApplyLocalization();
-                AppGrid.IsItemClickEnabled = ConfigService.LaunchMode != "double";
+                _settingsControl?.ApplyLocalization();
+                UpdateGridInteraction();
 
                 PropertyControl.ApplyLocalization();
 
@@ -1643,11 +1878,15 @@ namespace EricGameLauncher
         {
             using (LogService.StartOperation("Update", "ShowReleaseDialogAsync"))
             {
-            string downloadUrl = release.assets?.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.browser_download_url ?? "";
+            var asset = release.assets?.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+            string downloadUrl = asset?.browser_download_url ?? "";
             if (hasUpdate && string.IsNullOrEmpty(downloadUrl)) return;
 
             var (contentGrid, dlgW, dlgH) = await BuildReleaseContentAsync(release, prependTitle: true);
             var showHistory = false;
+            var updateFailed = false;
+            var isUpdating = false;
+            var updateAttempt = 0;
             var dialog = new ContentDialog
             {
                 Title = hasUpdate
@@ -1665,7 +1904,7 @@ namespace EricGameLauncher
             {
                 dialog.Closing += (s, e) =>
                 {
-                    if (showHistory) return;
+                    if (showHistory || updateFailed || isUpdating) return;
                     if (e.Result != ContentDialogResult.Primary)
                     {
                         e.Cancel = true;
@@ -1679,7 +1918,6 @@ namespace EricGameLauncher
             dialog.Resources["ContentDialogMaxHeight"] = dlgH;
 
             var tcs = new TaskCompletionSource<bool>();
-            var isUpdating = false;
 
             dialog.SecondaryButtonClick += (s, e) =>
             {
@@ -1693,16 +1931,20 @@ namespace EricGameLauncher
             {
                 e.Cancel = true;
                 isUpdating = true;
+                updateFailed = false;
+                int attempt = ++updateAttempt;
                 dialog.IsPrimaryButtonEnabled = false;
+                dialog.IsSecondaryButtonEnabled = false;
                 dialog.CloseButtonText = "";
                 dialog.PrimaryButtonText = string.Format(Text.T("Update_DownloadProgress"), 0);
 
                 try
                 {
-                    await UpdateService.StartUpdaterAndWaitAsync(downloadUrl, msg =>
+                    await UpdateService.StartUpdaterAndWaitAsync(asset!, msg =>
                     {
                         DispatcherQueue.TryEnqueue(() =>
                         {
+                            if (!isUpdating || updateFailed || attempt != updateAttempt) return;
                             if (msg.StartsWith("DOWNLOAD "))
                             {
                                 var pct = msg.Split(' ')[1];
@@ -1710,6 +1952,16 @@ namespace EricGameLauncher
                             }
                         });
                     });
+                }
+                catch (Exception ex)
+                {
+                    updateFailed = true;
+                    dialog.PrimaryButtonText = ex is UpdateVerificationException ? ex.Message : Text.T("Update_Failed");
+                    dialog.IsPrimaryButtonEnabled = true;
+                    dialog.IsSecondaryButtonEnabled = true;
+                    dialog.CloseButtonText = Text.T("Close");
+                    LogService.Write("Update", "Update failed; dialog remains open and can be dismissed", ex);
+                    return;
                 }
                 finally
                 {
@@ -1749,7 +2001,7 @@ namespace EricGameLauncher
             double innerH = Math.Max(280, dialogH - 150) - 48;
 
             string bodyHtml = string.IsNullOrEmpty(release.body_html) ? MarkdownHtml.ToHtml(release.body ?? "") : release.body_html;
-            if (prependTitle) bodyHtml = $"<h2>{release.name}</h2>{bodyHtml}";
+            if (prependTitle) bodyHtml = $"<h2>{System.Net.WebUtility.HtmlEncode(release.name)}</h2>{bodyHtml}";
 
             FrameworkElement dialogContent = (await HtmlViewBuilder.CreateAsync(this, bodyHtml, release.body ?? string.Empty, dialogW - 48, innerH, "")).View;
 
@@ -1817,8 +2069,12 @@ namespace EricGameLauncher
                 IntPtr hCustomIcon = AppIconService.GetCustomIconHandle();
                 if (hCustomIcon != IntPtr.Zero)
                 {
-                    var customBitmap = AppIconService.GetBitmapImageFromHicon(hCustomIcon);
-                    if (customBitmap != null) TitleBarIcon.Source = customBitmap;
+                    try
+                    {
+                        var customBitmap = AppIconService.GetBitmapImageFromHicon(hCustomIcon);
+                        if (customBitmap != null) TitleBarIcon.Source = customBitmap;
+                    }
+                    finally { DestroyIcon(hCustomIcon); }
                     return;
                 }
 
@@ -1843,6 +2099,8 @@ namespace EricGameLauncher
         private static extern IntPtr GetForegroundWindow();
 
         private const int GWLP_WNDPROC = -4;
+        [DllImport("user32.dll")]
+        private static extern bool DestroyIcon(IntPtr icon);
         private const uint WM_ENTERSIZEMOVE = 0x0231;
         private const uint WM_EXITSIZEMOVE = 0x0232;
 
@@ -1875,7 +2133,16 @@ namespace EricGameLauncher
             using (LogService.StartOperation("App", "Shutdown"))
             {
                 LogService.Write("App", "MainWindow_Closed Start");
-                ConfigService.SaveAll();
+                foreach (var panel in _sortWiggles.Keys.ToArray()) StopSortWiggle(panel);
+                _realizedItemPanels.Clear();
+                _lifetime.Cancel();
+                TitleBarGrid.Loaded -= TitleBarGrid_Loaded;
+                TitleBarGrid.SizeChanged -= TitleBarGrid_SizeChanged;
+                if (_titleBarXamlRoot != null) _titleBarXamlRoot.Changed -= TitleBarXamlRoot_Changed;
+                _titleBarXamlRoot = null;
+                _externalRefreshTimer?.Stop();
+                HistoryOverlayControl.Hide();
+                ConfigService.TrySaveAll();
                 ServerConfigManager.AnnouncementsUpdated -= OnAnnouncementsUpdated;
                 if (_languageChangedHandler != null)
                 {

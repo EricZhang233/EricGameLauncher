@@ -1,0 +1,18 @@
+<Project>
+  <PropertyGroup>
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <LauncherTestProject Include="$(MSBuildThisFileDirectory)Core\Core.Tests.csproj;$(MSBuildThisFileDirectory)System\System.Tests.csproj" />
+  </ItemGroup>
+  <Target Name="RestoreLauncherTests" AfterTargets="Restore" Condition="'$(VSTestSessionCorrelationId)' != '' Or '$(RestoreLauncherTestProjects)' == 'true'">
+    <MSBuild Projects="@(LauncherTestProject)" Targets="Restore" RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;SelfContained;Platform;PlatformTarget" Properties="Configuration=$(Configuration);LauncherTestRestore=true" />
+  </Target>
+  <Target Name="RunLauncherTests" BeforeTargets="VSTest">
+    <MSBuild Projects="@(LauncherTestProject)" Targets="VSTest" RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;SelfContained;Platform;PlatformTarget" Properties="Configuration=$(Configuration);LauncherTestExecution=true" />
+    <OnError ExecuteTargets="CleanFailedLauncherTestBuilds" />
+  </Target>
+  <Target Name="CleanFailedLauncherTestBuilds">
+    <MSBuild Projects="@(LauncherTestProject)" Targets="CleanTestTemporaryBuild" RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;SelfContained;Platform;PlatformTarget" Properties="Configuration=$(Configuration)" />
+  </Target>
+</Project>

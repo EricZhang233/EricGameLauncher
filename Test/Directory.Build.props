@@ -1,0 +1,14 @@
+<Project>
+  <Import Project="..\Directory.Build.props" />
+  <PropertyGroup>
+    <TestRoot>$(MSBuildThisFileDirectory)</TestRoot>
+    <EglTestBuildRoot Condition="'$(EglTestBuildRoot)' == ''">$([System.IO.Path]::GetTempPath())EricGameLauncher.Tests\build-$([MSBuild]::StableStringHash('$(TestRoot)'))\</EglTestBuildRoot>
+    <BaseOutputPath>$(EglTestBuildRoot)$(MSBuildProjectName)\bin\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(EglTestBuildRoot)$(MSBuildProjectName)\obj\</BaseIntermediateOutputPath>
+    <DefaultItemExcludes>$(DefaultItemExcludes);bin\**;obj\**</DefaultItemExcludes>
+  </PropertyGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="TestRoot" Value="$(TestRoot)" />
+    <Compile Include="$(TestRoot)Support\TestWorkspace.cs" Link="Support\TestWorkspace.cs" />
+  </ItemGroup>
+</Project>

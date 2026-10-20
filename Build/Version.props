@@ -1,0 +1,18 @@
+<Project>
+  <PropertyGroup>
+    <EglRepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</EglRepositoryRoot>
+    <VersionFileContent>$([System.IO.File]::ReadAllText('$(EglRepositoryRoot)Version.cs'))</VersionFileContent>
+    <ExtractedVersion>$([System.Text.RegularExpressions.Regex]::Match($(VersionFileContent), `Version\s*=\s*"([^"]+)"`).Groups[1].Value)</ExtractedVersion>
+    <Version>$(ExtractedVersion)</Version>
+    <AssemblyVersion>$(ExtractedVersion)</AssemblyVersion>
+    <AssemblyVersion Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ExtractedVersion)', '^\d+\.\d+\.\d+$'))">$(ExtractedVersion).0</AssemblyVersion>
+    <FileVersion>$(AssemblyVersion)</FileVersion>
+    <ReleasePackageFileName>EricGameLauncher_$(ExtractedVersion).zip</ReleasePackageFileName>
+    <ReleaseArtifactName>EricGameLauncher-$(ExtractedVersion)-win-x64</ReleaseArtifactName>
+    <NuGetAuditMode>all</NuGetAuditMode>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+</Project>

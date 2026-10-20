@@ -1434,5 +1434,5 @@ internal static class MarkdownHtml
     }
 
     private static string Escape(string text)
-        => text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+        => System.Net.WebUtility.HtmlEncode(text);
 }

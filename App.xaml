@@ -8,6 +8,14 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
+            <Style x:Key="TitleBarButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+                <Setter Property="Width" Value="44" />
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="CornerRadius" Value="4" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+            </Style>
             <local:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
             <local:ImagePathConverter x:Key="ImagePathConverter" />
             <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />

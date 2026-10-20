@@ -7,13 +7,15 @@ on:
 
 permissions:
   contents: write
+  actions: read
+  issues: read
 
 jobs:
   promote:
     runs-on: ubuntu-latest
     steps:
       - name: Promote Prereleases older than 48 hours
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         with:
           script: |
             const owner = context.repo.owner;
@@ -43,6 +45,23 @@ jobs:
                 const hoursSincePublish = (now - publishedAt) / (1000 * 60 * 60);
                 
                 if (hoursSincePublish >= 48) {
+                  const expectedAsset = 'EricGameLauncher_' + latestPre.tag_name.replace(/^v/, '') + '.zip';
+                  if (!(latestPre.assets || []).some(asset => asset.name === expectedAsset && asset.size > 0)) {
+                    console.log('Promotion blocked: release package is missing.');
+                    return;
+                  }
+                  const ref = await github.rest.git.getRef({owner, repo, ref: 'tags/' + latestPre.tag_name});
+                  let sha = ref.data.object.sha;
+                  if (ref.data.object.type === 'tag') sha = (await github.rest.git.getTag({owner, repo, tag_sha: sha})).data.object.sha;
+                  const {data: runs} = await github.rest.actions.listWorkflowRuns({owner, repo, workflow_id: 'post_release.yml', head_sha: sha, per_page: 100});
+                  const latestRun = runs.workflow_runs.filter(run => run.event === 'release' && run.head_sha === sha)
+                    .sort((a, b) => b.run_number - a.run_number || b.run_attempt - a.run_attempt || b.id - a.id)[0];
+                  if (!latestRun || latestRun.status !== 'completed' || latestRun.conclusion !== 'success') {
+                    console.log('Promotion blocked: latest release pipeline for this commit has not succeeded.');
+                    return;
+                  }
+                  const issues = await github.paginate(github.rest.issues.listForRepo, {owner, repo, state: 'open', labels: 'block-release', per_page: 100});
+                  if (issues.length) { console.log('Promotion blocked by block-release issue.'); return; }
                   console.log(`Promoting release ${latestPre.tag_name} to latest`);
                   await github.rest.repos.updateRelease({
                     owner,

@@ -1,0 +1,15 @@
+<Project>
+  <ItemGroup Condition="'$(IsTestProject)' == 'true'">
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" PrivateAssets="all" />
+  </ItemGroup>
+  <Target Name="CleanTestTemporaryBuild" AfterTargets="VSTest;Clean" Condition="'$(IsTestProject)' == 'true'">
+    <PropertyGroup>
+      <_TestTemporaryRoot>$([System.IO.Path]::GetFullPath('$([System.IO.Path]::GetTempPath())EricGameLauncher.Tests\'))</_TestTemporaryRoot>
+      <_TestProjectBuild>$([System.IO.Path]::GetFullPath('$(EglTestBuildRoot)$(MSBuildProjectName)\'))</_TestProjectBuild>
+    </PropertyGroup>
+    <Error Condition="!$([System.String]::Copy('$(_TestProjectBuild)').StartsWith('$(_TestTemporaryRoot)'))" Text="Test build cleanup escaped its temporary directory." />
+    <RemoveDir Directories="$(_TestProjectBuild)" />
+  </Target>
+</Project>

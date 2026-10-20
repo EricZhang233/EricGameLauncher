@@ -14,6 +14,7 @@ using System.Security.Principal;
 using System.Collections.Generic;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
+using EricGameLauncher;
 
 using System.Runtime.Versioning;
 
@@ -32,7 +33,7 @@ namespace updater.main
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(_logFile)!);
                 var line = $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}Z Updater/INFO] | {message}";
-                lock (_logLock) { File.AppendAllText(_logFile, line + Environment.NewLine + message + Environment.NewLine); }
+                lock (_logLock) { File.AppendAllText(_logFile, line + Environment.NewLine); }
             }
             catch { }
         }
@@ -48,25 +49,42 @@ namespace updater.main
             Console.WriteLine("========================================");
             Console.WriteLine();
 
-            if (TryRunTaskFile())
+            if (args.Length == 1 && args[0] == "--tasks")
             {
+                if (!TryRunTaskFile()) Environment.ExitCode = 1;
                 Log("TaskFileExecuted");
                 return;
             }
 
+            if (args.Length > 0 && (args[0].Equals("--run-cmd", StringComparison.OrdinalIgnoreCase) || args[0].Equals("--run-bat", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (args.Length < 2) { Environment.ExitCode = 1; return; }
+                TryHandleCommandMode(args);
+                return;
+            }
             if (args.Length < 2)
             {
                 if (TryHandleCommandMode(args)) return;
-                Console.WriteLine("Usage: updater.main.exe <install_dir> <download_url> [--ready-event <name>] [--main-pid <pid>]");
+                Console.WriteLine("Usage: updater.main.exe <install_dir> <download_url> --sha256 <sha256:digest> [--pipe-name <name>] [--main-pid <pid>]");
                 Console.WriteLine("       updater.main.exe --run-bat <path> [--args <args>] [--workdir <dir>] [--wait]");
                 Console.WriteLine("       updater.main.exe --run-cmd <command> [--workdir <dir>] [--wait]");
                 Log("InvalidArgs");
+                Environment.ExitCode = 1;
                 await Task.Delay(3000);
                 return;
             }
 
             string installDir = args[0];
             string downloadUrl = args[1];
+            string expectedDigest = GetArgValue(args, "--sha256");
+            if (!UpdatePackageIntegrity.IsValidDigest(expectedDigest))
+            {
+                Console.Error.WriteLine(GetArgValue(args, "--verification-error"));
+                Log("HASH_METADATA_INVALID: update stopped before download");
+                Environment.ExitCode = 1;
+                WaitForFailureDismissal(args);
+                return;
+            }
             Log($"Args installDir={installDir}");
             Log($"Args downloadUrl={downloadUrl}");
             Log($"InstallDir exists={Directory.Exists(installDir)}");
@@ -91,12 +109,14 @@ namespace updater.main
                         };
                         Process.Start(psi);
                         Log("ElevationRelaunch");
+                        Environment.ExitCode = 2;
                         return;
                     }
                     catch (Exception ex)
                     {
                         Console.WriteLine($"ERROR: Elevation failed: {ex}");
                         Log($"ElevationFailed {ex}");
+                        Environment.ExitCode = 1;
                         await Task.Delay(5000);
                         return;
                     }
@@ -105,6 +125,7 @@ namespace updater.main
                 {
                     Console.WriteLine("ERROR: Target directory is read-only despite administrator privileges.");
                     Log("ElevationNoWriteAccess");
+                    Environment.ExitCode = 1;
                     await Task.Delay(5000);
                     return;
                 }
@@ -195,6 +216,20 @@ namespace updater.main
                 Console.WriteLine("\n      Download completed.");
                 Log($"Download Complete duration={downloadTaskSw.ElapsedMilliseconds}ms size={new FileInfo(tempZip).Length}");
 
+                using var verifiedPackage = new FileStream(tempZip, FileMode.Open, FileAccess.Read, FileShare.Read);
+                if (!await UpdatePackageIntegrity.VerifyAsync(verifiedPackage, expectedDigest))
+                {
+                    Console.Error.WriteLine(GetArgValue(args, "--verification-error"));
+                    Log("HASH_MISMATCH: update stopped before READY and installation");
+                    SendProgress("ERROR HASH_MISMATCH");
+                    Environment.ExitCode = 1;
+                    try { pipeWriter?.Dispose(); pipeClient?.Dispose(); } catch { }
+                    WaitForFailureDismissal(args);
+                    return;
+                }
+                verifiedPackage.Position = 0;
+                Log("SHA256 verification passed");
+
                 SendProgress("READY");
                 try { pipeWriter?.Dispose(); pipeClient?.Dispose(); } catch { }
 
@@ -216,101 +251,24 @@ namespace updater.main
                 Log($"CloseLauncher foundProcesses={processes.Length}");
                 foreach (var p in processes)
                 {
-                    try { p.Kill(); p.WaitForExit(); Log($"Killed process Id={p.Id} Name={p.ProcessName}"); } catch (Exception ex) { Log($"KillProcessFailed {ex}"); }
+                    using (p)
+                    try
+                    {
+                        string? path = p.MainModule?.FileName;
+                        if (path == null || !string.Equals(Path.GetDirectoryName(Path.GetFullPath(path)), Path.GetFullPath(installDir).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) continue;
+                        p.CloseMainWindow();
+                        if (!p.WaitForExit(10000)) { p.Kill(); p.WaitForExit(); }
+                    }
+                    catch (Exception ex) { Log($"CloseTargetProcessFailed {ex}"); throw; }
                 }
                 await Task.Delay(1000);
                 Log("CloseLauncher End");
 
                 Console.WriteLine($"[3/4] Applying updates...");
                 Log("ApplyUpdates Start");
-                string stagingDir = Path.Combine(installDir, "._update_staging");
-                string backupDir = Path.Combine(installDir, "._update_backup");
+                using (var archive = new ZipArchive(verifiedPackage, ZipArchiveMode.Read, leaveOpen: true))
+                    UpdateTransaction.Apply(installDir, archive);
 
-                if (Directory.Exists(stagingDir)) Directory.Delete(stagingDir, true);
-                if (Directory.Exists(backupDir)) Directory.Delete(backupDir, true);
-                Directory.CreateDirectory(stagingDir);
-
-                try
-                {
-                    using (ZipArchive archive = ZipFile.OpenRead(tempZip))
-                    {
-                        foreach (ZipArchiveEntry entry in archive.Entries)
-                        {
-                            if (string.IsNullOrEmpty(entry.Name)) continue;
-
-                            string stagingPath = Path.GetFullPath(Path.Combine(stagingDir, entry.FullName));
-                            if (!stagingPath.StartsWith(stagingDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
-
-                            if (entry.FullName.ToLower().StartsWith("data/")) continue;
-
-                            string destDir = Path.GetDirectoryName(stagingPath)!;
-                            if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
-
-                            entry.ExtractToFile(stagingPath, true);
-                        }
-                    }
-
-                    Directory.CreateDirectory(backupDir);
-                    var currentFiles = Directory.GetFiles(installDir, "*", SearchOption.AllDirectories)
-                        .Where(f => !f.StartsWith(stagingDir) && !f.StartsWith(backupDir) && !f.ToLower().Contains("\\data\\") && !f.ToLower().EndsWith(".update_staging") && !f.ToLower().EndsWith(".update_backup"))
-                        .ToList();
-                    Log($"Applying updates: currentFilesToBackup={currentFiles.Count}");
-
-                    foreach (var file in currentFiles)
-                    {
-                        string relative = Path.GetRelativePath(installDir, file);
-                        string backupPath = Path.Combine(backupDir, relative);
-                        string bDir = Path.GetDirectoryName(backupPath)!;
-                        if (!Directory.Exists(bDir)) Directory.CreateDirectory(bDir);
-                        File.Move(file, backupPath, true);
-                    }
-                    Log($"Applying updates: backup moved, backupDir={backupDir}");
-
-                    var stagedFiles = Directory.GetFiles(stagingDir, "*", SearchOption.AllDirectories).ToList();
-                    Log($"Applying updates: stagedFilesCount={stagedFiles.Count}");
-                    foreach (var file in stagedFiles)
-                    {
-                        string relative = Path.GetRelativePath(stagingDir, file);
-                        string finalPath = Path.Combine(installDir, relative);
-                        string fDir = Path.GetDirectoryName(finalPath)!;
-                        if (!Directory.Exists(fDir)) Directory.CreateDirectory(fDir);
-                        File.Move(file, finalPath, true);
-                    }
-                    Log("Applying updates: staged files moved into install directory");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("Error during update application: " + ex);
-                    Console.WriteLine("Attempting rollback...");
-                    try
-                    {
-                        if (Directory.Exists(backupDir))
-                        {
-                            var backupFiles = Directory.GetFiles(backupDir, "*", SearchOption.AllDirectories).ToList();
-                            Log($"Rollback: backupFilesCount={backupFiles.Count}");
-                            foreach (var file in backupFiles)
-                            {
-                                string relative = Path.GetRelativePath(backupDir, file);
-                                string finalPath = Path.Combine(installDir, relative);
-                                if (File.Exists(finalPath)) File.Delete(finalPath);
-                                File.Move(file, finalPath, true);
-                            }
-                            Log("Rollback: restored backup files");
-                        }
-                        Console.WriteLine("Rollback successful. The launcher was not corrupted.");
-                    }
-                    catch (Exception rbEx)
-                    {
-                        Console.WriteLine("FATAL: Rollback failed! " + rbEx);
-                        Log($"Rollback failed: {rbEx}");
-                    }
-                    throw;
-                }
-                finally
-                {
-                    try { if (Directory.Exists(stagingDir)) { Directory.Delete(stagingDir, true); Log("Cleanup: stagingDir deleted"); } } catch (Exception ex) { Log($"Cleanup staging delete failed: {ex}"); }
-                    try { if (Directory.Exists(backupDir)) { Directory.Delete(backupDir, true); Log("Cleanup: backupDir deleted"); } } catch (Exception ex) { Log($"Cleanup backup delete failed: {ex}"); }
-                }
 
                 Console.WriteLine($"[4/4] Restarting application...");
                 Log("Restart Start");
@@ -336,15 +294,26 @@ namespace updater.main
                 Console.WriteLine();
                 Console.WriteLine("ERROR: " + ex);
                 Console.WriteLine("Please try manual update or check network connection.");
-                Console.WriteLine("Press any key to exit...");
                 Log($"Failure {ex}");
-                Console.ReadKey();
+                SendProgress("ERROR UPDATE_FAILED");
+                Environment.ExitCode = 1;
+                try { pipeWriter?.Dispose(); pipeClient?.Dispose(); } catch { }
+                WaitForFailureDismissal(args);
             }
             finally
             {
+                try { pipeWriter?.Dispose(); pipeClient?.Dispose(); } catch { }
                 if (File.Exists(tempZip)) try { File.Delete(tempZip); } catch (Exception ex) { Log($"DeleteTempZipFailed {ex}"); }
                 Log($"End duration={sw.ElapsedMilliseconds}ms");
             }
+        }
+
+        private static void WaitForFailureDismissal(string[] args)
+        {
+            if (Console.IsInputRedirected) return;
+            string prompt = GetArgValue(args, "--failure-close-message");
+            if (!string.IsNullOrWhiteSpace(prompt)) Console.WriteLine(prompt);
+            Console.ReadKey(true);
         }
 
         private static bool HasWriteAccess(string dir)
@@ -393,17 +362,19 @@ namespace updater.main
                     .Build();
                 var yamlObj = deserializer.Deserialize<object>(yamlText);
                 var normalized = NormalizeYamlObject(yamlObj) as List<object>;
-                if (normalized == null) return false;
+                if (normalized == null) throw new InvalidDataException("Task file must contain a sequence.");
                 foreach (var item in normalized)
                 {
-                    if (item is not Dictionary<string, object> cmd) continue;
+                    if (item is not Dictionary<string, object> cmd) throw new InvalidDataException("Invalid task entry.");
                     ExecuteCommandDict(cmd);
+                    if (Environment.ExitCode != 0) break;
                 }
                 return true;
             }
             catch (Exception ex)
             {
                 Log($"TaskFileFailed {ex}");
+                Environment.ExitCode = 1;
                 return true;
             }
         }
@@ -426,6 +397,7 @@ namespace updater.main
                 RunCommand(command, workDir, wait);
                 return;
             }
+            throw new InvalidDataException("Unknown task type.");
         }
 
         private static object? NormalizeYamlObject(object? obj)
@@ -484,6 +456,7 @@ namespace updater.main
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             {
                 Log("RunBatch invalid path");
+                Environment.ExitCode = 1;
                 return true;
             }
             string args = $"/c \"\"{path}\" {batArgs}\"";
@@ -495,6 +468,7 @@ namespace updater.main
             if (string.IsNullOrWhiteSpace(command))
             {
                 Log("RunCommand empty command");
+                Environment.ExitCode = 1;
                 return true;
             }
             string args = $"/c {command}";
@@ -514,18 +488,20 @@ namespace updater.main
                     WorkingDirectory = string.IsNullOrWhiteSpace(workDir) ? Environment.CurrentDirectory : workDir
                 };
                 Log($"{tag} start file={fileName} args={arguments} workDir={psi.WorkingDirectory}");
-                var proc = Process.Start(psi);
-                if (proc == null) return true;
+                using var proc = Process.Start(psi);
+                if (proc == null) { Environment.ExitCode = 1; return true; }
                 if (wait)
                 {
                     proc.WaitForExit();
                     Log($"{tag} exit code={proc.ExitCode}");
+                    Environment.ExitCode = proc.ExitCode;
                 }
                 return true;
             }
             catch (Exception ex)
             {
                 Log($"{tag} failed {ex}");
+                Environment.ExitCode = 1;
                 return true;
             }
         }
@@ -545,174 +521,4 @@ namespace updater.main
         }
     }
 }
-
-    internal static class LogService
-    {
-        private const long MaxLogFileBytes = 5 * 1024 * 1024;
-        private static string LogDir => Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher", "log");
-        private static string LogFilePath => Path.Combine(LogDir, "updater.main.log");
-
-        internal enum LogLevel { Debug, Info, Warn, Error }
-
-        private sealed class LogEntry
-        {
-            public DateTime Timestamp;
-            public string? Tag;
-            public string? Message;
-            public Exception? Exception;
-            public string? OperationId;
-            public LogLevel Level;
-            public string? Caller;
-            public string? CallerFile;
-            public int CallerLine;
-        }
-
-        private static readonly System.Collections.Concurrent.ConcurrentQueue<LogEntry> _entryPool = new();
-        private static LogEntry RentEntry() => _entryPool.TryDequeue(out var e) ? e : new LogEntry();
-        private static void ReturnEntry(LogEntry e)
-        {
-            e.Timestamp = default;
-            e.Tag = null;
-            e.Message = null;
-            e.Exception = null;
-            e.OperationId = null;
-            e.Level = default;
-            e.Caller = null;
-            e.CallerFile = null;
-            e.CallerLine = 0;
-            _entryPool.Enqueue(e);
-        }
-
-        private static readonly Channel<LogEntry> _channel;
-        private static readonly CancellationTokenSource _cts = new();
-        private static readonly Task _writerTask;
-
-        static LogService()
-        {
-            var options = new UnboundedChannelOptions { SingleReader = true, SingleWriter = false };
-            _channel = Channel.CreateUnbounded<LogEntry>(options);
-            _writerTask = Task.Run(WriteLoop);
-        }
-
-        internal static void Write(
-            string tag,
-            string message,
-            Exception? ex = null,
-            string? operationId = null,
-            LogLevel level = LogLevel.Info,
-            [CallerMemberName] string caller = "",
-            [CallerFilePath] string callerFile = "",
-            [CallerLineNumber] int callerLine = 0)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(tag)) tag = "LOG";
-                if (message == null) message = string.Empty;
-
-                string callerFileName = string.IsNullOrEmpty(callerFile) ? string.Empty : Path.GetFileName(callerFile);
-                var entry = RentEntry();
-                entry.Timestamp = DateTime.UtcNow;
-                entry.Tag = tag;
-                entry.Message = message;
-                entry.Exception = ex;
-                entry.OperationId = operationId;
-                entry.Level = level;
-                entry.Caller = caller;
-                entry.CallerFile = callerFileName;
-                entry.CallerLine = callerLine;
-                _channel.Writer.TryWrite(entry);
-            }
-            catch { }
-        }
-
-        private static async Task WriteLoop()
-        {
-            try { Directory.CreateDirectory(LogDir); } catch { }
-
-            StreamWriter? writer = null;
-            try
-            {
-                while (await _channel.Reader.WaitToReadAsync(_cts.Token))
-                {
-                    if (writer == null)
-                    {
-                        RotateIfNeeded(LogFilePath);
-                        writer = new StreamWriter(LogFilePath, append: true) { AutoFlush = false };
-                    }
-
-                    var sb = new StringBuilder(512);
-                    while (_channel.Reader.TryRead(out var entry))
-                    {
-                        sb.Clear();
-                        sb.Append('[');
-                        sb.Append(entry.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff"));
-                        sb.Append("Z ");
-                        sb.Append(entry.Tag);
-                        sb.Append('/');
-                        sb.Append(entry.Level.ToString().ToUpperInvariant());
-                        sb.Append("] ");
-                        sb.Append(entry.CallerFile);
-                        sb.Append(':');
-                        sb.Append(entry.CallerLine);
-                        sb.Append('.');
-                        sb.Append(entry.Caller);
-                        if (!string.IsNullOrEmpty(entry.OperationId))
-                        {
-                            sb.Append(" op=");
-                            sb.Append(entry.OperationId);
-                        }
-                        sb.Append(" | ");
-                        sb.Append(entry.Message);
-                        if (entry.Exception != null)
-                        {
-                            try
-                            {
-                                sb.Append(" Exception=");
-                                sb.Append(entry.Exception.GetType().FullName);
-                                sb.Append(':');
-                                sb.Append(entry.Exception.Message);
-                                sb.Append(" Stack=");
-                                sb.Append(entry.Exception.StackTrace);
-                            }
-                            catch { }
-                        }
-
-                        await writer.WriteLineAsync(sb.ToString());
-                        try { ReturnEntry(entry); } catch { }
-                    }
-
-                    await writer.FlushAsync();
-                }
-            }
-            catch (OperationCanceledException) { }
-            finally
-            {
-                if (writer != null)
-                {
-                    try { await writer.DisposeAsync(); } catch { }
-                }
-            }
-        }
-
-        private static void RotateIfNeeded(string path)
-        {
-            try
-            {
-                if (!File.Exists(path)) return;
-                var fi = new FileInfo(path);
-                if (fi.Length <= MaxLogFileBytes) return;
-                string archive = path + "." + DateTime.UtcNow.ToString("yyyyMMddHHmmss");
-                File.Move(path, archive);
-            }
-            catch { }
-        }
-
-        internal static void FlushAndStop()
-        {
-            _channel.Writer.Complete();
-            _cts.Cancel();
-            try { _writerTask.Wait(TimeSpan.FromSeconds(3)); } catch { }
-            try { _writerTask.Dispose(); } catch { }
-        }
-    }
 

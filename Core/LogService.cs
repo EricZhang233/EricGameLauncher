@@ -1,235 +1,92 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Diagnostics;
-using System.Text;
-using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
-using System.Threading;
+using System.Text;
 using System.Threading.Channels;
-using System.Threading.Tasks;
 
 namespace EricGameLauncher;
 
 internal static class LogService
 {
-    private static readonly object _lock = new();
-    private static int _startupRefCount = 0;
-    private static readonly string _sessionTimestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-
-    private static string LogDir => Path.Combine(ConfigService.SystemCachePath, "log");
-    private static string LogFilePath => Path.Combine(LogDir, $"app-{_sessionTimestamp}.log");
-
-    internal static void StartupEnter()
-    {
-        lock (_lock) { _startupRefCount++; }
-    }
-
-    internal static void StartupExit()
-    {
-        lock (_lock)
-        {
-            _startupRefCount--;
-            if (_startupRefCount < 0) _startupRefCount = 0;
-        }
-    }
-
     internal enum LogLevel { Debug, Info, Warn, Error }
+    private static readonly string Session = DateTime.Now.ToString("yyyyMMdd-HHmmss-fff") + "-" + Environment.ProcessId + "-" + Guid.NewGuid().ToString("N")[..6];
+    private static string LogDir => Path.Combine(ConfigService.SystemCachePath, "log");
+    private static readonly Channel<string> Entries = Channel.CreateBounded<string>(new BoundedChannelOptions(4096) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
+    private static long Dropped;
+    private static int Stopped;
+    private static readonly object CriticalGate = new();
+    private static readonly Task Writer = Task.Run(WriteLoop);
 
-    private sealed class LogEntry
+    static LogService() { AppDomain.CurrentDomain.ProcessExit += (_, _) => FlushAndStop(); }
+    internal static void StartupEnter() { }
+    internal static void StartupExit() { }
+
+    internal static void Write(string tag, string message, Exception? ex = null, string? operationId = null,
+        LogLevel level = LogLevel.Info, [CallerMemberName] string caller = "", [CallerFilePath] string callerFile = "", [CallerLineNumber] int callerLine = 0)
     {
-        public DateTime Timestamp;
-        public string? Tag;
-        public string? Message;
-        public Exception? Exception;
-        public string? OperationId;
-        public LogLevel Level;
-        public string? Caller;
-        public string? CallerFile;
-        public int CallerLine;
-    }
-
-    private static readonly ConcurrentQueue<LogEntry> _entryPool = new();
-
-    private static LogEntry RentEntry()
-    {
-        if (_entryPool.TryDequeue(out var e)) return e;
-        return new LogEntry();
-    }
-
-    private static void ReturnEntry(LogEntry e)
-    {
-        e.Timestamp = default;
-        e.Tag = null;
-        e.Message = null;
-        e.Exception = null;
-        e.OperationId = null;
-        e.Level = default;
-        e.Caller = null;
-        e.CallerFile = null;
-        e.CallerLine = 0;
-        _entryPool.Enqueue(e);
-    }
-
-    private static readonly Channel<LogEntry> _channel;
-    private static readonly CancellationTokenSource _cts = new();
-    private static readonly Task _writerTask;
-
-    static LogService()
-    {
-        var options = new UnboundedChannelOptions
+        if (Volatile.Read(ref Stopped) != 0) return;
+        string exception = ex == null ? "" : $" Exception={ex.GetType().FullName}:{ex.Message} Stack={ex.StackTrace}";
+        string line = SensitiveText.Redact($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}Z {tag}/{level.ToString().ToUpperInvariant()}] {Path.GetFileName(callerFile)}:{callerLine}.{caller}{(operationId == null ? "" : " op=" + operationId)} | {message}{exception}");
+        if (!Entries.Writer.TryWrite(line))
         {
-            SingleReader = true,
-            SingleWriter = false
-        };
-        _channel = Channel.CreateUnbounded<LogEntry>(options);
-        _writerTask = Task.Run(WriteLoop);
-    }
-
-    internal static void Write(
-        string tag,
-        string message,
-        Exception? ex = null,
-        string? operationId = null,
-        LogLevel level = LogLevel.Info,
-        [CallerMemberName] string caller = "",
-        [CallerFilePath] string callerFile = "",
-        [CallerLineNumber] int callerLine = 0)
-    {
-        try
-        {
-            if (string.IsNullOrEmpty(tag)) tag = "LOG";
-            if (message == null) message = string.Empty;
-
-            string callerFileName = string.IsNullOrEmpty(callerFile) ? string.Empty : Path.GetFileName(callerFile);
-            var entry = RentEntry();
-            entry.Timestamp = DateTime.UtcNow;
-            entry.Tag = tag;
-            entry.Message = message;
-            entry.Exception = ex;
-            entry.OperationId = operationId;
-            entry.Level = level;
-            entry.Caller = caller;
-            entry.CallerFile = callerFileName;
-            entry.CallerLine = callerLine;
-            _channel.Writer.TryWrite(entry);
+            if (level >= LogLevel.Warn)
+                try { lock (CriticalGate) { Directory.CreateDirectory(LogDir); File.AppendAllText(Path.Combine(LogDir, $"app-{Session}-critical.log"), line + Environment.NewLine); } } catch { }
+            else Interlocked.Increment(ref Dropped);
         }
-        catch { }
     }
 
     internal sealed class OperationTimer : IDisposable
     {
-        private readonly string _tag;
-        private readonly string _name;
-        private readonly Stopwatch _sw;
-        private readonly string _operationId;
-
-        internal OperationTimer(string tag, string name, string? operationId = null)
-        {
-            _tag = string.IsNullOrEmpty(tag) ? "App" : tag;
-            _name = name ?? string.Empty;
-            _sw = Stopwatch.StartNew();
-            _operationId = string.IsNullOrEmpty(operationId) ? Guid.NewGuid().ToString("N") : operationId!;
-            Write(_tag, $"OperationStart {_name}", null, _operationId, LogLevel.Info);
-        }
-
-        public void Dispose()
-        {
-            _sw.Stop();
-            Write(_tag, $"OperationEnd {_name} duration={_sw.ElapsedMilliseconds}ms", null, _operationId, LogLevel.Info);
-        }
+        private readonly string Tag;
+        private readonly string Name;
+        private readonly string Id;
+        private readonly Stopwatch Timer = Stopwatch.StartNew();
+        internal OperationTimer(string tag, string name, string? id)
+        { Tag = tag; Name = name; Id = id ?? Guid.NewGuid().ToString("N"); Write(Tag, $"OperationStart {Name}", operationId: Id); }
+        public void Dispose() => Write(Tag, $"OperationEnd {Name} duration={Timer.ElapsedMilliseconds}ms", operationId: Id);
     }
 
-    internal static OperationTimer StartOperation(string tag, string name, string? operationId = null)
-    {
-        return new OperationTimer(tag, name, operationId);
-    }
+    internal static OperationTimer StartOperation(string tag, string name, string? operationId = null) => new(tag, name, operationId);
 
     private static async Task WriteLoop()
     {
-        try { Directory.CreateDirectory(LogDir); } catch { }
-        try { if (File.Exists(LogFilePath)) File.Delete(LogFilePath); } catch { }
-
+        StreamWriter? output = null;
         try
         {
-            while (!_cts.IsCancellationRequested)
+            Directory.CreateDirectory(LogDir);
+            var retained = new DirectoryInfo(LogDir).GetFiles("app-*.log").OrderByDescending(x => x.LastWriteTimeUtc).ToArray();
+            long retainedBytes = 0;
+            foreach (var file in retained)
             {
-                LogEntry entry;
-                try
-                {
-                    entry = await _channel.Reader.ReadAsync(_cts.Token);
-                }
-                catch (OperationCanceledException) { break; }
-                catch (ChannelClosedException) { break; }
-
-                WriteEntry(entry);
+                retainedBytes += file.Length;
+                if (retainedBytes > 100L * 1024 * 1024 || DateTime.UtcNow - file.LastWriteTimeUtc > TimeSpan.FromDays(30))
+                    try { file.Delete(); } catch { }
+            }
+            int part = 0;
+            output = Open(part);
+            while (await Entries.Reader.WaitToReadAsync())
+            {
+                int batch = 0;
+                while (batch++ < 256 && Entries.Reader.TryRead(out var line)) await output.WriteLineAsync(line);
+                long dropped = Interlocked.Exchange(ref Dropped, 0);
+                if (dropped > 0) await output.WriteLineAsync($"[{DateTime.UtcNow:O} Log/WARN] | Dropped low-priority log entries count={dropped}");
+                await output.FlushAsync();
+                if (output.BaseStream.Length >= 5 * 1024 * 1024)
+                { await output.DisposeAsync(); output = Open(++part); }
             }
         }
-        catch (Exception ex) { WriteWriterFailure(ex); }
+        catch (Exception ex)
+        {
+            try { File.AppendAllText(Path.Combine(Path.GetTempPath(), "ericgamelauncher-log-error.txt"), SensitiveText.Redact(ex.Message) + Environment.NewLine); } catch { }
+        }
+        finally { if (output != null) await output.DisposeAsync(); }
     }
 
-    private static void WriteEntry(LogEntry entry)
-    {
-        try
-        {
-            var sb = new StringBuilder(512);
-            sb.Append('[');
-            sb.Append(entry.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff"));
-            sb.Append("Z ");
-            sb.Append(entry.Tag);
-            sb.Append('/');
-            sb.Append(entry.Level.ToString().ToUpperInvariant());
-            sb.Append("] ");
-            sb.Append(entry.CallerFile);
-            sb.Append(':');
-            sb.Append(entry.CallerLine);
-            sb.Append('.');
-            sb.Append(entry.Caller);
-            if (!string.IsNullOrEmpty(entry.OperationId))
-            {
-                sb.Append(" op=");
-                sb.Append(entry.OperationId);
-            }
-            sb.Append(" | ");
-            sb.Append(entry.Message);
-            if (entry.Exception != null)
-            {
-                try
-                {
-                    sb.Append(" Exception=");
-                    sb.Append(entry.Exception.GetType().FullName);
-                    sb.Append(':');
-                    sb.Append(entry.Exception.Message);
-                    sb.Append(" Stack=");
-                    sb.Append(entry.Exception.StackTrace);
-                }
-                catch { }
-            }
-
-            File.AppendAllText(LogFilePath, sb.ToString() + Environment.NewLine);
-        }
-        catch (Exception ex) { WriteWriterFailure(ex); }
-        finally
-        {
-            try { ReturnEntry(entry); } catch { }
-        }
-    }
-
-    private static void WriteWriterFailure(Exception ex)
-    {
-        try
-        {
-            string path = Path.Combine(Path.GetTempPath(), "ericgamelauncher-log-error.txt");
-            File.AppendAllText(path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {ex.GetType().FullName}: {ex.Message}{Environment.NewLine}{ex.StackTrace}{Environment.NewLine}");
-        }
-        catch { }
-    }
+    private static StreamWriter Open(int part) => new(new FileStream(Path.Combine(LogDir, $"app-{Session}-{part}.log"), FileMode.CreateNew, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete), new UTF8Encoding(false), 16384);
 
     internal static void FlushAndStop()
     {
-        _channel.Writer.Complete();
-        _cts.Cancel();
-        try { _writerTask.Wait(TimeSpan.FromSeconds(3)); } catch { }
-        try { _writerTask.Dispose(); } catch { }
+        if (Interlocked.Exchange(ref Stopped, 1) != 0) return;
+        Entries.Writer.TryComplete();
+        try { Writer.Wait(TimeSpan.FromSeconds(5)); } catch { }
     }
 }

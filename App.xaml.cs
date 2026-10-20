@@ -158,7 +158,7 @@ namespace EricGameLauncher
                 try
                 {
                     LogService.Write("App", $"Full exit requested quickStart={ConfigService.QuickStart} host={m_serviceHost} window={m_window != null}");
-                    ConfigService.SaveAll();
+                    ConfigService.TrySaveAll();
                     ServiceHost.StopServer();
                     m_serviceHost = false;
                     CloseKeeperWindow();
@@ -201,7 +201,7 @@ namespace EricGameLauncher
             {
                 if (sender is MainWindow window) window.Closed -= OnMainWindowClosed;
                 m_window = null;
-                ConfigService.SaveAll();
+                ConfigService.TrySaveAll();
                 ConfigService.Reload();
                 LogService.Write("QuickStart", $"Main window closed quickStart={ConfigService.QuickStart} host={m_serviceHost}");
                 if (!ConfigService.QuickStart)

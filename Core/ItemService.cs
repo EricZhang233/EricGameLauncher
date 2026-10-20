@@ -15,230 +15,137 @@ public static class ItemService
         return item;
     }
 
+
+    public static void CopyContent(AppItem target, AppItem source)
+    {
+        target.Title = source.Title; target.ExePath = source.ExePath; target.IconPath = source.IconPath;
+        target.IsAdmin = source.IsAdmin; target.MgrPath = source.MgrPath; target.IsMgrAdmin = source.IsMgrAdmin;
+        target.AlternativeLaunchCommand = source.AlternativeLaunchCommand; target.UseAlternativeLaunch = source.UseAlternativeLaunch; target.IsAltAdmin = source.IsAltAdmin;
+        target.AlongsideCommand = source.AlongsideCommand; target.RunAlongside = source.RunAlongside; target.IsAlongsideAdmin = source.IsAlongsideAdmin;
+        target.Platform = source.Platform; target.Status = source.Status; target.DeletedAt = source.DeletedAt;
+        target.CustomMenuItems = source.CustomMenuItems; target.SortOrder = source.SortOrder;
+    }
+
     public static bool CheckDuplicate(string path, List<AppItem>? existingPool = null)
     {
-        if (string.IsNullOrEmpty(path)) return false;
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        var normalized = PathHashHelper.NormalizePath(Environment.ExpandEnvironmentVariables(path.Trim()));
+        var pool = existingPool ?? ConfigService.LoadItems().Concat(ConfigService.LoadRecycleBinItems()).ToList();
+        return pool.Any(x => PathHashHelper.NormalizePath(Environment.ExpandEnvironmentVariables((x.ExePath ?? "").Trim())) == normalized);
+    }
 
-        var items = existingPool ?? ConfigService.LoadItems().Concat(ConfigService.LoadRecycleBinItems()).ToList();
-        var hash = PathHashHelper.GetPathHash(path);
-        string normalizedPath = PathHashHelper.NormalizePath(path).Trim();
-        return items.Any(i =>
-            string.Equals(i.Id, hash, StringComparison.OrdinalIgnoreCase) ||
-            (!string.IsNullOrEmpty(i.ExePath) &&
-             string.Equals(PathHashHelper.NormalizePath(i.ExePath!).Trim(), normalizedPath, StringComparison.OrdinalIgnoreCase)));
+    private static void EnsureUnique(AppItem item, IEnumerable<AppItem> others)
+    {
+        if (CheckDuplicate(item.ExePath ?? "", others.ToList())) throw new InvalidOperationException(Text.Cli("ErrDuplicatePath"));
+    }
+
+    private static void PrepareIcon(AppItem item)
+    {
+        if (string.IsNullOrEmpty(item.IconPath)) return;
+        string source = Path.GetFullPath(Environment.ExpandEnvironmentVariables(item.IconPath));
+        string cache = Path.GetFullPath(ConfigService.FixedCachePath) + Path.DirectorySeparatorChar;
+        if (source.StartsWith(cache, StringComparison.OrdinalIgnoreCase)) return;
+        if (!File.Exists(source)) throw new FileNotFoundException(Text.T("Icon_FileMissing"), source);
+        Directory.CreateDirectory(ConfigService.FixedCachePath);
+        string destination = Path.Combine(ConfigService.FixedCachePath, item.Id + "-" + Guid.NewGuid().ToString("N") + Path.GetExtension(source));
+        File.Copy(source, destination);
+        item.IconPath = destination;
     }
 
     public static void AddItem(AppItem item)
     {
-        using (LogService.StartOperation("Item", "Add"))
-        {
-            var items = ConfigService.LoadItems();
-            var recycleItems = ConfigService.LoadRecycleBinItems();
-            items.Add(item);
-            ConfigService.SaveItems(items, recycleItems);
-            LogService.Write("Item", $"Added id={item.Id} title={item.Title}");
-        }
+        PrepareIcon(item);
+        ConfigService.MutateItems((items, recycled) => { EnsureUnique(item, items.Concat(recycled)); items.Add(item); });
     }
 
     public static AppItem? FindItem(string? id, string? title, List<AppItem>? pool = null)
     {
         pool ??= ConfigService.LoadItems();
-        if (!string.IsNullOrEmpty(id))
-            return pool.FirstOrDefault(i => string.Equals(i.Id, id, StringComparison.OrdinalIgnoreCase));
-        if (!string.IsNullOrEmpty(title))
-            return pool.FirstOrDefault(i => string.Equals(i.Title, title, StringComparison.OrdinalIgnoreCase));
-        return null;
+        return !string.IsNullOrEmpty(id) ? pool.FirstOrDefault(x => x.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
+            : !string.IsNullOrEmpty(title) ? pool.FirstOrDefault(x => string.Equals(x.Title, title, StringComparison.OrdinalIgnoreCase)) : null;
     }
 
-    public static AppItem? FindInRecycle(string? id, string? title)
-    {
-        var recycleItems = ConfigService.LoadRecycleBinItems();
-        return FindItem(id, title, recycleItems);
-    }
+    public static AppItem? FindInRecycle(string? id, string? title) => FindItem(id, title, ConfigService.LoadRecycleBinItems());
 
     public static void EditItem(AppItem item, Action<AppItem> apply)
     {
-        using (LogService.StartOperation("Item", "Edit"))
+        apply(item);
+        PrepareIcon(item);
+        ConfigService.MutateItems((items, recycled) =>
         {
-            apply(item);
-            var items = ConfigService.LoadItems();
-            var index = items.FindIndex(i => string.Equals(i.Id, item.Id, StringComparison.OrdinalIgnoreCase));
-            if (index >= 0)
-                items[index] = item;
-            else
-                items.Add(item);
-            ConfigService.SaveItems(items, ConfigService.LoadRecycleBinItems());
-            LogService.Write("Item", $"Edited id={item.Id}");
-        }
+            int index = items.FindIndex(x => x.Id.Equals(item.Id, StringComparison.OrdinalIgnoreCase));
+            if (index < 0) throw new InvalidOperationException(Text.Cli("ErrItemNotFound"));
+            EnsureUnique(item, items.Concat(recycled).Where(x => x.Id != item.Id));
+            items[index] = item;
+        });
     }
 
     public static void RemoveItem(string? id, string? title, bool permanent = false)
     {
-        using (LogService.StartOperation("Item", "Remove"))
+        ConfigService.MutateItems((items, recycled) =>
         {
-            var items = ConfigService.LoadItems();
-            var item = FindItem(id, title, items);
-
-            if (item == null)
-            {
-                LogService.Write("Item", $"RemoveItem not found id={id} title={title}");
-                throw new InvalidOperationException("Item not found");
-            }
-
-            if (permanent)
-            {
-                items.Remove(item);
-                ConfigService.SaveItems(items, ConfigService.LoadRecycleBinItems());
-                LogService.Write("Item", $"Permanently removed id={item.Id}");
-            }
-            else
-            {
-                item.Status = (int)AppItemStatus.Recycled;
-                var recycleItems = ConfigService.LoadRecycleBinItems();
-                recycleItems.Add(item);
-                items.Remove(item);
-                ConfigService.SaveItems(items, recycleItems);
-                LogService.Write("Item", $"Moved to recycle id={item.Id}");
-            }
-        }
+            var item = FindItem(id, title, items) ?? throw new InvalidOperationException(Text.Cli("ErrItemNotFound"));
+            items.Remove(item);
+            if (!permanent) { item.Status = 1; item.DeletedAt = null; recycled.Add(item); }
+        });
     }
 
     public static int RemoveItems(IEnumerable<string> ids)
     {
-        using (LogService.StartOperation("Item", "RemoveItems"))
+        int count = 0;
+        var selected = ids.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        ConfigService.MutateItems((items, recycled) =>
         {
-            var items = ConfigService.LoadItems();
-            var recycleItems = ConfigService.LoadRecycleBinItems();
-            int removed = 0;
-
-            foreach (var id in ids)
-            {
-                var item = FindItem(id, null, items);
-                if (item == null) continue;
-                item.Status = (int)AppItemStatus.Recycled;
-                recycleItems.Add(item);
-                items.Remove(item);
-                removed++;
-            }
-
-            if (removed > 0)
-                ConfigService.SaveItems(items, recycleItems);
-
-            LogService.Write("Item", $"Removed {removed} items");
-            return removed;
-        }
+            foreach (var item in items.Where(x => selected.Contains(x.Id)).ToArray())
+            { items.Remove(item); item.Status = 1; item.DeletedAt = null; recycled.Add(item); count++; }
+        });
+        return count;
     }
 
     public static void RestoreItem(string? id, string? title)
     {
-        using (LogService.StartOperation("Item", "Restore"))
+        ConfigService.MutateItems((items, recycled) =>
         {
-            var recycleItems = ConfigService.LoadRecycleBinItems();
-            var items = ConfigService.LoadItems();
-            var item = FindItem(id, title, recycleItems);
-
-            if (item == null)
-            {
-                LogService.Write("Item", $"RestoreItem not found id={id} title={title}");
-                throw new InvalidOperationException("Item not found in recycle bin");
-            }
-
-            item.Status = (int)AppItemStatus.Normal;
-            recycleItems.Remove(item);
-            items.Add(item);
-            ConfigService.SaveItems(items, recycleItems);
-            LogService.Write("Item", $"Restored id={item.Id}");
-        }
+            var item = FindItem(id, title, recycled) ?? throw new InvalidOperationException(Text.Cli("ErrNotInRecycle"));
+            EnsureUnique(item, items);
+            recycled.Remove(item); item.Status = 0; item.DeletedAt = null; items.Add(item);
+        });
     }
 
-    public static void RestoreAll()
+    public static void RestoreAll() => ConfigService.MutateItems((items, recycled) =>
     {
-        using (LogService.StartOperation("Item", "RestoreAll"))
-        {
-            var recycleItems = ConfigService.LoadRecycleBinItems();
-            var items = ConfigService.LoadItems();
-            int restoredCount = recycleItems.Count;
+        foreach (var item in recycled) { EnsureUnique(item, items); item.Status = 0; item.DeletedAt = null; items.Add(item); }
+        recycled.Clear();
+    });
 
-            foreach (var item in recycleItems)
-                item.Status = (int)AppItemStatus.Normal;
-
-            items.AddRange(recycleItems);
-            recycleItems.Clear();
-            ConfigService.SaveItems(items, recycleItems);
-            LogService.Write("Item", $"Restored all ({restoredCount})");
-        }
-    }
-
-    public static void EmptyRecycle()
-    {
-        using (LogService.StartOperation("Item", "EmptyRecycle"))
-        {
-            var items = ConfigService.LoadItems();
-            var recycleItems = ConfigService.LoadRecycleBinItems();
-            recycleItems.Clear();
-            ConfigService.SaveItems(items, recycleItems);
-            LogService.Write("Item", "Recycle emptied");
-        }
-    }
+    public static void EmptyRecycle() => ConfigService.MutateItems((_, recycled) => recycled.Clear());
 
     public static bool MarkPendingDeletion(string id)
     {
-        using (LogService.StartOperation("Item", "MarkPendingDeletion"))
+        bool found = false;
+        ConfigService.MutateItems((_, recycled) =>
         {
-            var recycleItems = ConfigService.LoadRecycleBinItems();
-            var item = recycleItems.FirstOrDefault(i => string.Equals(i.Id, id, StringComparison.OrdinalIgnoreCase));
-            if (item == null)
-            {
-                LogService.Write("Item", $"MarkPendingDeletion not found id={id}");
-                return false;
-            }
-            item.Status = (int)AppItemStatus.PendingDeletion;
-            item.DeletedAt = DateTimeOffset.UtcNow;
-            ConfigService.SaveItems(ConfigService.LoadItems(), recycleItems);
-            LogService.Write("Item", $"Marked pending deletion id={id}");
-            return true;
-        }
+            var item = FindItem(id, null, recycled);
+            if (item == null) return;
+            found = true;
+            if (item.Status != 2) { item.Status = 2; item.DeletedAt = DateTimeOffset.UtcNow; }
+        });
+        return found;
     }
 
     public static int MarkAllPendingDeletion()
     {
-        using (LogService.StartOperation("Item", "MarkAllPendingDeletion"))
+        int count = 0;
+        ConfigService.MutateItems((_, recycled) =>
         {
-            var recycleItems = ConfigService.LoadRecycleBinItems();
-            var now = DateTimeOffset.UtcNow;
-            var count = 0;
-            foreach (var item in recycleItems.Where(i => i.Status == (int)AppItemStatus.Recycled))
-            {
-                item.Status = (int)AppItemStatus.PendingDeletion;
-                item.DeletedAt = now;
-                count++;
-            }
-            if (count > 0)
-            {
-                ConfigService.SaveItems(ConfigService.LoadItems(), recycleItems);
-                LogService.Write("Item", $"Marked {count} items pending deletion");
-            }
-            return count;
-        }
+            foreach (var item in recycled.Where(x => x.Status == 1))
+            { item.Status = 2; item.DeletedAt = DateTimeOffset.UtcNow; count++; }
+        });
+        return count;
     }
 
-    public static void AutoCleanExpired()
-    {
-        using (LogService.StartOperation("Item", "AutoCleanExpired"))
-        {
-            var recycleItems = ConfigService.LoadRecycleBinItems();
-            var now = DateTimeOffset.UtcNow;
-            var toRemove = recycleItems.Where(i =>
-                i.Status == (int)AppItemStatus.PendingDeletion && i.DeletedAt.HasValue &&
-                (now - i.DeletedAt.Value).TotalHours >= 72).ToList();
-
-            if (toRemove.Count == 0) return;
-
-            foreach (var item in toRemove) recycleItems.Remove(item);
-            ConfigService.SaveItems(ConfigService.LoadItems(), recycleItems);
-            LogService.Write("Item", $"AutoCleaned {toRemove.Count} expired items");
-        }
-    }
+    public static void AutoCleanExpired() => ConfigService.MutateItems((_, recycled) =>
+        recycled.RemoveAll(x => x.Status == 2 && x.DeletedAt.HasValue && DateTimeOffset.UtcNow - x.DeletedAt.Value >= TimeSpan.FromHours(72)));
 
     public static (List<AppItem> normalItems, List<AppItem> recycleItems, bool changed) NormalizeState(List<AppItem> items, List<AppItem> recycleItems)
     {
@@ -283,28 +190,10 @@ public static class ItemService
         return (normalItems, normalizedRecycle, changed);
     }
 
-    public static bool HasChanged(List<AppItem> oldItems, List<AppItem> newItems,
-        List<AppItem> oldRecycle, List<AppItem> newRecycle)
-    {
-        if (oldItems.Count != newItems.Count || oldRecycle.Count != newRecycle.Count)
-            return true;
 
-        var oldById = oldItems.ToDictionary(x => x.Id);
-        foreach (var newItem in newItems)
-        {
-            if (!oldById.TryGetValue(newItem.Id, out var oldItem)) return true;
-            if (oldItem.GetContentFingerprint() != newItem.GetContentFingerprint()) return true;
-        }
-
-        var oldRecycleById = oldRecycle.ToDictionary(x => x.Id);
-        foreach (var newItem in newRecycle)
-        {
-            if (!oldRecycleById.TryGetValue(newItem.Id, out var oldItem)) return true;
-            if (oldItem.GetContentFingerprint() != newItem.GetContentFingerprint()) return true;
-        }
-
-        return false;
-    }
+    public static bool HasChanged(List<AppItem> oldItems, List<AppItem> newItems, List<AppItem> oldRecycle, List<AppItem> newRecycle)
+        => !oldItems.Select(x => x.GetContentFingerprint()).SequenceEqual(newItems.Select(x => x.GetContentFingerprint()))
+        || !oldRecycle.Select(x => x.GetContentFingerprint()).SequenceEqual(newRecycle.Select(x => x.GetContentFingerprint()));
 
     public static List<AppItem> Search(IEnumerable<AppItem> items, string query)
     {
@@ -318,69 +207,63 @@ public static class ItemService
         ).ToList();
     }
 
+
     public static int MoveUp(List<AppItem> items, string id)
     {
-        var idx = items.FindIndex(i => string.Equals(i.Id, id, StringComparison.OrdinalIgnoreCase));
-        if (idx <= 0) return idx;
-        (items[idx], items[idx - 1]) = (items[idx - 1], items[idx]);
-        return idx - 1;
+        int index = items.FindIndex(x => x.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+        if (index <= 0) return -1;
+        (items[index], items[index - 1]) = (items[index - 1], items[index]);
+        return index - 1;
     }
 
     public static int MoveDown(List<AppItem> items, string id)
     {
-        var idx = items.FindIndex(i => string.Equals(i.Id, id, StringComparison.OrdinalIgnoreCase));
-        if (idx < 0 || idx >= items.Count - 1) return idx;
-        (items[idx], items[idx + 1]) = (items[idx + 1], items[idx]);
-        return idx + 1;
+        int index = items.FindIndex(x => x.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+        if (index < 0 || index >= items.Count - 1) return -1;
+        (items[index], items[index + 1]) = (items[index + 1], items[index]);
+        return index + 1;
     }
 
     public static bool Swap(List<AppItem> items, string id1, string id2)
     {
-        var idx1 = items.FindIndex(i => string.Equals(i.Id, id1, StringComparison.OrdinalIgnoreCase));
-        var idx2 = items.FindIndex(i => string.Equals(i.Id, id2, StringComparison.OrdinalIgnoreCase));
-        if (idx1 < 0 || idx2 < 0) return false;
-        (items[idx1], items[idx2]) = (items[idx2], items[idx1]);
+        int first = items.FindIndex(x => x.Id.Equals(id1, StringComparison.OrdinalIgnoreCase));
+        int second = items.FindIndex(x => x.Id.Equals(id2, StringComparison.OrdinalIgnoreCase));
+        if (first < 0 || second < 0) return false;
+        (items[first], items[second]) = (items[second], items[first]);
         return true;
     }
 
-    public static void SaveOrder(List<AppItem> items)
+    public static List<AppItem> ReorderVisibleItems(List<AppItem> items, IReadOnlyList<string> orderedIds)
     {
-        for (int i = 0; i < items.Count; i++)
-            items[i].SortOrder = i;
-        using (LogService.StartOperation("Sort", "SaveOrder"))
-        {
-            ConfigService.SaveItems(items, ConfigService.LoadRecycleBinItems());
-            LogService.Write("Sort", $"Saved order for {items.Count} items");
-        }
+        var byId = items.ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var reordered = orderedIds.Where(id => byId.ContainsKey(id) && seen.Add(id))
+            .Select(id => byId[id]).ToArray();
+        int index = 0;
+        return items.Select(item => seen.Contains(item.Id) ? reordered[index++] : item).ToList();
     }
+
+
+    public static void SaveVisibleOrder(IReadOnlyList<string> orderedIds) => ConfigService.MutateItems((items, _) =>
+    {
+        var ordered = ReorderVisibleItems(items, orderedIds);
+        items.Clear(); items.AddRange(ordered);
+    });
+
+    public static void SaveOrder(List<AppItem> items) => SaveVisibleOrder(items.Select(x => x.Id).ToArray());
 
     public static int ImportGames(List<ScannedGame> games)
     {
-        using (LogService.StartOperation("Import", "ImportGames"))
+        int count = 0;
+        ConfigService.MutateItems((items, recycled) =>
         {
-            var items = ConfigService.LoadItems();
-            var addedCount = 0;
-
             foreach (var game in games)
             {
-                var hash = PathHashHelper.GetPathHash(game.ExePath);
-                if (items.Any(i => string.Equals(i.Id, hash, StringComparison.OrdinalIgnoreCase)))
-                    continue;
-
-                var item = new AppItem { Title = game.Title };
-                item.ExePath = game.ExePath;
-                item.Platform = game.PlatformBadge;
-                items.Add(item);
-                addedCount++;
+                if (CheckDuplicate(game.ExePath, items.Concat(recycled).ToList())) continue;
+                items.Add(CreateItem(game.Title, game.ExePath, platform: game.PlatformBadge));
+                count++;
             }
-
-            if (addedCount > 0)
-            {
-                ConfigService.SaveItems(items, ConfigService.LoadRecycleBinItems());
-                LogService.Write("Import", $"Imported {addedCount} games");
-            }
-
-            return addedCount;
-        }
+        });
+        return count;
     }
 }

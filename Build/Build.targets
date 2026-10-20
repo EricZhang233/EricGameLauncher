@@ -1,0 +1,36 @@
+<Project>
+  <ItemGroup>
+    <_LauncherComponent Include="$(EglRepositoryRoot)Components\**\*.csproj" Exclude="$(EglRepositoryRoot)Components\**\bin\**;$(EglRepositoryRoot)Components\**\obj\**" />
+    <_LauncherTest Include="$(EglRepositoryRoot)Test\**\*.csproj" Exclude="$(EglRepositoryRoot)Test\artifacts\**;$(EglRepositoryRoot)Test\**\bin\**;$(EglRepositoryRoot)Test\**\obj\**" />
+  </ItemGroup>
+  <Target Name="GenerateLauncherManifest" Inputs="$(EglRepositoryRoot)app.manifest;$(EglRepositoryRoot)Version.cs;$(EglRepositoryRoot)Build\Version.props;$(MSBuildThisFileFullPath)" Outputs="$(IntermediateOutputPath)app.manifest">
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <Copy SourceFiles="$(EglRepositoryRoot)app.manifest" DestinationFiles="$(IntermediateOutputPath)app.manifest" />
+    <XmlPoke XmlInputPath="$(IntermediateOutputPath)app.manifest" Query="/*[local-name()='assembly']/*[local-name()='assemblyIdentity']/@version" Value="$(AssemblyVersion)" />
+  </Target>
+  <Target Name="SetLauncherManifest" BeforeTargets="PrepareForBuild" DependsOnTargets="GenerateLauncherManifest">
+    <PropertyGroup>
+      <ApplicationManifest>$([System.IO.Path]::GetFullPath('$(IntermediateOutputPath)app.manifest'))</ApplicationManifest>
+    </PropertyGroup>
+  </Target>
+  <Target Name="StripLauncherDebugSymbols" Condition="'$(Configuration)' == 'Release'">
+    <ItemGroup>
+      <_LauncherDebugSymbols Include="$(OutputPath)**\*.pdb" />
+    </ItemGroup>
+    <Delete Files="@(_LauncherDebugSymbols)" />
+  </Target>
+  <Target Name="ValidateLauncherPackage" BeforeTargets="ZipReleaseBuild" DependsOnTargets="StripLauncherDebugSymbols" Condition="'$(Configuration)' == 'Release'">
+    <Exec Command="pwsh.exe -NoProfile -NonInteractive -File &quot;$(EglRepositoryRoot)Build\ValidatePackage.ps1&quot; -DirectoryPath &quot;$([System.IO.Path]::GetFullPath('$(OutputPath).'))&quot;" />
+  </Target>
+  <Target Name="CleanLauncherIntermediate">
+    <ItemGroup>
+      <_LauncherClean Include="$(EglRepositoryRoot)bin;$(EglRepositoryRoot)obj;$(EglRepositoryRoot)payload;@(_LauncherComponent->'%(RootDir)%(Directory)bin');@(_LauncherComponent->'%(RootDir)%(Directory)obj')" />
+      <_LauncherCleanTest Include="@(_LauncherTest)" Condition="'$(TestHostRunning)' != 'true' Or !$([System.String]::Copy('%(_LauncherTest.Filename)').EndsWith('.Tests'))" />
+      <_LauncherClean Include="@(_LauncherCleanTest->'%(RootDir)%(Directory)bin');@(_LauncherCleanTest->'%(RootDir)%(Directory)obj')" />
+    </ItemGroup>
+    <Error Condition="!$([System.IO.Path]::GetFullPath('%(_LauncherClean.Identity)').StartsWith('$(EglRepositoryRoot)'))" Text="Cleanup target escaped repository: %(_LauncherClean.Identity)" />
+    <RemoveDir Directories="@(_LauncherClean)" />
+  </Target>
+  <Target Name="CleanAfterLauncherRelease" AfterTargets="ZipReleaseBuild" DependsOnTargets="CleanLauncherIntermediate" Condition="'$(Configuration)' == 'Release'" />
+  <Target Name="CleanAfterLauncherClean" AfterTargets="Clean" DependsOnTargets="CleanLauncherIntermediate" />
+</Project>

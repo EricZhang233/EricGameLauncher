@@ -25,6 +25,13 @@ internal static class HtmlViewBuilder
         try
         {
             await webView.EnsureCoreWebView2Async();
+            webView.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = false;
+            webView.CoreWebView2.NavigationStarting += async (_, args) =>
+            {
+                if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out var uri) || (uri.Scheme != "https" && uri.Scheme != "http")) return;
+                args.Cancel = true;
+                try { await Windows.System.Launcher.LaunchUriAsync(uri); } catch (Exception ex) { LogService.Write("UI", "External link failed", ex); }
+            };
             var actualTheme = owner.ActualTheme;
             if (actualTheme == ElementTheme.Default)
                 actualTheme = Application.Current.RequestedTheme == ApplicationTheme.Dark ? ElementTheme.Dark : ElementTheme.Light;
@@ -59,6 +66,7 @@ internal static class HtmlViewBuilder
         catch (Exception ex)
         {
             LogService.Write("Update", "HtmlViewBuilder fallback to plain text", ex);
+            try { webView.Close(); } catch { }
             var fallback = new ScrollViewer
             {
                 Content = new TextBlock { Text = plainFallback, TextWrapping = TextWrapping.Wrap }

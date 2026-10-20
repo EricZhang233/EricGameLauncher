@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>EricGameLauncher.Regression</AssemblyName>
+    <TargetFramework>net10.0-windows10.0.26100</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <MainDllPath Condition="'$(MainDllPath)' == ''">../../bin/Debug/net10.0-windows10.0.26100/win-x64/EricGameLauncher.dll</MainDllPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="EricGameLauncher"><HintPath>$(MainDllPath)</HintPath></Reference>
+    <Compile Include="../../Components/updater.main/UpdateTransaction.cs" Link="UpdateTransaction.cs" />
+    <Compile Include="../../Components/updater.cfgver/MigrationRules.cs" Link="MigrationRules.cs" />
+  </ItemGroup>
+</Project>

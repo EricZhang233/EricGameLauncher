@@ -22,6 +22,7 @@ public static class Text
 
     public static void Load(string langCode)
     {
+        if (_strings.Count > 0 && _currentLanguage == langCode) return;
         using (LogService.StartOperation("App", "Text_Load"))
         {
             var sw = Stopwatch.StartNew();

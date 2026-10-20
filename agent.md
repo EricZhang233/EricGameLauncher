@@ -21,3 +21,6 @@
 
 ### 五、编译流
 - 本仓库采用母法 `build-flow.md` 的编译流规范：Release 构建产出 `output/EricGameLauncher_<版本>.zip`，打包与清理后不留中间产物。
+
+### 六、工程文件偏好
+- 能用csproj就绝不要用sln，sln被视为不稳定的过程文件。

@@ -12,9 +12,11 @@ using System.Threading.Tasks;
 
 namespace EricGameLauncher;
 
+public sealed class UpdateFetchException(string message, Exception? inner = null) : IOException(message, inner);
+
 public class UpdateService
 {
-    private static readonly HttpClient client;
+    private static HttpClient client;
 
     static UpdateService()
     {
@@ -23,37 +25,24 @@ public class UpdateService
         client.DefaultRequestHeaders.Add("Accept", "application/vnd.github.v3.full+json");
     }
 
-    private static bool _tokenApplied = false;
-
-    private static void ApplyGitHubToken()
+    private static readonly SemaphoreSlim FetchGate = new(1, 1);
+    private static List<ReleaseInfo>? _cachedReleases;
+    private static DateTime _cachedAt;
+    private static string _cachedToken = "";
+    private static readonly Dictionary<string, (string? ETag, List<ReleaseInfo> Releases)> PageCache = new();
+    internal static void ConfigureTransport(HttpMessageHandler handler)
     {
-        if (!string.IsNullOrEmpty(ConfigService.GitHubToken))
-        {
-            if (!client.DefaultRequestHeaders.Contains("Authorization"))
-            {
-                client.DefaultRequestHeaders.Add("Authorization", $"Bearer {ConfigService.GitHubToken}");
-                _tokenApplied = true;
-                LogService.Write("Update", "ApplyGitHubToken: authenticated (5000 req/h)");
-            }
-        }
-        else if (!_tokenApplied)
-        {
-            _tokenApplied = true;
-            LogService.Write("Update", "ApplyGitHubToken: no token configured, falling back to unauthenticated (60 req/h)");
-        }
+        client.Dispose();
+        client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
+        client.DefaultRequestHeaders.Add("User-Agent", "EricGameLauncher-Updater");
+        _cachedReleases = null;
+        PageCache.Clear();
     }
 
-    private static void InvalidateToken()
-    {
-        ConfigService.GitHubToken = "";
-        ConfigService.SaveAll();
-        client.DefaultRequestHeaders.Remove("Authorization");
-        _tokenApplied = false;
-        LogService.Write("Update", "InvalidateToken: invalid token cleared, fallback to unauthenticated");
-    }
+    public static void InvalidateCache() => _cachedAt = DateTime.MinValue;
     private const string AllReleasesApiUrl = "https://api.github.com/repos/EricZhang233/EricGameLauncher/releases?per_page=100";
-    private const string MirrorPrefix = "https://ghproxy.com/";
     public const string LatestReleaseUrl = "https://github.com/EricZhang233/EricGameLauncher/releases/latest";
+
 
     public class ReleaseInfo
     {
@@ -81,36 +70,49 @@ public class UpdateService
     {
         public string name { get; set; } = "";
         public string browser_download_url { get; set; } = "";
+        public string? digest { get; set; }
         public long size { get; set; }
     }
 
     private static async Task<List<ReleaseInfo>?> FetchReleasesWithFallbackAsync()
     {
-        ApplyGitHubToken();
+        await FetchGate.WaitAsync();
         try
         {
-            var releases = await client.GetFromJsonAsync<List<ReleaseInfo>>(AllReleasesApiUrl);
-            LogService.Write("Update", $"FetchReleasesWithFallback fetched releasesCount={(releases?.Count ?? 0)}");
+            string token = ConfigService.GitHubToken;
+            if (_cachedReleases != null && _cachedToken == token && DateTime.UtcNow - _cachedAt < TimeSpan.FromMinutes(2)) return _cachedReleases;
+            var releases = new List<ReleaseInfo>();
+            for (int page = 1; ; page++)
+            {
+                string url = AllReleasesApiUrl + "&page=" + page;
+                string cacheKey = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token))) + ":" + page;
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                if (!string.IsNullOrEmpty(token)) request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                if (PageCache.TryGetValue(cacheKey, out var cached) && cached.ETag != null) request.Headers.TryAddWithoutValidation("If-None-Match", cached.ETag);
+                using var response = await client.SendAsync(request);
+                if (response.StatusCode == HttpStatusCode.Unauthorized && !string.IsNullOrEmpty(token))
+                {
+                    if (ConfigService.GitHubToken == token) { ConfigService.GitHubToken = ""; ConfigService.SaveSettings(); }
+                    token = ""; releases.Clear(); page = 0; continue;
+                }
+                List<ReleaseInfo> entries;
+                if (response.StatusCode == HttpStatusCode.NotModified) entries = cached.Releases;
+                else
+                {
+                    if (!response.IsSuccessStatusCode)
+                        throw new UpdateFetchException(response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests ? Text.T("Update_RateLimited") : Text.T("Update_NetworkFailed"));
+                    entries = await response.Content.ReadFromJsonAsync<List<ReleaseInfo>>() ?? throw new UpdateFetchException(Text.T("Update_NetworkFailed"));
+                    PageCache[cacheKey] = (response.Headers.ETag?.ToString(), entries);
+                }
+                releases.AddRange(entries);
+                if (entries.Count < 100) break;
+            }
+            _cachedReleases = releases; _cachedToken = token; _cachedAt = DateTime.UtcNow;
             return releases;
         }
-        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
-        {
-            if (!string.IsNullOrEmpty(ConfigService.GitHubToken))
-            {
-                LogService.Write("Update", "FetchReleasesWithFallback: 401 Unauthorized, invalidating token and retrying without auth", ex);
-                InvalidateToken();
-                try
-                {
-                    var releases = await client.GetFromJsonAsync<List<ReleaseInfo>>(AllReleasesApiUrl);
-                    LogService.Write("Update", $"FetchReleasesWithFallback retry without auth succeeded, releasesCount={(releases?.Count ?? 0)}");
-                    return releases;
-                }
-                catch (Exception ex2) { LogService.Write("Update", "FetchReleasesWithFallback retry without auth failed", ex2); return null; }
-            }
-            LogService.Write("Update", "FetchReleasesWithFallback 401 without token", ex);
-            return null;
-        }
-        catch (Exception ex) { LogService.Write("Update", "FetchReleasesWithFallback failed", ex); return null; }
+        catch (UpdateFetchException) { throw; }
+        catch (Exception ex) { throw new UpdateFetchException(Text.T("Update_NetworkFailed"), ex); }
+        finally { FetchGate.Release(); }
     }
 
     public static async Task<ReleaseInfo?> GetLatestReleaseAsync()
@@ -133,7 +135,7 @@ public class UpdateService
                 LogService.Write("Update", $"GetLatestReleaseAsync mergedTag={(merged?.tag_name ?? "null")}");
                 return merged;
             }
-            catch (Exception ex) { LogService.Write("Update", "GetLatestReleaseAsync failed", ex); return null; }
+            catch (Exception ex) { LogService.Write("Update", "GetLatestReleaseAsync failed", ex); throw; }
         }
     }
 
@@ -158,7 +160,7 @@ public class UpdateService
                 LogService.Write("Update", $"GetLatestStableReleaseAsync mergedTag={(merged?.tag_name ?? "null")}");
                 return merged;
             }
-            catch (Exception ex) { LogService.Write("Update", "GetLatestStableReleaseAsync failed", ex); return null; }
+            catch (Exception ex) { LogService.Write("Update", "GetLatestStableReleaseAsync failed", ex); throw; }
         }
     }
 
@@ -220,7 +222,7 @@ public class UpdateService
             catch (Exception ex)
             {
                 LogService.Write("Update", "GetReleaseHistoryAsync failed", ex);
-                return null;
+                throw;
             }
 
             if (releases == null)
@@ -323,7 +325,7 @@ public class UpdateService
             catch (Exception ex)
             {
                 LogService.Write("Update", $"CheckForUpdate Failed: duration={sw.ElapsedMilliseconds}ms", ex);
-                return null;
+                throw;
             }
         }
     }
@@ -362,16 +364,20 @@ public class UpdateService
             catch (Exception ex)
             {
                 LogService.Write("Update", "CheckUpdateStatus failed", ex);
+                throw;
             }
             return result;
         }
     }
 
-    public static async Task StartUpdaterAndWaitAsync(string downloadUrl, Action<string>? onProgress = null)
+    public static async Task StartUpdaterAndWaitAsync(Asset asset, Action<string>? onProgress = null)
     {
         var sw = Stopwatch.StartNew();
         try
         {
+            if (!UpdatePackageIntegrity.IsValidDigest(asset.digest))
+                throw new UpdateVerificationException(Text.T("Update_MissingDigest"));
+            string downloadUrl = asset.browser_download_url;
             LogService.Write("Update", $"StartUpdater Start: downloadUrl={downloadUrl}");
             string tempDir = Path.Combine(ConfigService.SystemCachePath, "updater.main");
             if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
@@ -397,37 +403,60 @@ public class UpdateService
 
             string pipeName = $"EricGameLauncher_UpdatePipe_{System.Diagnostics.Process.GetCurrentProcess().Id}";
             using var pipeServer = new NamedPipeServerStream(pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(35));
+            using var connectionCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token);
+            connectionCts.CancelAfter(TimeSpan.FromMinutes(5));
 
             string installDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
-            string args = $"\"{installDir.Replace("\"", "\\\"")}\" \"{downloadUrl.Replace("\"", "\\\"")}\" --pipe-name \"{pipeName}\" --main-pid {System.Diagnostics.Process.GetCurrentProcess().Id}";
-
             ProcessStartInfo psi = new ProcessStartInfo
             {
                 FileName = mainUpdaterPath,
-                Arguments = args,
                 WorkingDirectory = tempDir,
                 UseShellExecute = true
             };
+            foreach (string argument in new[]
+            {
+                installDir, downloadUrl, "--sha256", asset.digest!,
+                "--verification-error", Text.T("Update_VerificationStopped"),
+                "--failure-close-message", Text.T("Update_UpdaterClosePrompt"),
+                "--pipe-name", pipeName, "--main-pid", Environment.ProcessId.ToString(CultureInfo.InvariantCulture)
+            })
+                psi.ArgumentList.Add(argument);
 
-            Process.Start(psi);
-            LogService.Write("Update", $"StartUpdater Launched: duration={sw.ElapsedMilliseconds}ms args={psi.Arguments}");
+            using var updaterProcess = Process.Start(psi) ?? throw new InvalidOperationException(Text.T("Update_Failed"));
+            LogService.Write("Update", $"StartUpdater Launched: duration={sw.ElapsedMilliseconds}ms pid={updaterProcess.Id}");
 
-            await pipeServer.WaitForConnectionAsync(cts.Token);
+            var connectionTask = pipeServer.WaitForConnectionAsync(connectionCts.Token);
+            var exitTask = updaterProcess.WaitForExitAsync(connectionCts.Token);
+            if (await Task.WhenAny(connectionTask, exitTask) == exitTask && !connectionTask.IsCompletedSuccessfully
+                && updaterProcess.ExitCode != 2)
+                throw new InvalidOperationException(Text.T("Update_Failed"));
+            await connectionTask;
+            connectionCts.Cancel();
             LogService.Write("Update", $"PipeConnected: duration={sw.ElapsedMilliseconds}ms");
 
             using var reader = new StreamReader(pipeServer);
             string? line;
-            while ((line = await reader.ReadLineAsync()) != null)
+            while ((line = await reader.ReadLineAsync(cts.Token)) != null)
             {
                 LogService.Write("Update", $"PipeReceived: {line}");
+                if (line == "ERROR HASH_MISMATCH" || line == "ERROR HASH_METADATA_INVALID")
+                    throw new UpdateVerificationException(Text.T("Update_VerificationFailed"));
+                if (line.StartsWith("ERROR ", StringComparison.Ordinal))
+                    throw new InvalidOperationException(Text.T("Update_Failed"));
                 onProgress?.Invoke(line);
-                if (line == "READY") break;
+                if (line == "READY")
+                {
+                    cts.Cancel();
+                    return;
+                }
             }
+            throw new InvalidOperationException(Text.T("Update_Failed"));
         }
         catch (Exception ex)
         {
             LogService.Write("Update", $"StartUpdater Failed: duration={sw.ElapsedMilliseconds}ms", ex);
+            throw;
         }
     }
 }

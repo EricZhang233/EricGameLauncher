@@ -289,7 +289,7 @@ public class AppItem : INotifyPropertyChanged
             if (_mainAction.Path != value)
             {
                 _mainAction.Path = value;
-                if (!string.IsNullOrEmpty(value))
+                if (string.IsNullOrEmpty(Id) && !string.IsNullOrEmpty(value))
                     Id = PathHashHelper.GetPathHash(value);
                 OnPropertyChanged(nameof(ExePath));
                 OnPropertyChanged(nameof(MainAction));
@@ -590,11 +590,11 @@ public class AppItem : INotifyPropertyChanged
     [YamlIgnore]
     public bool HasManagerOrDefault => !string.IsNullOrEmpty(RuntimeManagerPath);
 
-    private static readonly ISerializer _fingerprintSerializer = new SerializerBuilder().Build();
+    private static readonly ISerializer _fingerprintSerializer = ConfigPersistence.Serializer;
 
     public string GetContentFingerprint()
     {
-        return _fingerprintSerializer.Serialize(this);
+        return _fingerprintSerializer.Serialize(AppItemDto.FromViewModel(this));
     }
 
     public virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
@@ -659,7 +659,7 @@ public class AppItemDto
             Status = vm.Status,
             DeletedAt = vm.DeletedAt,
             Title = vm.Title,
-            Icon = !string.IsNullOrEmpty(vm.IconPath) ? Path.GetFileName(vm.IconPath!) : null,
+            Icon = string.IsNullOrEmpty(vm.IconPath) ? null : Path.GetFullPath(vm.IconPath!).StartsWith(Path.GetFullPath(ConfigService.FixedCachePath) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ? Path.GetFileName(vm.IconPath!) : vm.IconPath,
             CustomMenu = vm.CustomMenuItems.Count > 0 ? vm.CustomMenuItems.ToList() : null,
             Platform = vm.Platform,
             Actions = new ActionsDto
@@ -893,10 +893,11 @@ public static class IconHelper
 
     private static bool ExtractStoreAppIcon(string shellPath, string savePath)
     {
+        IShellItemImageFactory? factory = null;
         try
         {
             Guid iid = new Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b");
-            int hr = SHCreateItemFromParsingName(shellPath, IntPtr.Zero, iid, out IShellItemImageFactory? factory);
+            int hr = SHCreateItemFromParsingName(shellPath, IntPtr.Zero, iid, out factory);
 
             if (hr == 0 && factory != null)
             {
@@ -939,18 +940,23 @@ public static class IconHelper
 
                     if (shfi.hIcon != IntPtr.Zero)
                     {
+                        try
+                        {
                         using (var icon = Icon.FromHandle(shfi.hIcon))
                         using (var bmp = icon.ToBitmap())
                         {
                             bmp.Save(savePath, ImageFormat.Png);
                             return true;
                         }
+                        }
+                        finally { DestroyIcon(shfi.hIcon); }
                     }
                 }
                 finally { ILFree(pidl); }
             }
         }
         catch (Exception ex) { LogService.Write("App", "ExtractStoreAppIcon failed", ex); }
+        finally { if (factory != null) Marshal.ReleaseComObject(factory); }
         return false;
     }
 

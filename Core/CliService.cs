@@ -10,12 +10,27 @@ public static class CliService
 {
     private static bool _jsonMode = false;
     private static string _lang = "Zh-CN";
+    private static bool _jsonWritten;
 
     public static async Task<int> RunAsync(string[] rawArgs)
+    {
+        _jsonMode = rawArgs.Contains("--json");
+        _jsonWritten = false;
+        try
+        {
+            int code = await RunCoreAsync(rawArgs);
+            if (_jsonMode && !_jsonWritten) WriteJson(new { success = code == 0, exitCode = code });
+            return code;
+        }
+        finally { LogService.FlushAndStop(); }
+    }
+
+    private static async Task<int> RunCoreAsync(string[] rawArgs)
     {
         try
         {
             StartupArgs.Parse();
+            DebugPaths.ApplyIfDebug();
             ConfigService.Initialize();
             Text.Load(_lang);
             ServerConfigManager.LoadReadIds();
@@ -69,7 +84,7 @@ public static class CliService
                 "exit" => CmdExit(),
                 "skill" => CmdSkill(),
                 "version" => CmdVersion(),
-                _ => WriteHelp(string.Format(Text.Cli("ErrUnknownCommand"), command))
+                _ => UnknownCommand(command)
             };
         }
         catch (Exception ex)
@@ -129,6 +144,7 @@ public static class CliService
     {
         try
         {
+            if (_jsonMode) { Console.Error.WriteLine(SensitiveText.Redact(text)); return; }
             if (color.HasValue) Console.ForegroundColor = color.Value;
             Console.WriteLine(text);
             if (color.HasValue) Console.ResetColor();
@@ -140,6 +156,7 @@ public static class CliService
     {
         try
         {
+            if (_jsonMode) { Console.Error.Write(SensitiveText.Redact(text)); return; }
             if (color.HasValue) Console.ForegroundColor = color.Value;
             Console.Write(text);
             if (color.HasValue) Console.ResetColor();
@@ -153,6 +170,7 @@ public static class CliService
         {
             var json = JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull });
             Console.WriteLine(json);
+            _jsonWritten = true;
         }
         catch { }
     }
@@ -181,6 +199,12 @@ public static class CliService
         WriteLine(Text.Cli("Help_OptionJson"));
         WriteLine();
         return 0;
+    }
+
+    private static int UnknownCommand(string command)
+    {
+        WriteHelp(string.Format(Text.Cli("ErrUnknownCommand"), command));
+        return 1;
     }
 
     private static int WriteCommandHelp(string command)
@@ -305,7 +329,7 @@ public static class CliService
             if (!string.IsNullOrEmpty(path))
             {
                 WriteLine(string.Format(Text.Cli("MsgLaunching"), path) + (admin ? Text.Cli("FmtAdminSuffix") : ""), ConsoleColor.Green);
-                ProcessRunner.Run(path, admin);
+                ProcessRunner.Run(path, admin).EnsureSuccess();
                 return 0;
             }
 
@@ -323,7 +347,7 @@ public static class CliService
             }
 
             WriteLine(string.Format(Text.Cli("MsgLaunching"), item.Title), ConsoleColor.Green);
-            LaunchService.Launch(item, alt);
+            LaunchService.Launch(item, alt || item.UseAlternativeLaunch).EnsureSuccess();
             if (alongside && !string.IsNullOrEmpty(item.AlongsideCommand))
                 WriteLine(string.Format(Text.Cli("MsgAlongside"), item.AlongsideCommand), ConsoleColor.Green);
 
@@ -571,6 +595,7 @@ public static class CliService
                     WriteJson(new
                     {
                         newGames = newGames.Select(g => new { g.Title, g.ExePath, g.PlatformBadge }),
+                        imported = import ? ItemService.ImportGames(newGames) : 0,
                         existingGames = existingGames.Select(g => new { g.Title, g.ExePath, g.PlatformBadge }),
                         invalidGames = invalid || classify
                             ? invalidGames.Select(g => new { g.Title, g.ExePath, g.PlatformBadge, g.ItemId })
@@ -634,7 +659,8 @@ public static class CliService
 
             if (_jsonMode)
             {
-                WriteJson(new { scannedGames = scannedGames.Select(g => new { g.Title, g.ExePath, g.PlatformBadge }) });
+                int imported = import ? ItemService.ImportGames(scannedGames) : 0;
+                WriteJson(new { imported, scannedGames = scannedGames.Select(g => new { g.Title, g.ExePath, g.PlatformBadge }) });
                 return 0;
             }
 
@@ -831,8 +857,8 @@ public static class CliService
                     }
                 }
 
-                WriteLine(string.Format(Text.Cli("MsgSetSetting"), key, value), ConsoleColor.Green);
-                try { LogService.Write("CLI", $"Set setting {key}={value}"); } catch { }
+                WriteLine(string.Format(Text.Cli("MsgSetSetting"), key, SensitiveText.SettingValue(key, value)), ConsoleColor.Green);
+                try { LogService.Write("CLI", $"Set setting {key}={SensitiveText.SettingValue(key, value)}"); } catch { }
                 return 0;
             }
 
@@ -867,7 +893,8 @@ public static class CliService
                     return 1;
                 }
 
-                WriteLine(result);
+                if (_jsonMode) WriteJson(new { key, value = result });
+                else WriteLine(result);
                 return 0;
             }
 
@@ -885,6 +912,7 @@ public static class CliService
     {
         try
         {
+            UpdateService.InvalidateCache();
             var channel = opts.GetValueOrDefault("channel") ?? "stable";
             if (channel != "stable" && channel != "latest")
             {
@@ -1006,15 +1034,15 @@ public static class CliService
             return 0;
         }
 
-        string downloadUrl = release.assets?.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.browser_download_url ?? "";
-        if (string.IsNullOrEmpty(downloadUrl))
+        var asset = release.assets?.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+        if (asset == null || string.IsNullOrEmpty(asset.browser_download_url))
         {
             WriteLine(Text.Cli("ErrNoDownloadUrl"), ConsoleColor.Red);
             return 1;
         }
 
         WriteLine(string.Format(Text.Cli("MsgUpgradeStart"), release.tag_name), ConsoleColor.Green);
-        await StartUpdaterWithProgressAsync(downloadUrl);
+        await StartUpdaterWithProgressAsync(asset);
         WriteLine(Text.Cli("MsgUpgradeReady"), ConsoleColor.Green);
         return 0;
     }
@@ -1029,22 +1057,22 @@ public static class CliService
             return 1;
         }
 
-        string downloadUrl = release.assets?.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.browser_download_url ?? "";
-        if (string.IsNullOrEmpty(downloadUrl))
+        var asset = release.assets?.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+        if (asset == null || string.IsNullOrEmpty(asset.browser_download_url))
         {
             WriteLine(Text.Cli("ErrNoDownloadUrl"), ConsoleColor.Red);
             return 1;
         }
 
         WriteLine(string.Format(Text.Cli("MsgRepairStart"), release.tag_name), ConsoleColor.Green);
-        await StartUpdaterWithProgressAsync(downloadUrl);
+        await StartUpdaterWithProgressAsync(asset);
         WriteLine(Text.Cli("MsgUpgradeReady"), ConsoleColor.Green);
         return 0;
     }
 
-    private static async Task StartUpdaterWithProgressAsync(string downloadUrl)
+    private static async Task StartUpdaterWithProgressAsync(UpdateService.Asset asset)
     {
-        await UpdateService.StartUpdaterAndWaitAsync(downloadUrl, msg =>
+        await UpdateService.StartUpdaterAndWaitAsync(asset, msg =>
         {
             if (msg.StartsWith("DOWNLOAD "))
             {
@@ -1056,6 +1084,7 @@ public static class CliService
 
     private static int CmdVersion()
     {
+        if (_jsonMode) { WriteJson(new { version = AppVersion.Version }); return 0; }
         WriteLine(string.Format(Text.Cli("MsgVersion"), AppVersion.Version), ConsoleColor.Cyan);
         WriteLine(Text.Cli("MsgCliMode"));
         try { LogService.Write("CLI", $"Version displayed: {AppVersion.Version}"); } catch { }
@@ -1182,7 +1211,7 @@ public static class CliService
             else if (opts.ContainsKey("move-down"))
             {
                 var newIdx = ItemService.MoveDown(items, id);
-                if (newIdx < 0 || newIdx >= items.Count - 1) { WriteLine(Text.Cli("ErrAtBottom"), ConsoleColor.Yellow); return 0; }
+                if (newIdx < 0) { WriteLine(Text.Cli("ErrAtBottom"), ConsoleColor.Yellow); return 0; }
                 WriteLine(string.Format(Text.Cli("MsgMovedDown"), item.Title, newIdx), ConsoleColor.Green);
             }
             else if (opts.TryGetValue("swap-with", out var swapId))
@@ -1341,7 +1370,7 @@ public static class CliService
             if (!mgr.HasValue) { WriteLine(Text.Cli("ErrNoManager"), ConsoleColor.Yellow); return 1; }
 
             WriteLine(string.Format(Text.Cli("MsgLaunchingMgr"), mgr.Value.path), ConsoleColor.Green);
-            LaunchService.LaunchManager(item);
+            LaunchService.LaunchManager(item).EnsureSuccess();
             return 0;
         }
         catch (Exception ex)
