@@ -46,7 +46,7 @@ public sealed class NotificationMessage : INotifyPropertyChanged
 public sealed partial class NotificationCenterControl : UserControl
 {
     private const int MaxVisible = 10;
-    private const int VisibleSeconds = 10;
+    private const int VisibleSeconds = 5;
     private const int ExpandMilliseconds = 200;
     private static readonly Color ErrorColor = Color.FromArgb(255, 196, 43, 28);
     private static readonly Color SuccessColor = Color.FromArgb(255, 15, 123, 15);

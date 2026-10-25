@@ -10,11 +10,11 @@
 
 Validate 在测试前通过 `Test/Scripts/prepare-runtime.ps1` 安装与还原依赖匹配的官方 x64 Windows App Runtime，校验安装器的 Microsoft 签名，并记录安装输出。该运行时仅安装到测试机，不进入发布 ZIP；未安装时 SDK 默认安装提示可能让无交互 CLI 等待到超时。
 
-CI 将 ZIP 直接生成到运行器临时目录，检查必要文件和私有数据后存为当前运行的 Artifact。附件工作流只取这次构建的 Artifact，上传内部原始 ZIP 到对应 Release；发布说明读取同一标签的 `.releasenote.md`。不读取仓库中的 `output/`，也不再删除或提交主分支上的文件。
+CI 将 ZIP 直接生成到运行器临时目录，检查必要文件和私有数据后存为当前运行的 Artifact。附件工作流只取这次构建的 Artifact，上传内部原始 ZIP 到对应 Release；发布说明读取同一标签的 `.releasenote.md`。不读取仓库中的 `Releasepack/`，也不再删除或提交主分支上的文件。
 
 需要单独测试构建时，在 Actions 中手动运行 `EricGameLauncher-BuildRelease`，输入一个已存在的 `v` 标签；该入口只生成保留 7 天的 Artifact，不上传 Release 附件。
 
-本地普通 Release 构建仍默认生成 `output/EricGameLauncher_<版本>.zip`。也可显式指定空目录：
+本地普通 Release 构建默认生成 `Releasepack/EricGameLauncher_<版本>.zip`，该目录仅用于本地构建，已排除在版本控制和源码扫描之外。也可显式指定空目录：
 
 ```powershell
 pwsh.exe -File .github/scripts/build-release.ps1 -Tag v1.2.4 -PackageDirectory C:\Temp\EGL-CI-Test
