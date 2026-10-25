@@ -18,6 +18,8 @@ $start.CreateNoWindow = $true
 $start.RedirectStandardInput = $true
 $start.RedirectStandardOutput = $true
 $start.RedirectStandardError = $true
+$start.StandardOutputEncoding = [Text.UTF8Encoding]::new($false)
+$start.StandardErrorEncoding = [Text.UTF8Encoding]::new($false)
 foreach ($argument in @('-debug', 'list', '--json')) { $start.ArgumentList.Add($argument) }
 $child = [Diagnostics.Process]::Start($start)
 try {

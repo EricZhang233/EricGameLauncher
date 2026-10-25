@@ -24,6 +24,8 @@ void Check(bool condition, string name)
 async Task<(int Code, string Output, string Error)> Cli(params string[] arguments)
 {
     var start = new ProcessStartInfo(cli) { WorkingDirectory = root, UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+    start.StandardOutputEncoding = new UTF8Encoding(false);
+    start.StandardErrorEncoding = new UTF8Encoding(false);
     start.ArgumentList.Add("-debug");
     foreach (string argument in arguments) start.ArgumentList.Add(argument);
     using var process = Process.Start(start)!;

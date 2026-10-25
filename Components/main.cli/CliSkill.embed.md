@@ -67,3 +67,4 @@ EricGameLauncher.Cli.exe settings --set quickStart=true
 
 - Item operations share the same data store as the GUI, so changes appear in both.
 - Prefer `--id` over `--title` when the ID is known, because titles can collide.
+- When stdout or stderr is redirected, both streams are written as UTF-8 without a BOM, so captured output keeps non-ASCII titles intact.
