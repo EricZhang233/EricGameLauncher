@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <!-- 1. 全局配置与元数据 (Global Metadata) -->
   <PropertyGroup>
@@ -23,11 +23,11 @@
     <ApplicationIcon>ico.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
-    <ReleasePackageDirectory Condition="'$(ReleasePackageDirectory)' == ''">output</ReleasePackageDirectory>
+    <ReleasePackageDirectory Condition="'$(ReleasePackageDirectory)' == ''">Releasepack</ReleasePackageDirectory>
 
     <!-- 彻底排除源码与中间产物，防止递归扫描 -->
     <DefaultItemExcludes>
-      $(DefaultItemExcludes);Components\updater.main\**;output\**;Components\updater.cfgver\**;Components\main.cli\**;Test\**</DefaultItemExcludes>
+      $(DefaultItemExcludes);Components\updater.main\**;output\**;Releasepack\**;Components\updater.cfgver\**;Components\main.cli\**;Test\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <!-- 3. 构建生命周期管理：构建前阶段 (Pre-Build Context) -->

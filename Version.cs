@@ -2,7 +2,7 @@
 {
     public static class AppVersion
     {
-        public const string Version = "1.2.5";
+        public const string Version = "1.2.6";
         public static string DisplayVersion
         {
             get
