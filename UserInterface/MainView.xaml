@@ -6,7 +6,6 @@
     xmlns:local="using:EricGameLauncher"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:controls="using:CommunityToolkit.WinUI.UI.Controls"
     mc:Ignorable="d"
     x:Name="RootWindow">
 
@@ -226,13 +225,15 @@
             </StackPanel>
         </Grid>
 
-<controls:AdaptiveGridView x:Name="AppGrid" Grid.Row="1" Visibility="Visible"
+<local:LauncherAdaptiveGridView x:Name="AppGrid" Grid.Row="1" Visibility="Visible"
                   Padding="4,0,4,0"
                   DesiredWidth="{x:Bind DesiredIconWidth, Mode=OneWay}"
                   StretchContentForSingleRow="False"
                   SelectionMode="None"
                   ScrollViewer.VerticalScrollBarVisibility="Auto"
                   ScrollViewer.VerticalScrollMode="Enabled"
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                  ScrollViewer.HorizontalScrollMode="Disabled"
                   ScrollViewer.IsDeferredScrollingEnabled="False"
                   CanReorderItems="False"
                   CanDragItems="False"
@@ -244,17 +245,9 @@
                   DoubleTapped="AppGrid_DoubleTapped"
                   PointerWheelChanged="AppGrid_PointerWheelChanged"
                   ContainerContentChanging="AppGrid_ContainerContentChanging">
-              <controls:AdaptiveGridView.ItemContainerTransitions>
-                  <TransitionCollection>
-                      <ReorderThemeTransition />
-                      <RepositionThemeTransition IsStaggeringEnabled="False" />
-                  </TransitionCollection>
-              </controls:AdaptiveGridView.ItemContainerTransitions>
-              <controls:AdaptiveGridView.ItemTemplate>
+              <local:LauncherAdaptiveGridView.ItemTemplate>
                   <DataTemplate x:DataType="models:AppItem">
                         <StackPanel x:Name="ItemPanel" Width="118" Margin="4" Tag="{Binding}" HorizontalAlignment="Center"
-                                    Loaded="ItemPanel_Loaded" Unloaded="ItemPanel_Unloaded"
-                                    SizeChanged="ItemPanel_SizeChanged"
                                     PointerEntered="ItemPanel_PointerEntered"
                                     PointerExited="ItemPanel_PointerExited"
                                     PointerCanceled="ItemPanel_PointerExited">
@@ -325,8 +318,8 @@
                         </StackPanel.ContextFlyout>
                     </StackPanel>
                 </DataTemplate>
-              </controls:AdaptiveGridView.ItemTemplate>
-        </controls:AdaptiveGridView>
+              </local:LauncherAdaptiveGridView.ItemTemplate>
+        </local:LauncherAdaptiveGridView>
 
         <local:EmptyStateControl x:Name="EmptyStateControl"
               Grid.Row="1"
