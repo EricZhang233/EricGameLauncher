@@ -14,6 +14,7 @@ public static class CliService
 
     public static async Task<int> RunAsync(string[] rawArgs)
     {
+        ConfigureRedirectedEncodings();
         _jsonMode = rawArgs.Contains("--json");
         _jsonWritten = false;
         try
@@ -23,6 +24,13 @@ public static class CliService
             return code;
         }
         finally { LogService.FlushAndStop(); }
+    }
+
+    private static void ConfigureRedirectedEncodings()
+    {
+        UTF8Encoding utf8 = new(false);
+        if (Console.IsOutputRedirected) Console.SetOut(new StreamWriter(Console.OpenStandardOutput(), utf8) { AutoFlush = true });
+        if (Console.IsErrorRedirected) Console.SetError(new StreamWriter(Console.OpenStandardError(), utf8) { AutoFlush = true });
     }
 
     private static async Task<int> RunCoreAsync(string[] rawArgs)
