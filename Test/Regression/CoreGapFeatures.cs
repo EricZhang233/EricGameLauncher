@@ -161,16 +161,18 @@ internal static class CoreGapFeatures
         check(!ScanService.IsItemStillInvalid(steamFound, true, false, steamUrls, new HashSet<string>()), "still valid when steam reports the installed path");
 
         ItemService.AddItem(userInvalid);
-        ItemService.AddItem(steamGone);
+        string missingUserSecond = @"C:\egl-scan-missing-user-2.exe";
+        var userInvalidSecond = ItemService.CreateItem("Scan User Invalid 2", missingUserSecond);
+        ItemService.AddItem(userInvalidSecond);
         var toDelete = new List<ScannedGame>
         {
             new() { ItemId = userInvalid.Id, Title = userInvalid.Title ?? "", ExePath = missingUser, PlatformBadge = "User" },
             new() { ItemId = userInvalid.Id, Title = userInvalid.Title ?? "", ExePath = missingUser, PlatformBadge = "User" },
-            new() { ItemId = steamGone.Id, Title = steamGone.Title ?? "", ExePath = missingSteam, PlatformBadge = "Steam" }
+            new() { ItemId = userInvalidSecond.Id, Title = userInvalidSecond.Title ?? "", ExePath = missingUserSecond, PlatformBadge = "User" }
         };
         int removed = ScanService.DeleteInvalidGames(toDelete);
         check(removed == 2, "invalid scan deletion removes each invalid item once despite duplicate rows");
-        check(ItemService.FindItem(userInvalid.Id, null) == null && ItemService.FindItem(steamGone.Id, null) == null, "invalid scan deletion removes them from the active list");
+        check(ItemService.FindItem(userInvalid.Id, null) == null && ItemService.FindItem(userInvalidSecond.Id, null) == null, "invalid scan deletion removes them from the active list");
         ClearItems();
     }
 
