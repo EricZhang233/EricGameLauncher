@@ -34,42 +34,8 @@ namespace EricGameLauncher
 
         public MainWindow()
         {
-            Content = CreateSplashContent();
+            InitializeComponent();
             PrepareWindowForActivation();
-        }
-
-        private FrameworkElement CreateSplashContent()
-        {
-            return new Grid
-            {
-                Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-                Children =
-                {
-                    new StackPanel
-                    {
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                        VerticalAlignment = VerticalAlignment.Center,
-                        Spacing = 18,
-                        Children =
-                        {
-                            new TextBlock
-                            {
-                                Text = "EricGameLauncher",
-                                HorizontalAlignment = HorizontalAlignment.Center,
-                                FontSize = 24,
-                                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
-                            },
-                            new ProgressRing
-                            {
-                                IsActive = true,
-                                Width = 24,
-                                Height = 24,
-                                HorizontalAlignment = HorizontalAlignment.Center
-                            }
-                        }
-                    }
-                }
-            };
         }
 
         private void PrepareWindowForActivation()
@@ -334,7 +300,7 @@ namespace EricGameLauncher
 
         private void StartMainView()
         {
-            this.InitializeComponent();
+            StartStartupOverlayFadeIn();
             if (WarmupMode)
             {
                 BeginMainView();
@@ -473,12 +439,12 @@ namespace EricGameLauncher
         {
             _startupOverlayLoaded = true;
             SetSplashIcon();
-            StartStartupOverlayFadeIn();
             TryHideStartupOverlay();
         }
 
         private void StartStartupOverlayFadeIn()
         {
+            if (_startupFadeInCompletion != null) return;
             var completion = new TaskCompletionSource<bool>();
             _startupFadeInCompletion = completion;
             try
