@@ -386,7 +386,7 @@ public static class CliService
             }
 
             var item = ItemService.CreateItem(title, path, admin, icon, platform, mgr, alt, alongside);
-            ItemService.AddItem(item);
+            await ItemService.AddItemAsync(item);
 
             WriteLine(string.Format(Text.Cli("MsgAdded"), item.Id, title), ConsoleColor.Green);
             WriteLine(string.Format(Text.Cli("FmtItemPath"), path));
@@ -1147,7 +1147,7 @@ public static class CliService
             if (item == null) { WriteLine(Text.Cli("ErrNotFound"), ConsoleColor.Red); return 1; }
 
             bool modified = false;
-            ItemService.EditItem(item, i =>
+            await ItemService.EditItemAsync(item, i =>
             {
                 if (opts.TryGetValue("title", out var v)) { i.Title = v; modified = true; }
                 if (opts.TryGetValue("path", out v)) { i.ExePath = v; modified = true; }
