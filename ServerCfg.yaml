@@ -1,5 +1,5 @@
 forceUpdate:
-  minVersion: "1.1.0"
+  minVersion: "1.2.6"
 
 announcements:
   # 块标量会保留换行与特殊字符，适合多行正文；行标量需要对特殊字符做适当转义。
@@ -59,7 +59,7 @@ announcements:
       If you have any new feature or improvement suggestions, please feel free to submit an issue on Github, and we will carefully consider and strive to implement them.
     time: "2026-06-01T00:00:40Z"
     position: top
-    visible: true
+    visible: false
 
   - id: "outdated-versions-1"
     title_zh: |
@@ -68,8 +68,10 @@ announcements:
       Outdated Versions list
     body_zh: |
       v1.0.x：不再接收更新和支持，不再支持服务器配置，且存在多项严重缺陷，不推荐继续使用。
+      v1.2.5及更早版本：部分新功能和修复未被包含，存在体验性问题，且未接入可靠的Cli特性，不推荐继续使用。
     body_en: |
       v1.0.x: No longer receiving updates and support, no longer supports server configuration, and contains several critical defects. Continued use is not recommended.
+      v1.2.5 and earlier versions: Some new features and fixes are not included, there are experience issues, and reliable CLI features are not integrated. Continued use is not recommended.
     time: "2026-06-01T00:00:59Z"
     position: bottom
     visible: true

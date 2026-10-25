@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using System.Diagnostics;
+using Windows.UI.ViewManagement;
 
 namespace EricGameLauncher;
 
@@ -14,6 +15,7 @@ public sealed partial class SearchFlyoutControl : UserControl
     private const double ExpandedWidth = 280;
     private bool _isExpanded;
     private Storyboard? _transition;
+    private readonly UISettings _uiSettings = new();
 
     public event Action<TextBox, TextChangedEventArgs>? QueryChanged;
     public string Text => SearchBox.Text ?? string.Empty;
@@ -68,6 +70,16 @@ public sealed partial class SearchFlyoutControl : UserControl
         SearchRoot.Width = targetWidth;
         SearchEditor.Opacity = targetOpacity;
         SearchCloseButton.Opacity = targetOpacity;
+
+        if (!_uiSettings.AnimationsEnabled)
+        {
+            _transition = null;
+            SearchEditor.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+            SearchCloseButton.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+            if (!expanded) SearchBox.Text = string.Empty;
+            LogService.Write("UI", $"Inline search transition skipped expanded={expanded} systemAnimations=false");
+            return;
+        }
 
         var storyboard = new Storyboard();
         long transitionStarted = Stopwatch.GetTimestamp();

@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Windows.UI.ViewManagement;
 
 namespace EricGameLauncher;
 
@@ -20,6 +21,7 @@ public sealed partial class PropertyPanelControl : UserControl
     private bool _customIconChosen;
     private string? _iconPreviewSource;
     private readonly PropertyDraftSession _draftSession = new();
+    private readonly UISettings _uiSettings = new();
 
     private readonly StackPanel[] _customSections;
     private readonly TextBox[] _customTitles;
@@ -465,6 +467,13 @@ public sealed partial class PropertyPanelControl : UserControl
         PropertyPanel.Visibility = Visibility.Visible;
         MenusRequested?.Invoke();
 
+        if (!_uiSettings.AnimationsEnabled)
+        {
+            PropertyPanel.RenderTransform = null;
+            PropertyPanel.Opacity = 1;
+            return;
+        }
+
         var transform = new TranslateTransform { Y = -20 };
         PropertyPanel.RenderTransform = transform;
         PropertyPanel.Opacity = 0;
@@ -501,6 +510,16 @@ public sealed partial class PropertyPanelControl : UserControl
         _iconPreviewCts?.Cancel();
         _draftSession.Advance();
         int closingSession = _draftSession.Generation;
+        if (!_uiSettings.AnimationsEnabled)
+        {
+            PropertyPanel.Visibility = Visibility.Collapsed;
+            PropertyPanel.RenderTransform = null;
+            PropertyPanel.Opacity = 1;
+            _editingItem = null;
+            _isNewItemMode = false;
+            return;
+        }
+
         var transform = PropertyPanel.RenderTransform as TranslateTransform;
         if (transform == null)
         {

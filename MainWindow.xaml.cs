@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using WinRT.Interop;
+using Windows.UI.ViewManagement;
 
 namespace EricGameLauncher
 {
@@ -19,6 +20,7 @@ namespace EricGameLauncher
         private bool _startupHidePending = false;
         private Storyboard? _startupFadeInStoryboard;
         private TaskCompletionSource<bool>? _startupFadeInCompletion;
+        private readonly UISettings _uiSettings = new();
         private readonly Stopwatch _startupOverlayStopwatch = Stopwatch.StartNew();
 
         private IntPtr _hWnd = IntPtr.Zero;
@@ -457,11 +459,11 @@ namespace EricGameLauncher
                     return;
                 }
 
-                if (!ConfigService.SplashFadeInApplied)
+                if (!ConfigService.SplashFadeInApplied || !_uiSettings.AnimationsEnabled)
                 {
                     StartupOverlay.Opacity = 1;
                     completion.TrySetResult(true);
-                    LogService.Write("Startup", "Splash fade-in skipped by configuration");
+                    LogService.Write("Startup", "Splash fade-in skipped by configuration or system animation preference");
                     return;
                 }
 
@@ -545,11 +547,11 @@ namespace EricGameLauncher
         {
             try
             {
-                if (!ConfigService.SplashFadeOutApplied)
+                if (!ConfigService.SplashFadeOutApplied || !_uiSettings.AnimationsEnabled)
                 {
                     StartupOverlay.Opacity = 0;
                     StartupOverlay.Visibility = Visibility.Collapsed;
-                    LogService.Write("Startup", "Startup overlay hidden without fade-out by configuration");
+                    LogService.Write("Startup", "Startup overlay hidden without fade-out by configuration or system animation preference");
                     return;
                 }
 

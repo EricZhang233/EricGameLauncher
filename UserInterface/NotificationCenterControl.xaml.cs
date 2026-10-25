@@ -7,6 +7,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using Windows.Foundation;
 using Windows.UI;
+using Windows.UI.ViewManagement;
 
 namespace EricGameLauncher;
 
@@ -51,6 +52,8 @@ public sealed partial class NotificationCenterControl : UserControl
     private static readonly Color ErrorColor = Color.FromArgb(255, 196, 43, 28);
     private static readonly Color SuccessColor = Color.FromArgb(255, 15, 123, 15);
     private static readonly Color InfoColor = Color.FromArgb(255, 0, 95, 184);
+    private readonly UISettings _uiSettings = new();
+    private bool AnimationsEnabled => _uiSettings.AnimationsEnabled;
 
     private readonly ObservableCollection<NotificationMessage> _messages = new();
     private readonly Dictionary<NotificationMessage, DispatcherTimer> _timers = new();
@@ -136,6 +139,11 @@ public sealed partial class NotificationCenterControl : UserControl
         if (!_removing.Add(item)) return;
         StopTimer(item);
         StopHeightAnimation(item);
+        if (!AnimationsEnabled)
+        {
+            RemoveImmediate(item);
+            return;
+        }
         if (ToastHost.ContainerFromItem(item) is not FrameworkElement container)
         {
             RemoveImmediate(item);
@@ -217,6 +225,13 @@ public sealed partial class NotificationCenterControl : UserControl
             DispatcherQueue.TryEnqueue(ApplyExpandVisibility);
             LogService.Write("UI", $"Notification canExpand={item.CanExpand}");
         }
+        if (!AnimationsEnabled)
+        {
+            card.RenderTransform = null;
+            card.Opacity = 1;
+            return;
+        }
+
         var transform = new TranslateTransform { X = 28 };
         card.RenderTransform = transform;
         card.Opacity = 0;
@@ -279,6 +294,7 @@ public sealed partial class NotificationCenterControl : UserControl
         }
 
         FinishToggle(item, target);
+        if (!AnimationsEnabled) return;
         if (to <= 0 || Math.Abs(to - from) < 0.5)
         {
             LogService.Write("UI", $"Notification height transition skipped expanded={target} from={from:0.0} to={to:0.0}");

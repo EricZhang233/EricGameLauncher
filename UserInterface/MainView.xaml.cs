@@ -4,9 +4,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
-using Microsoft.UI.Xaml.Hosting;
-using Microsoft.UI.Composition;
-using System.Numerics;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -97,12 +94,8 @@ namespace EricGameLauncher
         private bool _isRefreshPending = false;
         private bool _isDraggingItems;
         private bool _isSortMode;
-        private readonly Dictionary<FrameworkElement, Visual> _sortWiggles = new();
-        private readonly HashSet<FrameworkElement> _realizedItemPanels = new();
         private readonly Windows.UI.ViewManagement.UISettings _animationSettings = new();
-        private bool _sortAnimationsEnabled;
         private int _refreshQueued;
-        private readonly HashSet<string> _draggingItemIds = new();
         private string[]? _dragOrder;
         private DateTime _lastLaunchTime = DateTime.MinValue;
         private bool _isRootLoaded = false;
@@ -128,6 +121,7 @@ namespace EricGameLauncher
         public MainView()
         {
             this.InitializeComponent();
+            ApplyGridItemTransitions();
             LogService.Write("UI", "Main view constructed");
         }
 
@@ -807,6 +801,7 @@ namespace EricGameLauncher
 
         private void RefreshGridItems()
         {
+            ApplyGridItemTransitions();
             var query = SearchControl?.Text?.Trim() ?? "";
             IEnumerable<AppItem> items = string.IsNullOrEmpty(query)
                 ? _allItems
@@ -814,6 +809,7 @@ namespace EricGameLauncher
 
             SyncCollection(_viewItems, items, false);
             if (!ReferenceEquals(AppGrid.ItemsSource, _viewItems)) AppGrid.ItemsSource = _viewItems;
+            AppGrid.RecalculateAdaptiveWidth();
             IsFiltered = !string.IsNullOrEmpty(query);
             UpdateEmptyState();
             LogService.Write("App", $"RefreshGridItems applied count={_viewItems.Count} filtered={IsFiltered}");
@@ -1179,8 +1175,15 @@ namespace EricGameLauncher
         {
             item.IsLoading = true;
             item.LoadingOpacity = 1.0;
+            bool animate = _animationSettings.AnimationsEnabled;
             _ = Task.Delay(3000).ContinueWith(async _ => 
             {
+                if (!animate)
+                {
+                    DispatcherQueue.TryEnqueue(() => item.IsLoading = false);
+                    return;
+                }
+
                 for (int i = 0; i <= 10; i++)
                 {
                     DispatcherQueue.TryEnqueue(() => item.LoadingOpacity = 1.0 - (i / 10.0));
@@ -1467,6 +1470,7 @@ namespace EricGameLauncher
             {
                 if (sender == null) return;
 
+                ApplyGridItemTransitions();
                 string query = (sender.Text ?? "").ToLower().Trim();
 
                 IEnumerable<AppItem> filtered = string.IsNullOrEmpty(query)
@@ -1482,9 +1486,21 @@ namespace EricGameLauncher
             catch (Exception ex) { LogService.Write("App", "SearchBox_TextChanged failed", ex); }
         }
 
+        private void ApplyGridItemTransitions()
+        {
+            var transitions = new TransitionCollection();
+            if (_animationSettings.AnimationsEnabled)
+            {
+                transitions.Add(new ReorderThemeTransition());
+                transitions.Add(new RepositionThemeTransition { IsStaggeringEnabled = false });
+            }
+            AppGrid.ItemContainerTransitions = transitions;
+        }
+
         private void UpdateGridInteraction()
         {
             bool sorting = _isSortMode;
+            ApplyGridItemTransitions();
             ExitSortButton.Visibility = sorting ? Visibility.Visible : Visibility.Collapsed;
             AppGrid.CanDragItems = sorting;
             AppGrid.CanReorderItems = sorting;
@@ -1492,74 +1508,6 @@ namespace EricGameLauncher
             AppGrid.AllowDrop = sorting;
             AppGrid.IsItemClickEnabled = !sorting && ConfigService.LaunchMode != "double";
             AppGrid.SelectionMode = sorting ? ListViewSelectionMode.Single : ListViewSelectionMode.None;
-            _sortAnimationsEnabled = sorting && _animationSettings.AnimationsEnabled;
-            UpdateSortWiggles();
-        }
-
-        private void ItemPanel_Loaded(object sender, RoutedEventArgs e)
-        {
-            if (sender is FrameworkElement panel)
-            {
-                _realizedItemPanels.Add(panel);
-                UpdateSortWiggle(panel);
-            }
-        }
-
-        private void ItemPanel_Unloaded(object sender, RoutedEventArgs e)
-        {
-            if (sender is FrameworkElement panel)
-            {
-                _realizedItemPanels.Remove(panel);
-                StopSortWiggle(panel);
-            }
-        }
-
-        private void ItemPanel_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            if (sender is FrameworkElement panel && _sortWiggles.TryGetValue(panel, out var visual))
-                visual.CenterPoint = new Vector3((float)e.NewSize.Width / 2, (float)e.NewSize.Height / 2, 0);
-        }
-
-        private void UpdateSortWiggles()
-        {
-            foreach (var panel in _realizedItemPanels) UpdateSortWiggle(panel);
-        }
-
-        private void UpdateSortWiggle(FrameworkElement panel)
-        {
-            bool dragging = panel.DataContext is AppItem item && _draggingItemIds.Contains(item.Id);
-            if (!_sortAnimationsEnabled || dragging || !panel.IsLoaded)
-            {
-                StopSortWiggle(panel);
-                return;
-            }
-            if (_sortWiggles.ContainsKey(panel)) return;
-
-            float amplitude = 1.2f + (float)Random.Shared.NextDouble() * 0.4f;
-            if (Random.Shared.Next(2) == 0) amplitude = -amplitude;
-            double period = 0.30 + Random.Shared.NextDouble() * 0.10;
-            var visual = ElementCompositionPreview.GetElementVisual(panel);
-            visual.RotationAxis = Vector3.UnitZ;
-            visual.CenterPoint = new Vector3((float)panel.ActualWidth / 2, (float)panel.ActualHeight / 2, 0);
-            using var animation = visual.Compositor.CreateScalarKeyFrameAnimation();
-            animation.InsertKeyFrame(0, 0);
-            animation.InsertKeyFrame(0.25f, amplitude);
-            animation.InsertKeyFrame(0.5f, 0);
-            animation.InsertKeyFrame(0.75f, -amplitude);
-            animation.InsertKeyFrame(1, 0);
-            animation.Duration = TimeSpan.FromSeconds(period);
-            animation.IterationBehavior = AnimationIterationBehavior.Forever;
-            _sortWiggles.Add(panel, visual);
-            visual.StartAnimation(nameof(Visual.RotationAngleInDegrees), animation);
-        }
-
-        private void StopSortWiggle(FrameworkElement panel)
-        {
-            if (_sortWiggles.Remove(panel, out var visual))
-            {
-                visual.StopAnimation(nameof(Visual.RotationAngleInDegrees));
-                visual.RotationAngleInDegrees = 0;
-            }
         }
 
         private void AppGrid_DragItemsStarting(object sender, DragItemsStartingEventArgs e)
@@ -1572,11 +1520,9 @@ namespace EricGameLauncher
             }
 
             HideCustomToolTip();
+            ApplyGridItemTransitions();
             _dragOrder = _viewItems.Select(item => item.Id).ToArray();
             _isDraggingItems = true;
-            foreach (var item in e.Items.OfType<AppItem>()) _draggingItemIds.Add(item.Id);
-            foreach (var panel in _realizedItemPanels)
-                if (panel.DataContext is AppItem item && _draggingItemIds.Contains(item.Id)) StopSortWiggle(panel);
             e.Data.RequestedOperation = DataPackageOperation.Move;
             LogService.Write("Sort", $"Grid drag started count={e.Items.Count}");
         }
@@ -1607,9 +1553,6 @@ namespace EricGameLauncher
             {
                 _dragOrder = null;
                 _isDraggingItems = false;
-                var draggedPanels = _realizedItemPanels.Where(panel => panel.DataContext is AppItem item && _draggingItemIds.Contains(item.Id)).ToArray();
-                _draggingItemIds.Clear();
-                foreach (var panel in draggedPanels) UpdateSortWiggle(panel);
                 if (_isRefreshPending)
                     QueueRefreshView();
             }
@@ -1726,6 +1669,7 @@ namespace EricGameLauncher
             ConfigService.IconSize = value;
             LogService.Write("UI", $"IconSizeControl changed newSize={value}");
             UpdateGridItemSizes(value);
+            AppGrid.RecalculateAdaptiveWidth();
         }
 
         private void UpdateGridItemSizes(double size)
@@ -2153,8 +2097,6 @@ namespace EricGameLauncher
             using (LogService.StartOperation("App", "Shutdown"))
             {
                 LogService.Write("App", "MainWindow_Closed Start");
-                foreach (var panel in _sortWiggles.Keys.ToArray()) StopSortWiggle(panel);
-                _realizedItemPanels.Clear();
                 _lifetime.Cancel();
                 TitleBarGrid.Loaded -= TitleBarGrid_Loaded;
                 TitleBarGrid.SizeChanged -= TitleBarGrid_SizeChanged;
