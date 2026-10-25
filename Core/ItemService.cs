@@ -82,6 +82,53 @@ public static class ItemService
         });
     }
 
+    private static readonly string[] IconSourceExtensions = [".exe", ".com", ".lnk", ".url", ".bat", ".cmd", ".msi", ".ps1", ".appref-ms"];
+
+    public static bool SupportsIconExtraction(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        string target = path.Trim();
+        if (target.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase)) return true;
+        string extension = Path.GetExtension(Environment.ExpandEnvironmentVariables(target));
+        return extension.Length > 0 && IconSourceExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
+    }
+
+    public static string? SuggestTitle(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        string target = path.Trim();
+        if (target.Contains("://", StringComparison.Ordinal)) return null;
+        if (target.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase)) return null;
+        string name = Path.GetFileNameWithoutExtension(Environment.ExpandEnvironmentVariables(target));
+        return string.IsNullOrWhiteSpace(name) ? null : name;
+    }
+
+    public static async Task EnsureIconAsync(AppItem item)
+    {
+        if (!string.IsNullOrEmpty(item.IconPath)) return;
+        if (!SupportsIconExtraction(item.ExePath)) return;
+        try
+        {
+            string source = Environment.ExpandEnvironmentVariables(item.ExePath!.Trim());
+            string? iconPath = await IconHelper.GetIconPathAsync(source, item.Id);
+            if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath)) item.IconPath = iconPath;
+        }
+        catch (Exception ex) { LogService.Write("Item", "EnsureIconAsync failed", ex); }
+    }
+
+    public static async Task AddItemAsync(AppItem item)
+    {
+        await EnsureIconAsync(item);
+        AddItem(item);
+    }
+
+    public static async Task EditItemAsync(AppItem item, Action<AppItem> apply)
+    {
+        apply(item);
+        await EnsureIconAsync(item);
+        EditItem(item, _ => { });
+    }
+
     public static AppItem? FindItem(string? id, string? title, List<AppItem>? pool = null)
     {
         pool ??= ConfigService.LoadItems();

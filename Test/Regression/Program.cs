@@ -36,6 +36,8 @@ async Task<(int Code, string Output, string Error)> Cli(params string[] argument
 try
 {
     await LegacyFeatures.RunAsync(Check, Cli, root);
+    await IconFeatures.RunAsync(Check, root);
+    await CoreGapFeatures.RunAsync(Check, root);
     var first = ItemService.CreateItem("First", "C:\\EGL-regression-missing-A.exe");
     ItemService.AddItem(first);
     string id = first.Id;

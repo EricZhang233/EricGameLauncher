@@ -15,6 +15,10 @@ public sealed partial class PropertyPanelControl : UserControl
     private AppItem? _editingItem;
     private bool _isNewItemMode = false;
     private CancellationTokenSource? _platformDetectCts;
+    private CancellationTokenSource? _iconPreviewCts;
+    private bool _suppressIconPreview;
+    private bool _customIconChosen;
+    private string? _iconPreviewSource;
     private readonly PropertyDraftSession _draftSession = new();
 
     private readonly StackPanel[] _customSections;
@@ -39,7 +43,7 @@ public sealed partial class PropertyPanelControl : UserControl
     {
         InitializeComponent();
         foreach (var menu in new[] { MenuExeStartMenu, MenuExeDesktop, MenuAltStartMenu, MenuAltDesktop, MenuAlongStartMenu, MenuAlongDesktop, MenuMgrStartMenu, MenuMgrDesktop }) HookLazyMenu(menu);
-        Unloaded += (_, _) => { _platformDetectCts?.Cancel(); _draftSession.Advance(); };
+        Unloaded += (_, _) => { _platformDetectCts?.Cancel(); _iconPreviewCts?.Cancel(); _draftSession.Advance(); };
 
         _customSections = new StackPanel[] { PropCustomSection1, PropCustomSection2, PropCustomSection3, PropCustomSection4, PropCustomSection5, PropCustomSection6, PropCustomSection7, PropCustomSection8, PropCustomSection9, PropCustomSection10 };
         _customTitles = new TextBox[] { PropCustomTitle1, PropCustomTitle2, PropCustomTitle3, PropCustomTitle4, PropCustomTitle5, PropCustomTitle6, PropCustomTitle7, PropCustomTitle8, PropCustomTitle9, PropCustomTitle10 };
@@ -86,6 +90,27 @@ public sealed partial class PropertyPanelControl : UserControl
                 }
             }
             catch (Exception ex) { LogService.Write("UI", "PropExePath handler failed", ex); }
+        };
+
+        PropExePath.TextChanged += async (s, e) =>
+        {
+            _iconPreviewCts?.Cancel();
+            _iconPreviewCts?.Dispose();
+            _iconPreviewCts = null;
+            if (_suppressIconPreview) return;
+            string path = PropExePath.Text?.Trim() ?? "";
+            var cts = new CancellationTokenSource();
+            _iconPreviewCts = cts;
+            try
+            {
+                await Task.Delay(1000, cts.Token);
+                if (cts.Token.IsCancellationRequested) return;
+                AutoFillDisplayName(path);
+                if (_customIconChosen || !ItemService.SupportsIconExtraction(path)) return;
+                await PreviewIconAsync(path, cts.Token);
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { LogService.Write("UI", "PropExePath settle handler failed", ex); }
         };
 
         LogService.Write("UI", "Property panel control constructed");
@@ -184,11 +209,16 @@ public sealed partial class PropertyPanelControl : UserControl
         try
         {
             _platformDetectCts?.Cancel();
+            _iconPreviewCts?.Cancel();
             _draftSession.Advance();
             _editingItem = AppItemDto.FromViewModel(item).ToViewModel(ConfigService.FixedCachePath);
             _isNewItemMode = isNew;
+            _customIconChosen = false;
+            _iconPreviewSource = null;
 
-            LoadUI();
+            _suppressIconPreview = true;
+            try { LoadUI(); }
+            finally { _suppressIconPreview = false; }
 
             PropBtnDelete.Visibility = isNew ? Visibility.Collapsed : Visibility.Visible;
 
@@ -224,6 +254,8 @@ public sealed partial class PropertyPanelControl : UserControl
             {
                 _editingItem.ExePath = newExePath;
             }
+            if (string.IsNullOrWhiteSpace(_editingItem.Title))
+                _editingItem.Title = ItemService.SuggestTitle(newExePath) ?? "";
 
             _editingItem.IsAdmin = PropIsAdmin.IsChecked ?? false;
             _editingItem.IsAltAdmin = PropIsAltAdmin.IsChecked ?? false;
@@ -466,6 +498,7 @@ public sealed partial class PropertyPanelControl : UserControl
     private void HidePanel()
     {
         _platformDetectCts?.Cancel();
+        _iconPreviewCts?.Cancel();
         _draftSession.Advance();
         int closingSession = _draftSession.Generation;
         var transform = PropertyPanel.RenderTransform as TranslateTransform;
@@ -577,6 +610,8 @@ public sealed partial class PropertyPanelControl : UserControl
                         {
                             _editingItem.IconPath = null;
                             _editingItem.IconPath = newPath;
+                            _customIconChosen = true;
+                            _iconPreviewSource = null;
                             UpdatePropIconView(newPath);
                             LogService.Write("UI", $"BtnChangeIcon_Click updated item icon id={_editingItem.Id} newPath={newPath}");
                         }
@@ -723,6 +758,8 @@ public sealed partial class PropertyPanelControl : UserControl
                     {
                         _editingItem.IconPath = null;
                         _editingItem.IconPath = iconPath;
+                        _customIconChosen = true;
+                        _iconPreviewSource = null;
                         RefreshIconDisplay(iconPath);
                     }
                 }
@@ -744,6 +781,29 @@ public sealed partial class PropertyPanelControl : UserControl
     }
 
     private Task<string?> GetDraftIconAsync(string source) => _draftSession.TrackAsync(() => IconHelper.GetIconPathAsync(source, DraftIconId(), forceExtract: true));
+
+    private async Task PreviewIconAsync(string path, CancellationToken token)
+    {
+        if (token.IsCancellationRequested || _editingItem == null) return;
+        if (string.Equals(_iconPreviewSource, path, StringComparison.OrdinalIgnoreCase)) return;
+        string? iconPath = await GetDraftIconAsync(path);
+        if (token.IsCancellationRequested || _editingItem == null || _customIconChosen) return;
+        if (string.IsNullOrEmpty(iconPath) || !File.Exists(iconPath)) return;
+        _iconPreviewSource = path;
+        _editingItem.IconPath = iconPath;
+        RefreshIconDisplay(iconPath);
+        LogService.Write("UI", $"Property icon preview applied path={path} icon={iconPath}");
+    }
+
+    private void AutoFillDisplayName(string path)
+    {
+        if (_editingItem == null) return;
+        if (!string.IsNullOrWhiteSpace(PropTitle.Text)) return;
+        string? suggested = ItemService.SuggestTitle(path);
+        if (string.IsNullOrWhiteSpace(suggested) || suggested == PropTitle.Text) return;
+        PropTitle.Text = suggested;
+        LogService.Write("UI", $"Display name auto-filled from path title={suggested}");
+    }
 
     private async void BrowseFile(TextBox target, string? filter = null)
     {
@@ -832,6 +892,8 @@ public sealed partial class PropertyPanelControl : UserControl
                         {
                             _editingItem.IconPath = null;
                             _editingItem.IconPath = iconPath;
+                            _customIconChosen = true;
+                            _iconPreviewSource = null;
                             RefreshIconDisplay(iconPath);
                         }
                     }

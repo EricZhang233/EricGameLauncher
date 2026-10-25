@@ -16,6 +16,11 @@ internal static class CliFeatures
         check(add.Code == 0 && item.IsAdmin && item.MgrPath == "manager.exe" && item.AlternativeLaunchCommand == "alternate.exe" && item.AlongsideCommand == "alongside.exe", "CLI add persists all launch arguments");
         var edit = await cli(["edit", "--id", item.Id, "--title", "CLI 已编辑", "--path", "C:\\EGL-cli-edited.exe", "--json"]);
         check(edit.Code == 0 && ItemService.FindItem(item.Id, null)?.Title == "CLI 已编辑", "CLI edit preserves identity and changes title");
+        string cliIconExe = Path.Combine(Environment.SystemDirectory, "notepad.exe");
+        var autoIcon = await cli(["add", "--title", "CLI 自动图标", "--path", cliIconExe, "--json"]);
+        var autoItem = ConfigService.LoadItems().Single(x => x.Title == "CLI 自动图标");
+        check(autoIcon.Code == 0 && !string.IsNullOrEmpty(autoItem.IconPath) && File.Exists(autoItem.IconPath), "CLI add extracts icon automatically");
+        await cli(["remove", "--id", autoItem.Id, "--permanent", "--json"]);
         var search = await cli(["search", "已编辑", "--json"]);
         using (var json = JsonDocument.Parse(search.Output)) check(search.Code == 0 && json.RootElement.GetProperty("results").GetArrayLength() == 1, "CLI positional Unicode search returns item");
         var sort = await cli(["sort", "--list", "--json"]);
@@ -42,6 +47,42 @@ internal static class CliFeatures
         var scan = await cli(["scan", "--steam", "--import", "--json"]);
         using (var json = JsonDocument.Parse(scan.Output))
             check(scan.Code == 0 && json.RootElement.TryGetProperty("imported", out var imported) && imported.GetInt32() >= 0 && json.RootElement.GetProperty("scannedGames").ValueKind == JsonValueKind.Array, "CLI scan import and JSON execute together without stdout progress pollution");
+
+        var settingsList = await cli(["settings", "--list", "--json"]);
+        using (var json = JsonDocument.Parse(settingsList.Output))
+            check(settingsList.Code == 0 && json.RootElement.GetProperty("dataPath").GetString() == ConfigService.CurrentDataPath && json.RootElement.TryGetProperty("window", out _), "CLI settings list reports data path and window bounds");
+        var settingsGet = await cli(["settings", "--get", "iconsize", "--json"]);
+        using (var json = JsonDocument.Parse(settingsGet.Output))
+            check(settingsGet.Code == 0 && json.RootElement.GetProperty("value").GetString() == ConfigService.IconSize.ToString(), "CLI settings get returns the live value");
+        check((await cli(["settings", "--get", "unknownkey", "--json"])).Code != 0, "CLI settings get rejects an unknown key");
+
+        string currentStorageMode = ConfigService.IsSystemMode ? "system" : "portable";
+        var storageStatus = await cli(["storage", "--status", "--json"]);
+        using (var json = JsonDocument.Parse(storageStatus.Output))
+            check(storageStatus.Code == 0 && json.RootElement.GetProperty("storageMode").GetString() == currentStorageMode, "CLI storage status reports the active mode");
+        string currentDataPath = ConfigService.CurrentDataPath;
+        check((await cli(["storage", "--switch", currentStorageMode, "--json"])).Code == 0 && ConfigService.CurrentDataPath == currentDataPath, "CLI storage switch to the active mode keeps the data path");
+        check((await cli(["storage", "--switch", "invalid", "--json"])).Code != 0, "CLI storage switch rejects an unknown mode");
+
+        ConfigService.MutateItems((items, recycled) => { items.Clear(); recycled.Clear(); });
+        check((await cli(["add", "--title", "CLI 排序甲", "--path", "C:\\EGL-sort-a.exe", "--json"])).Code == 0, "CLI sort fixture item A is added");
+        check((await cli(["add", "--title", "CLI 排序乙", "--path", "C:\\EGL-sort-b.exe", "--json"])).Code == 0, "CLI sort fixture item B is added");
+        check((await cli(["add", "--title", "CLI 排序丙", "--path", "C:\\EGL-sort-c.exe", "--json"])).Code == 0, "CLI sort fixture item C is added");
+        var sortItems = ConfigService.LoadItems();
+        var sortFirst = sortItems[0];
+        var sortSecond = sortItems[1];
+        var sortThird = sortItems[2];
+        string SortOrder() => string.Join(",", ConfigService.LoadItems().Select(x => x.Title));
+        check((await cli(["sort", "--id", sortFirst.Id, "--move-down", "--json"])).Code == 0 && SortOrder() == "CLI 排序乙,CLI 排序甲,CLI 排序丙", "CLI sort move down reorders and persists");
+        check((await cli(["sort", "--id", sortThird.Id, "--move-up", "--json"])).Code == 0 && SortOrder() == "CLI 排序乙,CLI 排序丙,CLI 排序甲", "CLI sort move up reorders and persists");
+        check((await cli(["sort", "--id", sortSecond.Id, "--swap-with", sortFirst.Id, "--json"])).Code == 0 && SortOrder() == "CLI 排序甲,CLI 排序丙,CLI 排序乙", "CLI sort swap exchanges two entries and persists");
+        var listText = await cli(["list"]);
+        check(listText.Code == 0 && listText.Output.Contains("CLI 排序甲"), "CLI list text output includes item titles");
+
+        string cmdExe = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+        check((await cli(["launch", "--path", cmdExe + " /c exit 0", "--json"])).Code == 0, "CLI launch starts an existing executable with arguments");
+        check((await cli(["launch", "--path", "C:\\EGL-missing-launch-target.exe", "--json"])).Code != 0, "CLI launch fails for a missing target");
+
         ConfigService.MutateItems((items, recycled) => { items.Clear(); recycled.Clear(); });
     }
 }

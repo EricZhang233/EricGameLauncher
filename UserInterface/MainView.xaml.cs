@@ -1343,7 +1343,7 @@ namespace EricGameLauncher
 
 
 
-        private void PropertyPanel_SaveRequested()
+        private async void PropertyPanel_SaveRequested()
         {
             using (LogService.StartOperation("App", "PropertyPanel_SaveRequested"))
             {
@@ -1376,9 +1376,9 @@ namespace EricGameLauncher
                     PropertyControl.ApplyToItem();
 
                     if (isNew)
-                        ItemService.AddItem(item);
+                        await ItemService.AddItemAsync(item);
                     else
-                        ItemService.EditItem(item, _ => { });
+                        await ItemService.EditItemAsync(item, _ => { });
 
                     SyncFromCore();
                     RefreshView();
