@@ -1,5 +1,10 @@
 namespace EricGameLauncher;
 
+public sealed class ItemConflictException(string key) : InvalidOperationException(key)
+{
+    public string Key { get; } = key;
+}
+
 public static class ItemService
 {
     public static AppItem CreateItem(string title, string path, bool admin = false, string? icon = null, string? platform = null, string? mgr = null, string? alt = null, string? alongside = null)
@@ -23,20 +28,34 @@ public static class ItemService
         target.AlternativeLaunchCommand = source.AlternativeLaunchCommand; target.UseAlternativeLaunch = source.UseAlternativeLaunch; target.IsAltAdmin = source.IsAltAdmin;
         target.AlongsideCommand = source.AlongsideCommand; target.RunAlongside = source.RunAlongside; target.IsAlongsideAdmin = source.IsAlongsideAdmin;
         target.Platform = source.Platform; target.Status = source.Status; target.DeletedAt = source.DeletedAt;
-        target.CustomMenuItems = source.CustomMenuItems; target.SortOrder = source.SortOrder;
+        target.CustomMenuItems = source.CustomMenuItems; target.SortOrder = source.SortOrder; target.RecycleId = source.RecycleId;
     }
 
     public static bool CheckDuplicate(string path, List<AppItem>? existingPool = null)
     {
-        if (string.IsNullOrWhiteSpace(path)) return false;
-        var normalized = PathHashHelper.NormalizePath(Environment.ExpandEnvironmentVariables(path.Trim()));
-        var pool = existingPool ?? ConfigService.LoadItems().Concat(ConfigService.LoadRecycleBinItems()).ToList();
-        return pool.Any(x => PathHashHelper.NormalizePath(Environment.ExpandEnvironmentVariables((x.ExePath ?? "").Trim())) == normalized);
+        string key = PathHashHelper.PathKey(path);
+        if (key.Length == 0) return false;
+        var pool = existingPool ?? ConfigService.LoadItems();
+        return pool.Any(x => PathHashHelper.PathKey(x.ExePath) == key);
     }
 
     private static void EnsureUnique(AppItem item, IEnumerable<AppItem> others)
     {
         if (CheckDuplicate(item.ExePath ?? "", others.ToList())) throw new InvalidOperationException(Text.Cli("ErrDuplicatePath"));
+    }
+
+    private static string NewRecycleId(IEnumerable<AppItem> recycled)
+    {
+        var used = recycled.Select(x => x.RecycleId ?? "").Where(x => x.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        string id;
+        do { id = PathHashHelper.NewRandomId(); } while (used.Contains(id));
+        return id;
+    }
+
+    private static bool HasPathConflict(AppItem item, IEnumerable<AppItem> items)
+    {
+        string key = PathHashHelper.PathKey(item.ExePath);
+        return key.Length > 0 && items.Any(x => PathHashHelper.PathKey(x.ExePath) == key);
     }
 
     private static void PrepareIcon(AppItem item)
@@ -55,14 +74,24 @@ public static class ItemService
     public static void AddItem(AppItem item)
     {
         PrepareIcon(item);
-        ConfigService.MutateItems((items, recycled) => { EnsureUnique(item, items.Concat(recycled)); items.Add(item); });
+        ConfigService.MutateItems((items, _) =>
+        {
+            item.RecycleId = null;
+            EnsureUnique(item, items);
+            items.Add(item);
+        });
     }
 
     public static AppItem? FindItem(string? id, string? title, List<AppItem>? pool = null)
     {
         pool ??= ConfigService.LoadItems();
-        return !string.IsNullOrEmpty(id) ? pool.FirstOrDefault(x => x.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
-            : !string.IsNullOrEmpty(title) ? pool.FirstOrDefault(x => string.Equals(x.Title, title, StringComparison.OrdinalIgnoreCase)) : null;
+        if (!string.IsNullOrEmpty(id))
+        {
+            var item = pool.FirstOrDefault(x => x.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
+                       ?? pool.FirstOrDefault(x => string.Equals(x.RecycleId, id, StringComparison.OrdinalIgnoreCase));
+            if (item != null) return item;
+        }
+        return !string.IsNullOrEmpty(title) ? pool.FirstOrDefault(x => string.Equals(x.Title, title, StringComparison.OrdinalIgnoreCase)) : null;
     }
 
     public static AppItem? FindInRecycle(string? id, string? title) => FindItem(id, title, ConfigService.LoadRecycleBinItems());
@@ -71,11 +100,11 @@ public static class ItemService
     {
         apply(item);
         PrepareIcon(item);
-        ConfigService.MutateItems((items, recycled) =>
+        ConfigService.MutateItems((items, _) =>
         {
             int index = items.FindIndex(x => x.Id.Equals(item.Id, StringComparison.OrdinalIgnoreCase));
             if (index < 0) throw new InvalidOperationException(Text.Cli("ErrItemNotFound"));
-            EnsureUnique(item, items.Concat(recycled).Where(x => x.Id != item.Id));
+            EnsureUnique(item, items.Where(x => !x.Id.Equals(item.Id, StringComparison.OrdinalIgnoreCase)));
             items[index] = item;
         });
     }
@@ -86,7 +115,12 @@ public static class ItemService
         {
             var item = FindItem(id, title, items) ?? throw new InvalidOperationException(Text.Cli("ErrItemNotFound"));
             items.Remove(item);
-            if (!permanent) { item.Status = 1; item.DeletedAt = null; recycled.Add(item); }
+            if (permanent) return;
+            item.Status = 1;
+            item.DeletedAt = null;
+            item.RecycleId = NewRecycleId(recycled);
+            recycled.Add(item);
+            LogService.Write("Item", $"RemoveItem recycled id={item.Id} recycleId={item.RecycleId} title={item.Title}");
         });
     }
 
@@ -97,7 +131,14 @@ public static class ItemService
         ConfigService.MutateItems((items, recycled) =>
         {
             foreach (var item in items.Where(x => selected.Contains(x.Id)).ToArray())
-            { items.Remove(item); item.Status = 1; item.DeletedAt = null; recycled.Add(item); count++; }
+            {
+                items.Remove(item);
+                item.Status = 1;
+                item.DeletedAt = null;
+                item.RecycleId = NewRecycleId(recycled);
+                recycled.Add(item);
+                count++;
+            }
         });
         return count;
     }
@@ -107,16 +148,40 @@ public static class ItemService
         ConfigService.MutateItems((items, recycled) =>
         {
             var item = FindItem(id, title, recycled) ?? throw new InvalidOperationException(Text.Cli("ErrNotInRecycle"));
-            EnsureUnique(item, items);
-            recycled.Remove(item); item.Status = 0; item.DeletedAt = null; items.Add(item);
+            if (HasPathConflict(item, items)) throw new ItemConflictException("ErrRestoreDuplicatePath");
+            if (items.Any(x => x.Id.Equals(item.Id, StringComparison.OrdinalIgnoreCase))) throw new ItemConflictException("ErrRestoreIdConflict");
+            recycled.Remove(item);
+            item.Status = 0;
+            item.DeletedAt = null;
+            item.RecycleId = null;
+            items.Add(item);
+            LogService.Write("Item", $"RestoreItem restored id={item.Id} title={item.Title}");
         });
     }
 
-    public static void RestoreAll() => ConfigService.MutateItems((items, recycled) =>
+    public static (int restored, int skipped) RestoreAll()
     {
-        foreach (var item in recycled) { EnsureUnique(item, items); item.Status = 0; item.DeletedAt = null; items.Add(item); }
-        recycled.Clear();
-    });
+        int restored = 0, skipped = 0;
+        ConfigService.MutateItems((items, recycled) =>
+        {
+            foreach (var item in recycled.ToArray())
+            {
+                if (HasPathConflict(item, items) || items.Any(x => x.Id.Equals(item.Id, StringComparison.OrdinalIgnoreCase)))
+                {
+                    skipped++;
+                    LogService.Write("Item", $"RestoreAll skipped id={item.Id} recycleId={item.RecycleId} title={item.Title}");
+                    continue;
+                }
+                recycled.Remove(item);
+                item.Status = 0;
+                item.DeletedAt = null;
+                item.RecycleId = null;
+                items.Add(item);
+                restored++;
+            }
+        });
+        return (restored, skipped);
+    }
 
     public static void EmptyRecycle() => ConfigService.MutateItems((_, recycled) => recycled.Clear());
 
@@ -154,6 +219,7 @@ public static class ItemService
         bool changed = false;
         int normalizeCount = 0;
 
+        var recycleKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in recycleItems)
         {
             if (item.Status == (int)AppItemStatus.Normal)
@@ -163,20 +229,24 @@ public static class ItemService
                 changed = true;
                 normalizeCount++;
             }
+            if (string.IsNullOrEmpty(item.RecycleId) || !recycleKeys.Add(item.RecycleId))
+            {
+                item.RecycleId = NewRecycleId(normalizedRecycle);
+                recycleKeys.Add(item.RecycleId);
+                changed = true;
+                normalizeCount++;
+            }
             normalizedRecycle.Add(item);
         }
 
         var misplaced = items.Where(x => x.Status != (int)AppItemStatus.Normal).ToList();
         if (misplaced.Count > 0)
         {
-            var recycleIds = new HashSet<string>(normalizedRecycle.Select(x => x.Id));
             foreach (var item in misplaced)
             {
-                if (recycleIds.Add(item.Id))
-                {
-                    normalizedRecycle.Add(item);
-                    normalizeCount++;
-                }
+                item.RecycleId = NewRecycleId(normalizedRecycle);
+                normalizedRecycle.Add(item);
+                normalizeCount++;
             }
             changed = true;
         }
@@ -255,11 +325,13 @@ public static class ItemService
     public static int ImportGames(List<ScannedGame> games)
     {
         int count = 0;
-        ConfigService.MutateItems((items, recycled) =>
+        ConfigService.MutateItems((items, _) =>
         {
+            var keys = new HashSet<string>(items.Select(x => PathHashHelper.PathKey(x.ExePath)), StringComparer.Ordinal);
             foreach (var game in games)
             {
-                if (CheckDuplicate(game.ExePath, items.Concat(recycled).ToList())) continue;
+                string key = PathHashHelper.PathKey(game.ExePath);
+                if (key.Length == 0 || !keys.Add(key)) continue;
                 items.Add(CreateItem(game.Title, game.ExePath, platform: game.PlatformBadge));
                 count++;
             }

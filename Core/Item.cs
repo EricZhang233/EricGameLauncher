@@ -105,6 +105,20 @@ public static class PathHashHelper
 {
     public static string NormalizePath(string path) => (path ?? string.Empty).ToLowerInvariant().Replace('/', '\\');
 
+    public static string PathKey(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+        string expanded;
+        try { expanded = Environment.ExpandEnvironmentVariables(path.Trim()); }
+        catch { expanded = path.Trim(); }
+        string full = expanded;
+        try { if (Path.IsPathRooted(expanded)) full = Path.GetFullPath(expanded); }
+        catch { full = expanded; }
+        return NormalizePath(full);
+    }
+
+    internal static string NewRandomId() => Guid.NewGuid().ToString("N")[..16];
+
     public static string GetPathHash(string path)
     {
         if (!AppItem.SuppressInitLogs)
@@ -442,6 +456,9 @@ public class AppItem : INotifyPropertyChanged
         set => SetProperty(ref _id, value);
     }
 
+    [YamlIgnore]
+    public string? RecycleId { get; set; }
+
     public string? Title
     {
         get => _title;
@@ -640,6 +657,9 @@ public class AppItemDto
     [YamlMember(Alias = "icon")]
     public string? Icon { get; set; }
 
+    [YamlMember(Alias = "recycleId")]
+    public string? RecycleId { get; set; }
+
     [YamlMember(Alias = "customMenu")]
     public List<CustomMenuItem>? CustomMenu { get; set; }
 
@@ -660,6 +680,7 @@ public class AppItemDto
             DeletedAt = vm.DeletedAt,
             Title = vm.Title,
             Icon = string.IsNullOrEmpty(vm.IconPath) ? null : Path.GetFullPath(vm.IconPath!).StartsWith(Path.GetFullPath(ConfigService.FixedCachePath) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ? Path.GetFileName(vm.IconPath!) : vm.IconPath,
+            RecycleId = vm.RecycleId,
             CustomMenu = vm.CustomMenuItems.Count > 0 ? vm.CustomMenuItems.ToList() : null,
             Platform = vm.Platform,
             Actions = new ActionsDto
@@ -694,6 +715,7 @@ public class AppItemDto
                                : (!Icon.Contains(Path.DirectorySeparatorChar) && !Icon.Contains(Path.AltDirectorySeparatorChar))
                                   ? Path.Combine(iconCachePath, Icon)
                                   : Icon,
+            RecycleId = RecycleId,
             CustomMenuItems = CustomMenu ?? [],
             Platform = Platform,
             MgrPath = Actions?.Manager?.Path,

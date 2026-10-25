@@ -21,9 +21,18 @@ internal static class CliFeatures
         var sort = await cli(["sort", "--list", "--json"]);
         using (var json = JsonDocument.Parse(sort.Output)) check(sort.Code == 0 && json.RootElement.GetProperty("items").GetArrayLength() == 1, "CLI sort list emits indexed items");
         check((await cli(["remove", "--id", item.Id, "--json"])).Code == 0 && ItemService.FindInRecycle(item.Id, null) != null, "CLI remove moves item to recycle");
-        check((await cli(["recycle", "--mark", item.Id, "--json"])).Code == 0 && ItemService.FindInRecycle(item.Id, null)?.Status == 2, "CLI mark starts pending countdown");
-        check((await cli(["restore", "--id", item.Id, "--json"])).Code == 0 && ItemService.FindItem(item.Id, null)?.Status == 0, "CLI restore cancels countdown");
-        await cli(["remove", "--id", item.Id, "--json"]);
+        var recycled = ConfigService.LoadRecycleBinItems().Single(x => x.Id == item.Id);
+        check(!string.IsNullOrEmpty(recycled.RecycleId), "CLI recycle entry exposes recycle id");
+        var recycleList = await cli(["list", "--recycle", "--json"]);
+        using (var json = JsonDocument.Parse(recycleList.Output))
+            check(recycleList.Code == 0 && json.RootElement.GetProperty("recycleBinItems")[0].GetProperty("RecycleId").GetString() == recycled.RecycleId, "CLI list --recycle emits recycle id");
+        check((await cli(["recycle", "--mark", recycled.RecycleId!, "--json"])).Code == 0 && ItemService.FindInRecycle(item.Id, null)?.Status == 2, "CLI mark accepts recycle id");
+        check((await cli(["restore", "--recycle-id", recycled.RecycleId!, "--json"])).Code == 0 && ItemService.FindItem(item.Id, null)?.Status == 0, "CLI restore accepts recycle id");
+        check((await cli(["remove", "--id", item.Id, "--json"])).Code == 0, "CLI remove again prepares recycle duplicate scenario");
+        var readd = await cli(["add", "--title", "CLI 重新添加", "--path", "C:\\EGL-cli-edited.exe", "--json"]);
+        check(readd.Code == 0 && ConfigService.LoadItems().Count(x => x.ExePath == "C:\\EGL-cli-edited.exe") == 1 && ConfigService.LoadRecycleBinItems().Count == 1, "CLI add allows a path that only exists in the recycle bin");
+        var readdBusy = await cli(["add", "--title", "CLI 再添加", "--path", "C:\\EGL-cli-edited.exe", "--json"]);
+        check(readdBusy.Code != 0, "CLI add still rejects a path already in the main list");
         check((await cli(["recycle", "--purge", "--json"])).Code == 0 && ConfigService.LoadRecycleBinItems().Count == 0, "CLI purge explicitly removes recycled entries");
         foreach (string command in new[] { "launch", "platform", "add", "edit", "remove", "restore", "recycle", "scan", "search", "sort", "settings", "update", "announcements", "install", "uninstall", "storage" })
         {

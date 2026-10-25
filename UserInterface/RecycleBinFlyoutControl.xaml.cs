@@ -11,6 +11,8 @@ public sealed partial class RecycleBinFlyoutControl : UserControl
     private readonly ObservableCollection<AppItem> _items = new();
 
     public event Action? ItemsChanged;
+    public event Action<string>? Failed;
+    public event Action<NotificationLevel, string>? NotifyRequested;
     public Flyout Flyout => _flyout;
 
     public RecycleBinFlyoutControl()
@@ -45,8 +47,13 @@ public sealed partial class RecycleBinFlyoutControl : UserControl
 
     private void BtnEmptyRecycleBin_Click(object sender, RoutedEventArgs e)
     {
-        ItemService.MarkAllPendingDeletion();
-        ItemsChanged?.Invoke();
+        try
+        {
+            ItemService.MarkAllPendingDeletion();
+            ItemsChanged?.Invoke();
+            NotifyRequested?.Invoke(NotificationLevel.Success, Text.T("Notify_RecycleCleared"));
+        }
+        catch (Exception ex) { ReportFailure("BtnEmptyRecycleBin_Click", ex); }
     }
 
     private void RecycleMenuFlyout_Opening(object sender, object e)
@@ -68,8 +75,14 @@ public sealed partial class RecycleBinFlyoutControl : UserControl
     {
         if (sender is MenuFlyoutItem menuItem && menuItem.Tag is AppItem item)
         {
-            ItemService.RestoreItem(item.Id, null);
-            ItemsChanged?.Invoke();
+            try
+            {
+                ItemService.RestoreItem(item.RecycleId ?? item.Id, null);
+                ItemsChanged?.Invoke();
+                NotifyRequested?.Invoke(NotificationLevel.Success, string.Format(Text.T("Notify_Restored"), item.Title ?? ""));
+            }
+            catch (ItemConflictException ex) { Failed?.Invoke(Text.T(ex.Key)); }
+            catch (Exception ex) { ReportFailure("MenuRestore_Click", ex); }
         }
     }
 
@@ -77,8 +90,13 @@ public sealed partial class RecycleBinFlyoutControl : UserControl
     {
         if (sender is MenuFlyoutItem menuItem && menuItem.Tag is AppItem item)
         {
-            ItemService.MarkPendingDeletion(item.Id);
-            ItemsChanged?.Invoke();
+            try
+            {
+                ItemService.MarkPendingDeletion(item.RecycleId ?? item.Id);
+                ItemsChanged?.Invoke();
+                NotifyRequested?.Invoke(NotificationLevel.Success, string.Format(Text.T("Notify_PendingDeleted"), item.Title ?? ""));
+            }
+            catch (Exception ex) { ReportFailure("MenuDeletePerm_Click", ex); }
         }
     }
 
@@ -86,5 +104,11 @@ public sealed partial class RecycleBinFlyoutControl : UserControl
     {
         if (sender is Grid grid && grid.DataContext is AppItem item)
             RecycleItemsControl.SelectedItem = item;
+    }
+
+    private void ReportFailure(string operation, Exception ex)
+    {
+        LogService.Write("UI", operation + " failed", ex);
+        Failed?.Invoke(ex.Message);
     }
 }
