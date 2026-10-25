@@ -1,4 +1,4 @@
-﻿<UserControl
+<UserControl
     x:Class="EricGameLauncher.MainView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -15,8 +15,6 @@
             <RowDefinition Height="48"/>
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <InfoBar x:Name="OperationErrorBar" Grid.Row="1" Canvas.ZIndex="2000" VerticalAlignment="Top"
-                 IsOpen="False" Severity="Error" IsClosable="True" Margin="12"/>
 
         
 
@@ -345,6 +343,13 @@
               Grid.RowSpan="2"
               Visibility="Collapsed"
               Canvas.ZIndex="2100"/>
+
+        <local:NotificationCenterControl x:Name="Notifications"
+              Grid.RowSpan="2"
+              HorizontalAlignment="Right"
+              VerticalAlignment="Bottom"
+              Margin="0,0,16,20"
+              Canvas.ZIndex="3000"/>
 
         <Popup x:Name="CustomIconToolTip" IsHitTestVisible="False">
             <Border Background="{ThemeResource FlyoutPresenterBackground}"

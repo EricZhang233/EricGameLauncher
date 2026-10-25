@@ -54,9 +54,17 @@ try
     Check((await Task.WhenAll(simultaneous)).All(x => x.Code == 0), "concurrent CLI writes succeed");
     Check(ConfigService.LoadItems().Count(x => x.Title!.StartsWith("Concurrent")) == 6, "concurrent additions all survive");
     ItemService.RemoveItem(id, null);
-    Check(ItemService.ImportGames([new() { Title = "Duplicate", ExePath = first.ExePath!, PlatformBadge = "Steam" }]) == 0, "import includes recycle bin in deduplication");
-    ItemService.RestoreItem(id, null);
-    Check(ConfigService.LoadItems().Count(x => x.Id == id) == 1, "restore keeps unique identity");
+    var recycledFirst = ConfigService.LoadRecycleBinItems().Single(x => x.Id == id);
+    Check(!string.IsNullOrEmpty(recycledFirst.RecycleId) && recycledFirst.RecycleId != recycledFirst.Id, "recycle bin keeps original id and adds a distinct recycle id");
+    Check(ItemService.ImportGames([new() { Title = "Duplicate", ExePath = first.ExePath!, PlatformBadge = "Steam" }]) == 1, "import ignores recycle bin paths");
+    var reimported = ConfigService.LoadItems().Single(x => x.ExePath == first.ExePath);
+    bool restoreBlocked = false;
+    try { ItemService.RestoreItem(recycledFirst.RecycleId, null); } catch (ItemConflictException) { restoreBlocked = true; }
+    Check(restoreBlocked && ConfigService.LoadRecycleBinItems().Count == 1, "restore rejects a path already present in the main list");
+    ItemService.RemoveItem(reimported.Id, null, true);
+    ItemService.RestoreItem(recycledFirst.RecycleId, null);
+    var restoredFirst = ConfigService.LoadItems().Single(x => x.Id == id);
+    Check(restoredFirst.RecycleId == null, "restore strips recycle state and keeps original identity");
     var ordered = ConfigService.LoadItems();
     string penultimate = ordered[^2].Id;
     var down = await Cli("sort", "--id", penultimate, "--move-down");

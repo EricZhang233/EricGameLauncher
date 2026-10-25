@@ -362,22 +362,23 @@ public static class ConfigService
         MutateItems((current, recycled) =>
         {
             var expected = _itemsData ?? new ItemsData();
-            MergeItems(current, items, expected.Items);
-            MergeItems(recycled, recycleItems, expected.RecycleBinItems);
+            MergeItems(current, items, expected.Items, x => x.Id, x => x.Id);
+            MergeItems(recycled, recycleItems, expected.RecycleBinItems, x => x.RecycleId ?? "", x => x.RecycleId ?? "");
         }, triggerEvent);
     }
 
-    private static void MergeItems(List<AppItem> current, List<AppItem> proposed, List<AppItemDto> baseline)
+    private static void MergeItems(List<AppItem> current, List<AppItem> proposed, List<AppItemDto> baseline, Func<AppItem, string> keyOf, Func<AppItemDto, string> baselineKeyOf)
     {
-        var before = baseline.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
-        var after = proposed.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
-        current.RemoveAll(x => before.ContainsKey(x.Id) && !after.ContainsKey(x.Id));
+        var before = baseline.ToDictionary(baselineKeyOf, StringComparer.OrdinalIgnoreCase);
+        var after = proposed.ToDictionary(keyOf, StringComparer.OrdinalIgnoreCase);
+        current.RemoveAll(x => before.ContainsKey(keyOf(x)) && !after.ContainsKey(keyOf(x)));
         foreach (var item in proposed)
         {
-            if (before.TryGetValue(item.Id, out var old) && ConfigPersistence.Equal(old, AppItemDto.FromViewModel(item))) continue;
-            int index = current.FindIndex(x => x.Id.Equals(item.Id, StringComparison.OrdinalIgnoreCase));
+            string key = keyOf(item);
+            if (before.TryGetValue(key, out var old) && ConfigPersistence.Equal(old, AppItemDto.FromViewModel(item))) continue;
+            int index = current.FindIndex(x => keyOf(x).Equals(key, StringComparison.OrdinalIgnoreCase));
             if (index >= 0) current[index] = item;
-            else if (!before.ContainsKey(item.Id)) current.Add(item);
+            else if (!before.ContainsKey(key)) current.Add(item);
         }
     }
 
@@ -392,10 +393,17 @@ public static class ConfigService
             var items = data.Items.Select(x => x.ToViewModel(FixedCachePath)).ToList();
             var recycled = data.RecycleBinItems.Select(x => x.ToViewModel(FixedCachePath)).ToList();
             change(items, recycled);
-            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in items.Concat(recycled))
-                if (!ids.Add(item.Id)) throw new InvalidOperationException(Text.Cli("ErrDuplicatePath"));
-            foreach (var item in items) { item.Status = 0; item.DeletedAt = null; }
+            var activeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in items)
+            {
+                if (string.IsNullOrWhiteSpace(item.Id) || !activeIds.Add(item.Id)) throw new DataFileException(ItemsFilePath);
+                item.Status = 0;
+                item.DeletedAt = null;
+                item.RecycleId = null;
+            }
+            var recycleKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in recycled)
+                if (string.IsNullOrWhiteSpace(item.RecycleId) || !recycleKeys.Add(item.RecycleId)) throw new DataFileException(ItemsFilePath);
             var updated = new ItemsData { Items = items.Select(AppItemDto.FromViewModel).ToList(), RecycleBinItems = recycled.Select(AppItemDto.FromViewModel).ToList() };
             if (!ConfigPersistence.Equal(data, updated)) AtomicFile.Write(ItemsFilePath, ConfigPersistence.Serializer.Serialize(updated));
             _itemsData = updated;
@@ -410,9 +418,12 @@ public static class ConfigService
         if (data.Version != CurrentConfigVersion) throw new DataFileException(ItemsFilePath);
         data.Items ??= [];
         data.RecycleBinItems ??= [];
-        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var item in data.Items.Concat(data.RecycleBinItems))
-            if (string.IsNullOrWhiteSpace(item.Id) || !ids.Add(item.Id)) throw new DataFileException(ItemsFilePath);
+        var activeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in data.Items)
+            if (string.IsNullOrWhiteSpace(item.Id) || !activeIds.Add(item.Id)) throw new DataFileException(ItemsFilePath);
+        var recycleKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in data.RecycleBinItems)
+            if (string.IsNullOrWhiteSpace(item.RecycleId) || !recycleKeys.Add(item.RecycleId)) throw new DataFileException(ItemsFilePath);
         return data;
     }
 
@@ -556,23 +567,21 @@ public static class ConfigService
                 dto.Id = string.IsNullOrWhiteSpace(dto.Actions?.Main?.Path) ? Guid.NewGuid().ToString("N")[..16] : PathHashHelper.GetPathHash(dto.Actions.Main.Path);
                 normalized = true;
             }
-            var uniqueIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var dto in _itemsData.Items.Concat(_itemsData.RecycleBinItems))
-                if (!uniqueIds.Add(dto.Id)) { _itemsInvalid = true; throw new DataFileException(itemsPath); }
             if (_itemsData.Items.Any(x => x.Status != (int)AppItemStatus.Normal))
             {
-                var recycleIds = new HashSet<string>(_itemsData.RecycleBinItems.Select(x => x.Id));
                 var moveItems = _itemsData.Items.Where(x => x.Status != (int)AppItemStatus.Normal).ToList();
                 _itemsData.Items = _itemsData.Items.Where(x => x.Status == (int)AppItemStatus.Normal).ToList();
+                var movedKeys = new HashSet<string>(_itemsData.RecycleBinItems.Select(x => x.RecycleId ?? "").Where(x => x.Length > 0), StringComparer.OrdinalIgnoreCase);
                 foreach (var item in moveItems)
                 {
-                    if (recycleIds.Add(item.Id))
-                    {
-                        _itemsData.RecycleBinItems.Add(item);
-                    }
+                    string recycleId;
+                    do { recycleId = PathHashHelper.NewRandomId(); } while (!movedKeys.Add(recycleId));
+                    item.RecycleId = recycleId;
+                    _itemsData.RecycleBinItems.Add(item);
                 }
                 normalized = true;
             }
+            var recycleKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in _itemsData.RecycleBinItems)
             {
                 if (item.Status == (int)AppItemStatus.Normal)
@@ -581,7 +590,18 @@ public static class ConfigService
                     item.DeletedAt = null;
                     normalized = true;
                 }
+                if (!string.IsNullOrEmpty(item.RecycleId) && recycleKeys.Add(item.RecycleId)) continue;
+                string recycleId;
+                do { recycleId = PathHashHelper.NewRandomId(); } while (!recycleKeys.Add(recycleId));
+                item.RecycleId = recycleId;
+                normalized = true;
             }
+            var activeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var dto in _itemsData.Items)
+                if (string.IsNullOrWhiteSpace(dto.Id) || !activeIds.Add(dto.Id)) { _itemsInvalid = true; throw new DataFileException(itemsPath); }
+            var recycleIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var dto in _itemsData.RecycleBinItems)
+                if (string.IsNullOrWhiteSpace(dto.RecycleId) || !recycleIds.Add(dto.RecycleId)) { _itemsInvalid = true; throw new DataFileException(itemsPath); }
             if (normalized)
             {
                 SaveItemsData();

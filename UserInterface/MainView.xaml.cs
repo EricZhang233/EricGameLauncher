@@ -687,7 +687,7 @@ namespace EricGameLauncher
             {
                 LogService.Write("App", $"ApplyItemData DataChanged - rebuilding collections");
                 SyncCollection(_allItems, normalItems, true);
-                SyncCollection(_recycleItems, normalizedRecycle, true);
+                SyncCollection(_recycleItems, normalizedRecycle, true, RecycleKey);
                 RefreshGridItems();
             }
             else
@@ -726,8 +726,18 @@ namespace EricGameLauncher
         private void ShowOperationError(Exception error)
         {
             LogService.Write("UI", "Operation failed", error);
-            OperationErrorBar.Message = error.Message;
-            OperationErrorBar.IsOpen = true;
+            Notifications.Notify(error.Message, NotificationLevel.Error);
+        }
+
+        private static string ItemDisplayName(AppItem item)
+        {
+            if (!string.IsNullOrWhiteSpace(item.Title)) return item.Title!;
+            return string.IsNullOrEmpty(item.ExePath) ? "" : Path.GetFileNameWithoutExtension(item.ExePath);
+        }
+
+        private void ShowSuccessNotification(string message)
+        {
+            Notifications.Notify(message, NotificationLevel.Success);
         }
 
         private async Task LoadData()
@@ -770,19 +780,22 @@ namespace EricGameLauncher
         private void SyncFromCore()
         {
             SyncCollection(_allItems, ConfigService.LoadItems(), true);
-            SyncCollection(_recycleItems, ConfigService.LoadRecycleBinItems(), true);
+            SyncCollection(_recycleItems, ConfigService.LoadRecycleBinItems(), true, RecycleKey);
             RefreshGridItems();
         }
 
-        private static void SyncCollection(ObservableCollection<AppItem> target, IEnumerable<AppItem> source, bool update)
+        private static string RecycleKey(AppItem item) => item.RecycleId ?? item.Id;
+
+        private static void SyncCollection(ObservableCollection<AppItem> target, IEnumerable<AppItem> source, bool update, Func<AppItem, string>? keyOf = null)
         {
+            keyOf ??= item => item.Id;
             var desired = source.ToList();
-            var ids = desired.Select(x => x.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            for (int i = target.Count - 1; i >= 0; i--) if (!ids.Contains(target[i].Id)) target.RemoveAt(i);
+            var ids = desired.Select(keyOf).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            for (int i = target.Count - 1; i >= 0; i--) if (!ids.Contains(keyOf(target[i]))) target.RemoveAt(i);
             for (int i = 0; i < desired.Count; i++)
             {
                 int existing = -1;
-                for (int j = i; j < target.Count; j++) if (target[j].Id == desired[i].Id) { existing = j; break; }
+                for (int j = i; j < target.Count; j++) if (keyOf(target[j]) == keyOf(desired[i])) { existing = j; break; }
                 if (existing < 0) target.Insert(i, desired[i]);
                 else
                 {
@@ -1207,6 +1220,7 @@ namespace EricGameLauncher
                     ItemService.RemoveItem(item.Id, null);
                     SyncFromCore();
                     RefreshView();
+                    ShowSuccessNotification(string.Format(Text.T("Notify_Deleted"), ItemDisplayName(item)));
                 }
             }
             catch (Exception ex) { LogService.Write("App", "MenuDel_Click failed", ex); }
@@ -1249,7 +1263,7 @@ namespace EricGameLauncher
                 bool canValidateSteam = ScanService.CanValidateSteam;
                 bool canValidateEpic = ScanService.CanValidateEpic;
 
-                var allItems = _allItems.Concat(_recycleItems).ToList();
+                var allItems = _allItems.ToList();
                 var (newGames, existingGames) = ScanService.Classify(scannedGames ?? new List<ScannedGame>(), allItems);
 
                 LogService.Write("Scan", $"MenuScan_Click classification existing={existingGames.Count} new={newGames.Count}");
@@ -1294,8 +1308,9 @@ namespace EricGameLauncher
         {
             try
             {
-                ScanService.DeleteInvalidGames(games);
+                int removed = ScanService.DeleteInvalidGames(games);
                 SyncFromCore();
+                if (removed > 0) ShowSuccessNotification(string.Format(Text.T("Notify_InvalidRemoved"), removed));
             }
             catch (Exception ex) { LogService.Write("App", "DeleteInvalidGames failed", ex); }
         }
@@ -1318,6 +1333,7 @@ namespace EricGameLauncher
                 var addedCount = ItemService.ImportGames(games);
                 SyncFromCore();
                 _ = ConfigService.RefreshGlobalAsync();
+                if (addedCount > 0) ShowSuccessNotification(string.Format(Text.T("Notify_Imported"), addedCount));
                 LogService.Write("Scan", $"ImportScannedGames completed imported={addedCount}");
             }
             catch (Exception ex) { LogService.Write("App", "ImportScannedGames failed", ex); }
@@ -1368,6 +1384,7 @@ namespace EricGameLauncher
                     RefreshView();
                     PropertyControl.CommitDraft();
                     PropertyControl.ClosePanel();
+                    ShowSuccessNotification(string.Format(Text.T(isNew ? "Notify_Added" : "Notify_Updated"), ItemDisplayName(item)));
                     LogService.Write("App", $"PropertyPanel_SaveRequested completed id={item.Id} isNew={isNew}");
                 }
                 catch (Exception ex) { ShowOperationError(ex); }
@@ -1391,6 +1408,7 @@ namespace EricGameLauncher
                     SyncFromCore();
                     RefreshView();
                     PropertyControl.ClosePanel();
+                    if (!isNew) ShowSuccessNotification(string.Format(Text.T("Notify_Deleted"), ItemDisplayName(item)));
                     LogService.Write("App", $"PropertyPanel_DeleteRequested completed id={item.Id} isNew={isNew}");
                 }
                 catch (Exception ex) { LogService.Write("App", "PropertyPanel_DeleteRequested failed", ex); }
@@ -1660,6 +1678,8 @@ namespace EricGameLauncher
                 SyncFromCore();
                 control.SetItems(_recycleItems);
             };
+            control.Failed += message => ShowOperationError(new InvalidOperationException(message));
+            control.NotifyRequested += (level, message) => Notifications.Notify(message, level);
             return control;
         }
 

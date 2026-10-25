@@ -46,9 +46,9 @@ public static class ScanService
             }
             else
             {
-                string gameNorm = NormalizePath(game.ExePath);
-                exists = allItems.Any(a =>
-                    (!string.IsNullOrEmpty(a.ExePath) && NormalizePath(a.ExePath) == gameNorm) ||
+                string gameNorm = PathHashHelper.PathKey(game.ExePath);
+                exists = gameNorm.Length > 0 && allItems.Any(a =>
+                    (PathHashHelper.PathKey(a.ExePath) == gameNorm) ||
                     string.Equals(a.Title, game.Title, StringComparison.OrdinalIgnoreCase));
             }
 
@@ -85,7 +85,7 @@ public static class ScanService
 
                 bool found = scannedGames.Any(game =>
                     game.PlatformBadge == platformName &&
-                    ((!string.IsNullOrEmpty(item.ExePath) && NormalizePath(item.ExePath) == NormalizePath(game.ExePath)) ||
+                    ((!string.IsNullOrEmpty(item.ExePath) && PathHashHelper.PathKey(item.ExePath) == PathHashHelper.PathKey(game.ExePath)) ||
                      string.Equals(item.Title, game.Title, StringComparison.OrdinalIgnoreCase)));
 
                 if (!found)
@@ -204,13 +204,6 @@ public static class ScanService
             LogService.Write("Scan", $"DeleteInvalidGames removed={removed}");
             return removed;
         }
-    }
-
-    private static string NormalizePath(string? p)
-    {
-        if (string.IsNullOrEmpty(p)) return string.Empty;
-        try { return Path.GetFullPath(p).ToUpperInvariant(); }
-        catch { return p.ToUpperInvariant(); }
     }
 
     private static bool IsFileOrDirectoryExists(string? rawPath)

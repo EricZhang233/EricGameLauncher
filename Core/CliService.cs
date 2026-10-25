@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -271,6 +271,8 @@ public static class CliService
                     {
                         WriteLine(string.Format(Text.Cli("FmtItemEntry"), item.Id, item.Title ?? Text.Cli("LblUntitled")));
                         WriteLine(string.Format(Text.Cli("FmtItemPath"), item.ExePath ?? Text.Cli("LblNA")));
+                        if (!string.IsNullOrEmpty(item.RecycleId))
+                            WriteLine(string.Format(Text.Cli("FmtRecycleId"), item.RecycleId));
                         if (item.Status == (int)AppItemStatus.PendingDeletion)
                             WriteLine(Text.Cli("LblStatusPending"), ConsoleColor.DarkYellow);
                         else
@@ -429,21 +431,40 @@ public static class CliService
         try
         {
             var id = opts.GetValueOrDefault("id");
+            var recycleId = opts.GetValueOrDefault("recycle-id");
             var title = opts.GetValueOrDefault("title");
             var all = opts.ContainsKey("all");
 
             if (all)
             {
-                var recycleItems = ConfigService.LoadRecycleBinItems();
-                var count = recycleItems.Count;
-                ItemService.RestoreAll();
-                WriteLine(string.Format(Text.Cli("MsgRestoredCount"), count), ConsoleColor.Green);
+                var (restored, skipped) = ItemService.RestoreAll();
+                WriteLine(string.Format(Text.Cli("MsgRestoreAllFmt"), restored, skipped), ConsoleColor.Green);
                 return 0;
             }
 
-            ItemService.RestoreItem(id, title);
-            WriteLine(string.Format(Text.Cli("MsgRestored"), title ?? id), ConsoleColor.Green);
+            string? key = !string.IsNullOrEmpty(recycleId) ? recycleId : id;
+            if (string.IsNullOrEmpty(key) && string.IsNullOrEmpty(title))
+            {
+                WriteLine(Text.Cli("ErrIdRequired"), ConsoleColor.Red);
+                return 1;
+            }
+
+            if (string.IsNullOrEmpty(recycleId) && !string.IsNullOrEmpty(id) &&
+                ConfigService.LoadRecycleBinItems().Count(x => x.Id.Equals(id, StringComparison.OrdinalIgnoreCase)) > 1)
+            {
+                WriteLine(Text.Cli("ErrRestoreAmbiguousId"), ConsoleColor.Red);
+                return 1;
+            }
+
+            ItemService.RestoreItem(key, title);
+            WriteLine(string.Format(Text.Cli("MsgRestored"), title ?? key), ConsoleColor.Green);
             return 0;
+        }
+        catch (ItemConflictException ex)
+        {
+            WriteLine(Text.Cli(ex.Key), ConsoleColor.Red);
+            try { LogService.Write("CLI", "CmdRestore conflict", ex); } catch { }
+            return 1;
         }
         catch (InvalidOperationException)
         {
@@ -1446,6 +1467,7 @@ public static class CliService
             item.Platform,
             item.PlatformName,
             item.IconPath,
+            item.RecycleId,
             item.MgrPath,
             item.AlternativeLaunchCommand,
             item.UseAlternativeLaunch,
@@ -1475,7 +1497,7 @@ public static class CliService
         new("edit",           ["--id", "--title", "--path", "--admin", "--icon", "--platform", "--mgr", "--mgr-admin", "--alt", "--alt-admin", "--alt-enable", "--alongside", "--alongside-admin", "--alongside-enable", "--custom-add", "--custom-remove", "--custom-clear"],
                                                                        "Help_CmdEditDesc",           "Help_Edit_Text"),
         new("remove",         ["--id", "--title", "--permanent"],      "Help_CmdRemoveDesc",         "Help_Remove_Text"),
-        new("restore",        ["--id", "--title", "--all"],            "Help_CmdRestoreDesc",        "Help_Restore_Text"),
+        new("restore",        ["--id", "--recycle-id", "--title", "--all"], "Help_CmdRestoreDesc",   "Help_Restore_Text"),
         new("recycle",        ["--list", "--mark", "--empty", "--purge", "--clean", "--json"],
                                                                        "Help_CmdRecycleDesc",        "Help_Recycle_Text"),
         new("scan",           ["--steam", "--epic", "--xbox", "--all", "--classify", "--invalid", "--delete-invalid", "--import", "--json"],

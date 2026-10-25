@@ -16,19 +16,20 @@ Use the CLI when the user wants to control their EricGameLauncher library from a
 4. Running the CLI with no recognized command prints the help screen.
 5. The `-debug` flag switches to local data and cache paths.
 6. In JSON mode stdout contains JSON only; diagnostics and progress go to stderr. Mutation commands return a JSON success/exitCode result. Unknown commands return a nonzero exit code.
-7. Item IDs remain stable when paths are edited. Add, edit and scan import check active and recycled paths for duplicates. A failed launch returns an error; it does not mean the game was started.
-8. A corrupt configuration is preserved and writes fail explicitly. Restore its `.bak` or repair it before retrying. Concurrent item modifications are serialized across processes.
+7. Item IDs remain stable when paths are edited and are preserved when an item moves to the recycle bin. Add, edit and scan import check only the active list for duplicate paths: an item may be re-added while an older copy stays in the recycle bin. Each recycled entry also carries a `recycleId` (shown by `list --recycle` and emitted in JSON); use `restore --recycle-id <recycleId>` when several recycled entries share one item ID.
+8. A failed launch returns an error; it does not mean the game was started.
+9. A corrupt configuration is preserved and writes fail explicitly. Restore its `.bak` or repair it before retrying. Concurrent item modifications are serialized across processes.
 
 ## Commands
 
-- `list [--recycle] [--json]` — list active items or the recycle bin
+- `list [--recycle] [--json]` — list active items or the recycle bin (recycle entries include `recycleId`)
 - `launch --id <id> | --title <title> | --path <path> [--admin] [--alt] [--alongside]` — launch a game or application
 - `platform --id <id> | --title <title>` — launch the platform manager (Steam, Epic, Xbox)
 - `add --title <title> --path <path> [--admin] [--icon <path>] [--platform <name>] [--mgr <path>] [--alt <path>] [--alongside <path>]` — add a new item
 - `edit --id <id> [options]` — edit an item; run `edit --help` for all supported fields
 - `remove --id <id> | --title <title> [--permanent]` — remove an item (to recycle bin by default)
-- `restore --id <id> | --title <title> | --all` — restore items from the recycle bin
-- `recycle --list | --mark <id> | --empty | --purge | --clean [--json]` — manage the recycle bin
+- `restore --id <id> | --recycle-id <recycleId> | --title <title> | --all` — restore items from the recycle bin; restore fails if the main list already holds the same path or ID
+- `recycle --list | --mark <id> | --empty | --purge | --clean [--json]` — manage the recycle bin (for `--mark`, an item ID or recycle ID is accepted)
 - `scan [--steam | --epic | --xbox | --all] [--classify] [--invalid] [--delete-invalid] [--import] [--json]` — scan for installed games
 - `search <query> [--json]` — search by title, path, pinyin, or pinyin initials
 - `sort --list | --id <id> --move-up | --move-down | --swap-with <id>` — reorder items

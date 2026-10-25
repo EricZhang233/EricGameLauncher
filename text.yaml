@@ -1,7 +1,17 @@
-﻿"Zh-CN":
+"Zh-CN":
   _LangName: "简体中文"
   DataFile_Error: "无法读写配置，已保留原文件：{0}。请修复配置或从 .bak 恢复后重试。"
   DataFile_Busy: "配置正在被其他进程使用，请重试。"
+  ErrRestoreDuplicatePath: "已在主列表，无法还原"
+  ErrRestoreIdConflict: "标识冲突，无法还原"
+  Notify_Added: "已添加：{0}"
+  Notify_Updated: "已保存：{0}"
+  Notify_Deleted: "已移入回收站：{0}"
+  Notify_Restored: "已还原：{0}"
+  Notify_RecycleCleared: "已清空回收站"
+  Notify_PendingDeleted: "已进入 72 小时删除倒计时：{0}"
+  Notify_Imported: "已导入 {0} 个游戏"
+  Notify_InvalidRemoved: "已移除 {0} 个失效条目"
   Icon_FileMissing: "图标文件不存在。"
   Source_Loading: "正在加载…"
   Launch_Failed: "无法启动，请检查路径、关联程序或权限。"
@@ -151,6 +161,16 @@
   _LangName: "English"
   DataFile_Error: "Cannot access configuration; original preserved: {0}. Repair it or restore the .bak file and retry."
   DataFile_Busy: "Configuration is busy in another process. Please retry."
+  ErrRestoreDuplicatePath: "Already in the main list"
+  ErrRestoreIdConflict: "Conflicting ID"
+  Notify_Added: "Added: {0}"
+  Notify_Updated: "Saved: {0}"
+  Notify_Deleted: "Moved to recycle bin: {0}"
+  Notify_Restored: "Restored: {0}"
+  Notify_RecycleCleared: "Recycle bin cleared"
+  Notify_PendingDeleted: "Deletion countdown started: {0}"
+  Notify_Imported: "Imported {0} game(s)"
+  Notify_InvalidRemoved: "Removed {0} invalid item(s)"
   Icon_FileMissing: "The icon file does not exist."
   Source_Loading: "Loading…"
   Launch_Failed: "Could not launch. Check the path, file association, or permissions."
@@ -308,6 +328,9 @@ CLI:
   ErrNoManager: "No platform manager available for this item."
   ErrDuplicatePath: "An item with this path already exists."
   ErrNotInRecycle: "Item not found in recycle bin."
+  ErrRestoreDuplicatePath: "Cannot restore: an item with the same path already exists in the main list. Remove that item first."
+  ErrRestoreIdConflict: "Cannot restore: an item with the same ID already exists in the main list."
+  ErrRestoreAmbiguousId: "Multiple recycled items share this ID. Use --recycle-id to choose one."
   ErrNoChanges: "No changes specified."
   ErrAtTop: "Item is already at the top."
   ErrAtBottom: "Item is already at the bottom."
@@ -365,6 +388,7 @@ CLI:
   MsgRemoved: "{0}: {1}"
   MsgRestored: "Restored: {0}"
   MsgRestoredCount: "Restored {0} item(s)."
+  MsgRestoreAllFmt: "Restored {0} item(s); skipped {1} item(s) whose path already exists in the main list."
   MsgRecycleEmptied: "Recycle bin emptied ({0} item(s) removed)."
   MsgMarkedPending: "Marked '{0}' for deletion (72h countdown)."
   MsgMarkedAllPending: "Marked {0} item(s) for deletion (72h countdown)."
@@ -467,6 +491,7 @@ CLI:
   # == Format Strings ==
   FmtItemEntry: "  [{0}] {1}"
   FmtItemPath: "    Path: {0}"
+  FmtRecycleId: "    Recycle ID: {0}"
   FmtItemPlatform: "    Platform: {0}"
   FmtAdminSuffix: " (admin)"
   FmtSortListItem: "  [{0}] {1}  (id={2}, order={3})"
@@ -518,7 +543,7 @@ CLI:
   Help_List_Text: |
     Usage: EricGameLauncher.Cli.exe list [options]
 
-      --recycle           List recycle bin items
+      --recycle           List recycle bin items (each item shows its recycle ID)
       --json              Output in JSON format
   Help_Launch_Text: |
     Usage: EricGameLauncher.Cli.exe launch [options]
@@ -545,6 +570,8 @@ CLI:
       --mgr <path>        Manager executable path
       --alt <path>        Alternative launch command
       --alongside <path>  Alongside launch command
+
+    An item already in the recycle bin with the same path is not treated as a duplicate.
   Help_Edit_Text: |
     Usage: EricGameLauncher.Cli.exe edit [options]
 
@@ -575,13 +602,17 @@ CLI:
     Usage: EricGameLauncher.Cli.exe restore [options]
 
       --id <id>           Restore by item ID
+      --recycle-id <id>   Restore by recycle ID (use when several items share an ID)
       --title <title>     Restore by title (first match)
-      --all               Restore all items
+      --all               Restore all non-conflicting items
+
+    A recycled item keeps its original item ID. Restore fails when the main list
+    already contains the same path or ID. Recycle IDs are shown by: list --recycle.
   Help_Recycle_Text: |
     Usage: EricGameLauncher.Cli.exe recycle [options]
 
-      --list              List recycle bin items
-      --mark <id>         Mark one item for deletion (72h countdown)
+      --list              List recycle bin items (with recycle IDs)
+      --mark <id>         Mark one item for deletion (72h countdown; item or recycle ID)
       --empty             Mark all items for deletion (72h countdown)
       --purge             Permanently empty the recycle bin immediately
       --clean             Auto-clean expired items (72h+)
