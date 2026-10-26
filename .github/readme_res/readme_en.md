@@ -16,7 +16,6 @@
   <a href="../../readme.md">For the latest updates, please refer to the Chinese README.</a>
 </div>
 <div align="center">
-  <img src="../../ico.ico" width="104" height="104" alt="Eric Game Launcher" />
 
 # Eric Game Launcher
 
@@ -31,10 +30,10 @@
 [![Windows 11](https://img.shields.io/badge/Windows-11%2024H2%2B-0078D4?logo=microsoft)](https://www.microsoft.com/windows)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?logo=gnu)](https://www.gnu.org/licenses/gpl-3.0.html)
 
-<a href="#highlights">Highlights</a> • <a href="#quickstart">Quick Start</a> • <a href="#features">Features</a> • <a href="#cli">CLI</a> • <a href="#settings">Settings</a> • <a href="#architecture">Architecture</a> • <a href="#faq">FAQ</a> • <a href="#thanks">Thanks</a>
+<a href="#highlights">Highlights</a> • <a href="#quickstart">Quick Start</a> • <a href="#features">Features</a> • <a href="#cli">CLI</a> • <a href="#settings">Settings</a> • <a href="#architecture">Architecture</a> • <a href="#faq">FAQ</a> • <a href="#thanks">Thanks</a> • <a href="../../readme.md">中文</a>
 
 <div align="center">
-  <img src="readme.overview.gif" width="100%" alt="Main window: icon grid, hover hint, Pinyin search and icon size adjustment" />
+  <img src="banner-en-rounded.png" width="80%" alt="Banner" />
 </div>
 
 </div>
@@ -82,6 +81,10 @@
 <a name="features"></a>
 
 ## Features
+
+<div align="center">
+  <img src="readme.overview.gif" width="100%" alt="Main window: icon grid, hover hint, Pinyin search and icon size adjustment" />
+</div>
 
 ### Every game in one grid
 

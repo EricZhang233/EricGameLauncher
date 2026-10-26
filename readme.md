@@ -13,11 +13,7 @@
   8. 非中文版本的readme顶部的语言切换器仅保留指向主readme(中文版)的链接，不互相跳转。非中文版本的入口仅在主readme中统一显示。
 -->
 
-<div align="right">
-  <a href=".github/readme_res/readme_en.md">English</a>
-</div>
 <div align="center">
-  <img src="ico.ico" width="104" height="104" alt="Eric Game Launcher" />
 
 # Eric Game Launcher
 
@@ -32,10 +28,10 @@
   [![Windows 11](https://img.shields.io/badge/Windows-11%2024H2%2B-0078D4?logo=microsoft)](https://www.microsoft.com/windows)
   [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?logo=gnu)](https://www.gnu.org/licenses/gpl-3.0.html)
 
-<a href="#highlights">亮点速览</a> • <a href="#quickstart">快速开始</a> • <a href="#features">功能详解</a> • <a href="#cli">命令行</a> • <a href="#settings">设置</a> • <a href="#architecture">技术架构</a> • <a href="#faq">常见问题</a> • <a href="#thanks">致谢</a>
+<a href="#highlights">亮点速览</a> • <a href="#quickstart">快速开始</a> • <a href="#features">功能详解</a> • <a href="#cli">命令行</a> • <a href="#settings">设置</a> • <a href="#architecture">技术架构</a> • <a href="#faq">常见问题</a> • <a href="#thanks">致谢</a> • <a href=".github/readme_res/readme_en.md">English</a>
 
 <div align="center">
-  <img src=".github/readme_res/readme.overview.gif" width="100%" alt="主界面：图标网格、悬停提示、拼音搜索与图标大小调节" />
+  <img src=".github/readme_res/banner-rounded.png" width="80%" alt="宣传头图" />
 </div>
 </div>
 
@@ -64,7 +60,7 @@
 | 项目 | 要求 |
 | :--- | :--- |
 | 操作系统 | Windows 11 24H2（Build 26100）或更高版本，x64 |
-| 运行依赖 | [.NET 10 桌面运行时](https://dotnet.microsoft.com/download/dotnet/10.0)及 Windows App SDK 1.8 运行时，需单独安装 |
+| 运行依赖 | [.NET 10 桌面运行时](https://dotnet.microsoft.com/download/dotnet/10.0)及 Windows App SDK 1.8 运行时，缺失时自动安装 |
 | 下载体积 | 不足 15 MB；程序自身免安装，解压即用 |
 
 ### 三步上手
@@ -82,6 +78,10 @@
 <a name="features"></a>
 
 ## 功能详解
+
+<div align="center">
+  <img src=".github/readme_res/readme.overview.gif" width="100%" alt="主界面：图标网格、悬停提示、拼音搜索与图标大小调节" />
+</div>
 
 ### 一屏收纳你的全部游戏
 
