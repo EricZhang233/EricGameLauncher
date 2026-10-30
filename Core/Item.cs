@@ -143,6 +143,9 @@ public static class PathHashHelper
 
 public class AppItem : INotifyPropertyChanged
 {
+    public bool IsPlatform { get; set; }
+    public bool Pin { get; set; }
+    public long LaunchCount { get; set; }
     internal static bool SuppressInitLogs = false;
 
     private bool _isLoading;
@@ -602,7 +605,9 @@ public class AppItem : INotifyPropertyChanged
     }
 
     [YamlIgnore]
-    public string? PlatformName => !string.IsNullOrEmpty(Platform) ? Platform : (!string.IsNullOrEmpty(ExePath) ? GamePlatformHelper.GetPlatformDisplayName(ExePath) : null);
+    public string? PlatformName => !string.IsNullOrEmpty(Platform) && !string.Equals(Platform, "User", StringComparison.OrdinalIgnoreCase)
+        ? Platform
+        : (!string.IsNullOrEmpty(ExePath) ? GamePlatformHelper.GetPlatformDisplayName(ExePath) : null) ?? Platform;
 
     [YamlIgnore]
     public bool HasManagerOrDefault => !string.IsNullOrEmpty(RuntimeManagerPath);
@@ -642,6 +647,10 @@ public class AppItem : INotifyPropertyChanged
 
 public class AppItemDto
 {
+    [YamlMember(Alias = "isplatform")]
+    public bool? IsPlatform { get; set; }
+    [YamlMember(Alias = "pin")]
+    public bool? Pin { get; set; }
     [YamlMember(Alias = "id")]
     public string Id { get; set; } = string.Empty;
 
@@ -676,6 +685,8 @@ public class AppItemDto
         return new AppItemDto
         {
             Id = vm.Id,
+            IsPlatform = vm.IsPlatform,
+            Pin = vm.Pin,
             Status = vm.Status,
             DeletedAt = vm.DeletedAt,
             Title = vm.Title,
@@ -703,6 +714,8 @@ public class AppItemDto
         var item = new AppItem
         {
             ExePath = Actions?.Main?.Path,
+            IsPlatform = IsPlatform ?? PlatformRecognition.IsPlatform(Actions?.Main?.Path),
+            Pin = Pin ?? (IsPlatform ?? PlatformRecognition.IsPlatform(Actions?.Main?.Path)),
             IsAdmin = Actions?.Main?.IsAdmin ?? false,
             Id = string.IsNullOrEmpty(Id) ? PathHashHelper.GetPathHash(Actions?.Main?.Path ?? "") : Id,
             Status = Status,

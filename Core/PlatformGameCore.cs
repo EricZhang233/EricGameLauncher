@@ -20,6 +20,9 @@ public class ScannedGame
     public string PlatformBadge { get; set; } = string.Empty;
 
     [System.Text.Json.Serialization.JsonIgnore]
+    public string? ManagerPath { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
     public string? ItemId { get; set; }
 }
 
@@ -45,7 +48,8 @@ public static class GamePlatformHelper
     {
         [LauncherConstants.SteamProtocol] = new GamePlatformInfo { PlatformName = "Steam", DefaultLauncherPath = "steam://open/main", UrlProtocol = LauncherConstants.SteamProtocol },
         [LauncherConstants.EpicProtocol] = new GamePlatformInfo { PlatformName = "Epic Games", DefaultLauncherPath = LauncherConstants.EpicProtocol, UrlProtocol = LauncherConstants.EpicProtocol },
-        [LauncherConstants.XboxProtocol] = new GamePlatformInfo { PlatformName = "Xbox", DefaultLauncherPath = LauncherConstants.XboxProtocol, UrlProtocol = LauncherConstants.XboxProtocol }
+        [LauncherConstants.XboxProtocol] = new GamePlatformInfo { PlatformName = "Xbox", DefaultLauncherPath = LauncherConstants.XboxProtocol, UrlProtocol = LauncherConstants.XboxProtocol },
+        ["googleplaygames://"] = new GamePlatformInfo { PlatformName = "Google Play Games", UrlProtocol = "googleplaygames://" }
     };
 
     public static GamePlatformInfo? DetectPlatform(string url)
@@ -65,6 +69,9 @@ public static class GamePlatformHelper
                 return kvp.Value;
             }
         }
+
+        if (WeGameHelper.IsGameLauncher(url))
+            return new GamePlatformInfo { PlatformName = "WeGame", DefaultLauncherPath = WeGameHelper.FindManagerPath() };
 
         LogService.Write("Platform", "DetectPlatform no match");
         return null;

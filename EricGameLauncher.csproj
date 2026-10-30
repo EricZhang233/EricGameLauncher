@@ -88,14 +88,13 @@
 
   <ItemGroup>
     <Compile Include="Test\ProductionAccess.cs" />
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WPF" />
     <PackageReference Include="CommunityToolkit.WinUI.UI.Controls" Version="7.1.2" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260101001" />
     <PackageReference Include="WinUIEx" Version="2.4.0" />
-    <PackageReference Include="System.Drawing.Common" Version="8.0.8" />
     <PackageReference Include="TinyPinyin.Net" Version="1.0.2" />
     <PackageReference Include="CommunityToolkit.WinUI.UI.Controls.Markdown" Version="7.1.2" />
     <PackageReference Include="YamlDotNet" Version="12.0.2" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
   </ItemGroup>
 
   <ItemGroup>

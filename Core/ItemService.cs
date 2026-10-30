@@ -11,6 +11,8 @@ public static class ItemService
     {
         var item = new AppItem { Title = title };
         item.ExePath = path;
+        item.IsPlatform = PlatformRecognition.IsPlatform(path);
+        item.Pin = item.IsPlatform;
         item.IsAdmin = admin;
         if (!string.IsNullOrEmpty(icon)) item.IconPath = icon;
         if (!string.IsNullOrEmpty(platform)) item.Platform = platform;
@@ -24,6 +26,7 @@ public static class ItemService
     public static void CopyContent(AppItem target, AppItem source)
     {
         target.Title = source.Title; target.ExePath = source.ExePath; target.IconPath = source.IconPath;
+        target.IsPlatform = source.IsPlatform; target.Pin = source.Pin;
         target.IsAdmin = source.IsAdmin; target.MgrPath = source.MgrPath; target.IsMgrAdmin = source.IsMgrAdmin;
         target.AlternativeLaunchCommand = source.AlternativeLaunchCommand; target.UseAlternativeLaunch = source.UseAlternativeLaunch; target.IsAltAdmin = source.IsAltAdmin;
         target.AlongsideCommand = source.AlongsideCommand; target.RunAlongside = source.RunAlongside; target.IsAlongsideAdmin = source.IsAlongsideAdmin;
@@ -379,7 +382,8 @@ public static class ItemService
             {
                 string key = PathHashHelper.PathKey(game.ExePath);
                 if (key.Length == 0 || !keys.Add(key)) continue;
-                items.Add(CreateItem(game.Title, game.ExePath, platform: game.PlatformBadge));
+                if (items.Any(item => WeGameHelper.MatchesLaunchPath(game, item.ExePath))) continue;
+                items.Add(CreateItem(game.Title, game.ExePath, platform: game.PlatformBadge, mgr: game.ManagerPath));
                 count++;
             }
         });

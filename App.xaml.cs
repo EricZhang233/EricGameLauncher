@@ -26,6 +26,7 @@ namespace EricGameLauncher
                 {
                     LogService.Write("Startup", "OnLaunched start");
                     ConfigService.Initialize();
+                    JumpListService.Initialize();
                     QuickStartService.SyncAutoStart();
 
                     if (StartupArgs.IsServiceStart)

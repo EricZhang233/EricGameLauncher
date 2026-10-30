@@ -7,7 +7,9 @@ public static class ScanService
         var steam = Task.Run(ScanSteam, cancellationToken);
         var epic = Task.Run(ScanEpic, cancellationToken);
         var xbox = ScanXboxAsync();
-        var groups = await Task.WhenAll(steam, epic, xbox).WaitAsync(cancellationToken);
+        var google = Task.Run(GooglePlayGamesHelper.GetInstalledGames, cancellationToken);
+        var wegame = Task.Run(ScanWeGame, cancellationToken);
+        var groups = await Task.WhenAll(steam, epic, xbox, google, wegame).WaitAsync(cancellationToken);
         return groups.SelectMany(x => x).ToList();
     }
 
@@ -20,6 +22,8 @@ public static class ScanService
     {
         return EpicGamesHelper.GetAllInstalledGames();
     }
+
+    public static List<ScannedGame> ScanWeGame() => WeGameHelper.GetInstalledGames();
 
     public static async Task<List<ScannedGame>> ScanXboxAsync()
     {
@@ -48,7 +52,7 @@ public static class ScanService
             {
                 string gameNorm = PathHashHelper.PathKey(game.ExePath);
                 exists = gameNorm.Length > 0 && allItems.Any(a =>
-                    (PathHashHelper.PathKey(a.ExePath) == gameNorm) ||
+                    (PathHashHelper.PathKey(a.ExePath) == gameNorm) || WeGameHelper.MatchesLaunchPath(game, a.ExePath) ||
                     string.Equals(a.Title, game.Title, StringComparison.OrdinalIgnoreCase));
             }
 

@@ -181,12 +181,16 @@ internal static class LegacyFeatures
         string beforeSetting = File.ReadAllText(ConfigService.SettingsFilePath);
         var unknown = await cli(["settings", "--set", "unrecognizedSetting=true", "--json"]);
         check(unknown.Code != 0 && File.ReadAllText(ConfigService.SettingsFilePath) == beforeSetting, "unknown setting is rejected without mutation");
-        foreach (var setting in new[] { "launchMode=triple", "closeAfterLaunch=maybe", "quickStart=maybe", "splashFadeIn=maybe", "splashFadeOut=maybe", "iconSize=31", "iconSize=513", "updateChannel=invalid", "windowWidth=399", "windowHeight=299", "windowX=invalid", "windowY=invalid" })
+        var listedSettings = await cli(["settings", "--list", "--json"]);
+        check(listedSettings.Code == 0 && !listedSettings.Output.Contains("splashFade", StringComparison.OrdinalIgnoreCase), "settings list omits removed animation switches");
+        foreach (var key in new[] { "splashFadeIn", "splashFadeOut" })
+            check((await cli(["settings", "--get", key, "--json"])).Code != 0, "removed animation setting cannot be read: " + key);
+        foreach (var setting in new[] { "launchMode=triple", "closeAfterLaunch=maybe", "quickStart=maybe", "splashFadeIn=false", "splashFadeOut=false", "iconSize=31", "iconSize=513", "updateChannel=invalid", "windowWidth=399", "windowHeight=299", "windowX=invalid", "windowY=invalid" })
         {
             var result = await cli(["settings", "--set", setting, "--json"]);
             check(result.Code != 0 && File.ReadAllText(ConfigService.SettingsFilePath) == beforeSetting, "setting validation preserves data: " + setting);
         }
-        foreach (var setting in new[] { "launchMode=double", "closeAfterLaunch=true", "splashFadeIn=false", "splashFadeOut=false", "iconSize=32", "iconSize=512", "updateChannel=latest", "appTitle=Round trip", "windowWidth=400", "windowHeight=300", "windowX=-1200", "windowY=-100" })
+        foreach (var setting in new[] { "launchMode=double", "closeAfterLaunch=true", "iconSize=32", "iconSize=512", "updateChannel=latest", "appTitle=Round trip", "windowWidth=400", "windowHeight=300", "windowX=-1200", "windowY=-100" })
         {
             var result = await cli(["settings", "--set", setting, "--json"]);
             check(result.Code == 0, "valid setting is saved: " + setting);

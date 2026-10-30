@@ -52,12 +52,6 @@
                         VerticalAlignment="Center"
                         Margin="0,0,12,0">
 
-                <Button x:Name="ExitSortButton"
-                        Visibility="Collapsed"
-                        Style="{StaticResource TitleBarButtonStyle}"
-                        Width="Auto" Padding="12,0"
-                        Click="ExitSortButton_Click"/>
-
                 <local:AnnouncementFlyoutControl x:Name="AnnouncementControl"/>
                 
                 <local:SearchFlyoutControl x:Name="SearchControl"/>
@@ -89,12 +83,6 @@
                                 </MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
                             
-                            
-                            <MenuFlyoutItem x:Name="MenuSortItem" Text="" Click="MenuSort_Click">
-                                <MenuFlyoutItem.Icon>
-                                    <FontIcon Glyph="&#xE70F;"/>
-                                </MenuFlyoutItem.Icon>
-                            </MenuFlyoutItem>
                             
                             <MenuFlyoutItem x:Name="MenuRecycleBinItem" Text="" Click="MenuRecycleBin_Click">
                                 <MenuFlyoutItem.Icon>
@@ -229,15 +217,15 @@
                   Padding="4,0,4,0"
                   DesiredWidth="{x:Bind DesiredIconWidth, Mode=OneWay}"
                   StretchContentForSingleRow="False"
-                  SelectionMode="None"
+                  SelectionMode="Single"
                   ScrollViewer.VerticalScrollBarVisibility="Auto"
                   ScrollViewer.VerticalScrollMode="Enabled"
                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                   ScrollViewer.HorizontalScrollMode="Disabled"
                   ScrollViewer.IsDeferredScrollingEnabled="False"
-                  CanReorderItems="False"
-                  CanDragItems="False"
-                  AllowDrop="False"
+                  CanReorderItems="True"
+                  CanDragItems="True"
+                  AllowDrop="True"
                   DragItemsStarting="AppGrid_DragItemsStarting"
                   DragItemsCompleted="AppGrid_DragItemsCompleted"
                   IsItemClickEnabled="True"

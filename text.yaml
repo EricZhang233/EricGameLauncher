@@ -1,4 +1,9 @@
 "Zh-CN":
+  Property_IsPlatform: "这是个游戏平台"
+  Property_Pin: "在 Jump List 中显示"
+  JumpList_Pinned: "已固定"
+  JumpList_Frequent: "常用"
+  ScanWeGameFailed: "无法读取 WeGame 安装清单，请确认客户端配置完整且版本受支持。"
   _LangName: "简体中文"
   DataFile_Error: "无法读写配置，已保留原文件：{0}。请修复配置或从 .bak 恢复后重试。"
   DataFile_Busy: "配置正在被其他进程使用，请重试。"
@@ -50,8 +55,6 @@
   Menu_RunManager: "运行管理器"
   Menu_Scan: "扫描"
   Menu_Settings: "设置"
-  Menu_Sort: "拖动排序"
-  Sort_Exit: "退出排序"
   Menu_SystemIntegration: "快捷方式"
   Menu_Uninstall: "卸载"
   Migration_OverlaySubTitle: "这可能需要几秒钟，完成后应用将自动重启。"
@@ -119,10 +122,6 @@
   Settings_PortableMode: "便携"
   Settings_QuickStart: "快速启动"
   Settings_QuickStart_Desc: "启动器将以后台服务方式开机自启，并在后台预加载与预热资源；关闭窗口后仍以无界面后台常驻，再次启动可快速进入。如需澈底退出，可在「更多」菜单底部选择「退出」（立即结束窗口与后台宿主，本设置保持不变），或使用任务栏右键「结束任务」（Windows 11 24H2 及以上）。"
-  Settings_SplashAnimation: "启动动画"
-  Settings_SplashAnimation_Desc: "控制启动画面的渐入与渐出动画；关闭后启动画面直接显示或消失，启动会略快一些。该设置仅在开启「快速启动」时生效，未开启时启动画面始终保留动画。"
-  Settings_SplashFadeIn: "渐入"
-  Settings_SplashFadeOut: "渐出"
   Settings_SwitchToPortable: "迁移至便携模式"
   Settings_SwitchToSystem: "迁移至系统模式"
   Settings_SystemMode: "系统"
@@ -138,6 +137,9 @@
   TitleBar_CloseSearch: "清空并关闭搜索"
   TitleBar_SearchPlaceholder: "搜索..."
   Update_ChannelNote: "当前更新通道：{0}。可前往「设置」中切换。"
+  Update_Checking: "正在检查更新…"
+  Update_CheckFailed: "检查更新失败"
+  Update_PackageUnavailable: "未找到可用的更新包，请稍后重试。"
   Update_DialogCancel: "以后再说"
   Update_DialogConfirm: "立即更新"
   Update_DialogContent: "是否立即下载并更新？更新过程中程序将自动重启。"
@@ -158,6 +160,11 @@
   Update_OK: "确定"
   Update_Repair: "强制重装"
 "EN":
+  Property_IsPlatform: "This is a game platform"
+  Property_Pin: "Show in Jump List"
+  JumpList_Pinned: "Pinned"
+  JumpList_Frequent: "Frequent"
+  ScanWeGameFailed: "Unable to read the WeGame installation manifest. Check that the client configuration is intact and its version is supported."
   _LangName: "English"
   DataFile_Error: "Cannot access configuration; original preserved: {0}. Repair it or restore the .bak file and retry."
   DataFile_Busy: "Configuration is busy in another process. Please retry."
@@ -209,8 +216,6 @@
   Menu_RunManager: "Run Manager"
   Menu_Scan: "Scan"
   Menu_Settings: "Settings"
-  Menu_Sort: "Drag to reorder"
-  Sort_Exit: "Exit sorting"
   Menu_SystemIntegration: "Shortcuts"
   Menu_Uninstall: "Uninstall"
   Migration_OverlaySubTitle: "This may take a few seconds; the app will restart automatically when finished."
@@ -278,10 +283,6 @@
   Settings_PortableMode: "Portable"
   Settings_QuickStart: "Quick Start"
   Settings_QuickStart_Desc: "Runs the launcher as a background service with auto start at sign-in, preloading and warming up resources in the background. Closing the window keeps it resident without any interface, so the next launch enters quickly. To exit completely, choose Exit at the bottom of the More menu (it ends the window and the background host right away and keeps this setting unchanged), or right-click the taskbar entry and choose End task (Windows 11 24H2 or later)."
-  Settings_SplashAnimation: "Startup animation"
-  Settings_SplashAnimation_Desc: "Controls the splash fade-in and fade-out animations. When off, the splash appears or disappears instantly and startup is slightly faster. This setting applies only while Quick Start is enabled; with Quick Start off the splash always animates."
-  Settings_SplashFadeIn: "Fade in"
-  Settings_SplashFadeOut: "Fade out"
   Settings_SwitchToPortable: "Migrate to Portable Mode"
   Settings_SwitchToSystem: "Migrate to System Mode"
   Settings_SystemMode: "System"
@@ -297,6 +298,9 @@
   TitleBar_CloseSearch: "Clear and close search"
   TitleBar_SearchPlaceholder: "Search..."
   Update_ChannelNote: "Current update channel: {0}. You can switch it in Settings."
+  Update_Checking: "Checking for updates…"
+  Update_CheckFailed: "Update check failed"
+  Update_PackageUnavailable: "No update package is available. Please try again later."
   Update_DialogCancel: "Later"
   Update_DialogConfirm: "Update Now"
   Update_DialogContent: "Would you like to download and update now? The app will relaunch automatically."
@@ -347,8 +351,6 @@ CLI:
   ErrCloseAfterLaunch: "closeAfterLaunch must be 'true' or 'false'."
   ErrQuickStart: "quickStart must be 'true' or 'false'."
   ErrQuickStartApply: "Failed to register the quick start background service."
-  ErrSplashFadeIn: "splashFadeIn must be 'true' or 'false'."
-  ErrSplashFadeOut: "splashFadeOut must be 'true' or 'false'."
   ErrIconSize: "iconSize must be a number between 32 and 512."
   ErrUpdateChannel: "updateChannel must be 'stable' or 'latest'."
   ErrLang: "lang must be 'Zh-CN' or 'EN'."
@@ -485,6 +487,7 @@ CLI:
 
   # == Scan Labels ==
   ScanSteam: "Scanning Steam..."
+  ScanGoogle: "Scanning Google Play Games..."
   ScanEpic: "Scanning Epic Games..."
   ScanXbox: "Scanning Xbox/UWP..."
 
@@ -560,6 +563,8 @@ CLI:
       --id <id>           Launch platform manager by item ID
       --title <title>     Launch platform manager by title (first match)
   Help_Add_Text: |
+    --isplatform <bool>  Mark as a game platform; defaults Pin on when true.
+    --pin <bool>         Pin item; unpinned platforms are hidden from Tasks.
     Usage: EricGameLauncher.Cli.exe add [options]
 
       --title <title>     Item title (required)
@@ -573,6 +578,8 @@ CLI:
 
     An item already in the recycle bin with the same path is not treated as a duplicate.
   Help_Edit_Text: |
+    --isplatform <bool>  Set platform flag; first enabling defaults Pin on.
+    --pin <bool>         Set application-managed pin state for any item.
     Usage: EricGameLauncher.Cli.exe edit [options]
 
       --id <id>           Edit by item ID (required)
@@ -623,6 +630,8 @@ CLI:
       --steam             Scan Steam games
       --epic              Scan Epic games
       --xbox              Scan Xbox/UWP games
+      --google            Scan Google Play Games local encrypted library
+      --wegame            Scan WeGame local encrypted installation manifest
       --all               Scan all platforms (default)
       --classify          Show new/existing/invalid breakdown
       --invalid           Show only invalid (broken) games
@@ -646,8 +655,6 @@ CLI:
       launchMode          Launch mode (single / double)
       closeAfterLaunch    Auto-close after launch (true / false)
       quickStart          Run as background service with auto start (true / false)
-      splashFadeIn        Splash fade-in animation (true / false, applies only when quickStart is true)
-      splashFadeOut       Splash fade-out animation (true / false, applies only when quickStart is true)
       iconSize            Icon size in pixels (32-512)
       updateChannel       Update channel (stable / latest)
       githubToken         GitHub personal access token

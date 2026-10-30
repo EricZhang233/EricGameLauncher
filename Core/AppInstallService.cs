@@ -40,6 +40,7 @@ public static class AppInstallService
                 ShortcutResolver.CreateShortcut(exePath, StartMenuShortcutPath, Description);
 
                 LogService.Write("App", "Install Complete");
+                JumpListService.UpdateShortcutIds();
             }
             catch (Exception ex) { LogService.Write("App", "AppInstallService.Install failed", ex); throw; }
         }

@@ -37,6 +37,9 @@ async Task<(int Code, string Output, string Error)> Cli(params string[] argument
 
 try
 {
+    JumpListFeatures.Run(Check);
+    await WeGameFeatures.RunAsync(Check, Cli, root);
+    await LaunchCountFeatures.RunAsync(Check);
     await LegacyFeatures.RunAsync(Check, Cli, root);
     await IconFeatures.RunAsync(Check, root);
     await CoreGapFeatures.RunAsync(Check, root);

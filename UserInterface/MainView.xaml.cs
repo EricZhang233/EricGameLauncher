@@ -90,10 +90,10 @@ namespace EricGameLauncher
         }
 
         private UpdateService.ReleaseInfo? _pendingUpdate;
+        private bool _manualCheckInProgress;
         private bool _isUserInteracting = false;
         private bool _isRefreshPending = false;
         private bool _isDraggingItems;
-        private bool _isSortMode;
         private readonly Windows.UI.ViewManagement.UISettings _animationSettings = new();
         private int _refreshQueued;
         private string[]? _dragOrder;
@@ -488,8 +488,16 @@ namespace EricGameLauncher
 
         private async void MenuCheckUpdate_Click(object sender, RoutedEventArgs e)
         {
+            if (_manualCheckInProgress) return;
+            _manualCheckInProgress = true;
+            MenuCheckUpdateItem.IsEnabled = false;
             try { await ManualCheckAsync(); }
             catch (Exception ex) { if (!_lifetime.IsCancellationRequested) ShowOperationError(ex); }
+            finally
+            {
+                _manualCheckInProgress = false;
+                MenuCheckUpdateItem.IsEnabled = true;
+            }
         }
 
         private async Task ManualCheckAsync()
@@ -500,51 +508,7 @@ namespace EricGameLauncher
             using (LogService.StartOperation("Update", "ManualCheck"))
             {
                 LogService.Write("Update", "ManualCheck Start");
-                var status = await UpdateService.CheckUpdateStatusAsync(ConfigService.UpdateChannel).WaitAsync(_lifetime.Token);
-                if (_lifetime.IsCancellationRequested) return;
-                if (status.Release != null)
-                {
-                    if (status.HasUpdate)
-                    {
-                        var release = status.Release;
-                        _pendingUpdate = release;
-
-                        DispatcherQueue.TryEnqueue(() =>
-                        {
-                            HasUpdate = true;
-                        });
-
-                        if (status.IsForced)
-                        {
-                            await StartUpdateFlowAsync(release, true);
-                        }
-                        else
-                        {
-                            await ShowReleaseDialogAsync(release, hasUpdate: true);
-                        }
-                    }
-                    else
-                    {
-                        await ShowReleaseDialogAsync(status.Release, hasUpdate: false);
-                    }
-                }
-                else
-                {
-                    ContentDialog noUpdateDialog = new ContentDialog
-                    {
-                        Title = Text.T("Update_NoUpdateTitle"),
-                        Content = Text.T("Update_NoUpdateContent"),
-                        SecondaryButtonText = Text.T("Update_History"),
-                        CloseButtonText = Text.T("Update_OK"),
-                        DefaultButton = ContentDialogButton.Close,
-                        XamlRoot = this.XamlRoot
-                    };
-                    var noUpdateResult = await noUpdateDialog.ShowAsync();
-                    if (noUpdateResult == ContentDialogResult.Secondary)
-                    {
-                        await ShowUpdateHistoryAsync();
-                    }
-                }
+                await ShowReleaseDialogAsync(null, hasUpdate: false, checkForUpdates: true);
                 LogService.Write("Update", "ManualCheck End");
             }
         }
@@ -822,6 +786,7 @@ namespace EricGameLauncher
 
         private void ItemPanel_PointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
+            if (_isDraggingItems) return;
             if (sender is FrameworkElement fe && fe.DataContext is AppItem item)
             {
                 _hoveredItem = item;
@@ -844,6 +809,7 @@ namespace EricGameLauncher
             try
             {
                 _tooltipTimer?.Stop();
+                if (_isDraggingItems) return;
                 if (_hoveredItem != null && _hoveredElement != null && CustomIconToolTip != null && CustomIconToolTipText != null)
                 {
                     LogService.Write("App", $"TooltipTimer_Tick showing tooltip for itemId={_hoveredItem.Id} title={_hoveredItem.Title}");
@@ -918,9 +884,9 @@ namespace EricGameLauncher
             {
             try
             {
-                if (_isSortMode || _isDraggingItems || ConfigService.LaunchMode == "double")
+                if (_isDraggingItems || ConfigService.LaunchMode == "double")
                 {
-                    LogService.Write("App", "AppGrid_ItemClick ignored due to sorting or double launch mode");
+                    LogService.Write("App", "AppGrid_ItemClick ignored due to dragging or double launch mode");
                     return;
                 }
                 var item = e.ClickedItem as AppItem;
@@ -956,9 +922,9 @@ namespace EricGameLauncher
             {
             try
             {
-                if (_isSortMode || _isDraggingItems || ConfigService.LaunchMode != "double")
+                if (_isDraggingItems || ConfigService.LaunchMode != "double")
                 {
-                    LogService.Write("App", "AppGrid_DoubleTapped ignored due to sorting or single launch mode");
+                    LogService.Write("App", "AppGrid_DoubleTapped ignored due to dragging or single launch mode");
                     return;
                 }
                 if (AppGrid.SelectedItem is AppItem item)
@@ -1499,21 +1465,19 @@ namespace EricGameLauncher
 
         private void UpdateGridInteraction()
         {
-            bool sorting = _isSortMode;
             ApplyGridItemTransitions();
-            ExitSortButton.Visibility = sorting ? Visibility.Visible : Visibility.Collapsed;
-            AppGrid.CanDragItems = sorting;
-            AppGrid.CanReorderItems = sorting;
-            AppGrid.ReorderMode = sorting ? ListViewReorderMode.Enabled : ListViewReorderMode.Disabled;
-            AppGrid.AllowDrop = sorting;
-            AppGrid.IsItemClickEnabled = !sorting && ConfigService.LaunchMode != "double";
-            AppGrid.SelectionMode = sorting ? ListViewSelectionMode.Single : ListViewSelectionMode.None;
+            AppGrid.CanDragItems = true;
+            AppGrid.CanReorderItems = true;
+            AppGrid.ReorderMode = ListViewReorderMode.Enabled;
+            AppGrid.AllowDrop = true;
+            AppGrid.IsItemClickEnabled = ConfigService.LaunchMode != "double";
+            AppGrid.SelectionMode = ListViewSelectionMode.Single;
         }
 
         private void AppGrid_DragItemsStarting(object sender, DragItemsStartingEventArgs e)
         {
             using var operation = LogService.StartOperation("Sort", "DragPickup");
-            if (!_isSortMode || _isDraggingItems)
+            if (_isDraggingItems)
             {
                 e.Cancel = true;
                 return;
@@ -1533,7 +1497,7 @@ namespace EricGameLauncher
             try
             {
                 var order = _viewItems.Select(item => item.Id).ToArray();
-                if (_isSortMode && _dragOrder != null && !_dragOrder.SequenceEqual(order))
+                if (_dragOrder != null && !_dragOrder.SequenceEqual(order))
                 {
                     ItemService.SaveVisibleOrder(order);
                     _isRefreshPending = true;
@@ -1585,22 +1549,6 @@ namespace EricGameLauncher
             IconSizeControl.ApplyLocalization();
             IconSizeControl.Flyout.ShowAt(BtnMore);
             LogService.Write("UI", "MenuIconSize_Click showed IconSizeFlyoutControl");
-        }
-
-        private void MenuSort_Click(object sender, RoutedEventArgs e)
-        {
-            HideCustomToolTip();
-            _isSortMode = true;
-            UpdateGridInteraction();
-            LogService.Write("Sort", "Grid sorting enabled from menu");
-        }
-
-        private void ExitSortButton_Click(object sender, RoutedEventArgs e)
-        {
-            HideCustomToolTip();
-            _isSortMode = false;
-            UpdateGridInteraction();
-            LogService.Write("Sort", "Grid sorting disabled from title bar button");
         }
 
         private void MenuRecycleBin_Click(object sender, RoutedEventArgs e)
@@ -1701,7 +1649,7 @@ namespace EricGameLauncher
 
             if (args.ItemContainer is GridViewItem gvi)
             {
-                gvi.AllowDrop = false;
+                gvi.AllowDrop = true;
                 ApplySizeToContainer(gvi, IconSize);
             }
         }
@@ -1773,9 +1721,6 @@ namespace EricGameLauncher
                 MenuAddItem.Text = Text.T("Menu_Add");
                 if (MenuScanItem != null) MenuScanItem.Text = Text.T("Menu_Scan");
                 _scannerControl?.ApplyLocalization();
-                MenuSortItem.Text = Text.T("Menu_Sort");
-                ExitSortButton.Content = Text.T("Sort_Exit");
-                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(ExitSortButton, Text.T("Sort_Exit"));
                 MenuRecycleBinItem.Text = Text.T("Menu_RecycleBin");
                 _recycleBinControl?.ApplyLocalization();
                 MenuSettingsItem.Text = Text.T("Menu_Settings");
@@ -1838,31 +1783,73 @@ namespace EricGameLauncher
             }
         }
 
-        private async Task ShowReleaseDialogAsync(UpdateService.ReleaseInfo release, bool hasUpdate, bool isForced = false)
+        private async Task ShowReleaseDialogAsync(UpdateService.ReleaseInfo? release, bool hasUpdate, bool isForced = false, bool checkForUpdates = false)
         {
             using (LogService.StartOperation("Update", "ShowReleaseDialogAsync"))
             {
+            double viewWidth = this.ActualWidth > 0 ? this.ActualWidth : 950;
+            double viewHeight = this.ActualHeight > 0 ? this.ActualHeight : 650;
+            double dialogWidth = Math.Max(560, viewWidth * 0.80);
+            double dialogHeight = Math.Max(420, viewHeight * 0.78);
+            using var loadingLifetime = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+            var loadingRing = new ProgressRing { IsActive = true, Width = 28, Height = 28 };
+            var loadingContent = new StackPanel { Width = dialogWidth - 48, Spacing = 16, Padding = new Thickness(24), HorizontalAlignment = HorizontalAlignment.Center };
+            loadingContent.Children.Add(loadingRing);
+            loadingContent.Children.Add(new TextBlock { Text = Text.T("Update_Checking"), TextAlignment = TextAlignment.Center });
+            var dialog = new ContentDialog
+            {
+                Title = Text.T("Update_NoUpdateTitle"),
+                Content = loadingContent,
+                CloseButtonText = Text.T("Close"),
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = this.XamlRoot
+            };
+            dialog.Resources["ContentDialogMaxWidth"] = dialogWidth;
+            dialog.Resources["ContentDialogMaxHeight"] = dialogHeight;
+            bool closed = false;
+            dialog.Closed += (_, _) => { closed = true; loadingLifetime.Cancel(); };
+            var showTask = dialog.ShowAsync().AsTask();
+            try
+            {
+            LogService.Write("Update", $"Update dialog opened with loading content width={dialogWidth} height={dialogHeight}");
+            if (checkForUpdates)
+            {
+                var status = await UpdateService.CheckUpdateStatusAsync(ConfigService.UpdateChannel).WaitAsync(loadingLifetime.Token);
+                release = status.Release;
+                hasUpdate = status.HasUpdate;
+                isForced = status.IsForced;
+                _pendingUpdate = hasUpdate ? release : null;
+                HasUpdate = hasUpdate;
+            }
+            loadingLifetime.Token.ThrowIfCancellationRequested();
+            if (release == null)
+            {
+                loadingRing.IsActive = false;
+                dialog.Content = Text.T("Update_NoUpdateContent");
+                dialog.SecondaryButtonText = Text.T("Update_History");
+                dialog.CloseButtonText = Text.T("Update_OK");
+                if (await showTask == ContentDialogResult.Secondary) await ShowUpdateHistoryAsync();
+                return;
+            }
             var asset = release.assets?.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
             string downloadUrl = asset?.browser_download_url ?? "";
-            if (hasUpdate && string.IsNullOrEmpty(downloadUrl)) return;
-
-            var (contentGrid, dlgW, dlgH) = await BuildReleaseContentAsync(release, prependTitle: true);
+            if (hasUpdate && string.IsNullOrEmpty(downloadUrl)) throw new InvalidOperationException(Text.T("Update_PackageUnavailable"));
+            var contentGrid = await BuildReleaseContentAsync(release, true, dialogWidth, dialogHeight).WaitAsync(loadingLifetime.Token);
+            loadingLifetime.Token.ThrowIfCancellationRequested();
+            loadingRing.IsActive = false;
             var showHistory = false;
             var updateFailed = false;
             var isUpdating = false;
             var updateAttempt = 0;
-            var dialog = new ContentDialog
-            {
-                Title = hasUpdate
+            dialog.Title = hasUpdate
                     ? (object)Text.T("Update_DialogTitle")
-                    : Text.T("Update_NoUpdateContent"),
-                Content = contentGrid,
-                PrimaryButtonText = hasUpdate ? Text.T("Update_DialogConfirm") : (string.IsNullOrEmpty(downloadUrl) ? "" : Text.T("Update_Repair")),
-                SecondaryButtonText = Text.T("Update_History"),
-                CloseButtonText = isForced ? Text.T("Update_Exit") : (hasUpdate ? Text.T("Update_DialogCancel") : Text.T("Update_OK")),
-                DefaultButton = hasUpdate ? ContentDialogButton.Primary : ContentDialogButton.Close,
-                XamlRoot = this.XamlRoot
-            };
+                    : Text.T("Update_NoUpdateContent");
+            dialog.Content = contentGrid;
+            dialog.PrimaryButtonText = hasUpdate ? Text.T("Update_DialogConfirm") : (string.IsNullOrEmpty(downloadUrl) ? "" : Text.T("Update_Repair"));
+            dialog.SecondaryButtonText = Text.T("Update_History");
+            dialog.CloseButtonText = isForced ? Text.T("Update_Exit") : (hasUpdate ? Text.T("Update_DialogCancel") : Text.T("Update_OK"));
+            dialog.DefaultButton = hasUpdate ? ContentDialogButton.Primary : ContentDialogButton.Close;
+            LogService.Write("Update", "Update dialog loading content replaced with release details");
 
                 if (isForced)
             {
@@ -1877,9 +1864,6 @@ namespace EricGameLauncher
                     }
                 };
             }
-
-            dialog.Resources["ContentDialogMaxWidth"] = dlgW;
-            dialog.Resources["ContentDialogMaxHeight"] = dlgH;
 
             var tcs = new TaskCompletionSource<bool>();
 
@@ -1941,7 +1925,7 @@ namespace EricGameLauncher
                 if (isUpdating) e.Cancel = true;
             };
 
-            var result = await dialog.ShowAsync();
+            await showTask;
             if (tcs.Task.IsCompleted)
             {
                 LogService.Write("App", "Exit requested (update start)");
@@ -1952,16 +1936,37 @@ namespace EricGameLauncher
                 await ShowUpdateHistoryAsync();
             }
             }
+            catch (OperationCanceledException) when (loadingLifetime.IsCancellationRequested)
+            {
+                if (!closed) dialog.Hide();
+                await showTask;
+                LogService.Write("Update", "Update dialog loading cancelled");
+            }
+            catch (Exception ex)
+            {
+                LogService.Write("Update", "Update dialog loading failed", ex);
+                if (!closed && !_lifetime.IsCancellationRequested)
+                {
+                    loadingRing.IsActive = false;
+                    dialog.Title = Text.T("Update_CheckFailed");
+                    dialog.Content = new TextBlock { Text = ex.Message, TextWrapping = TextWrapping.Wrap, MaxWidth = 480 };
+                    dialog.PrimaryButtonText = "";
+                    dialog.SecondaryButtonText = "";
+                    dialog.CloseButtonText = Text.T("Close");
+                    await showTask;
+                }
+            }
+            finally
+            {
+                loadingRing.IsActive = false;
+            }
+            }
         }
 
-        private async Task<(Grid contentGrid, double dialogW, double dialogH)> BuildReleaseContentAsync(UpdateService.ReleaseInfo release, bool prependTitle)
+        private async Task<Grid> BuildReleaseContentAsync(UpdateService.ReleaseInfo release, bool prependTitle, double dialogW, double dialogH)
         {
             using (LogService.StartOperation("Update", "BuildReleaseContentAsync"))
             {
-            double viewWidth = this.ActualWidth > 0 ? this.ActualWidth : 950;
-            double viewHeight = this.ActualHeight > 0 ? this.ActualHeight : 650;
-            double dialogW = Math.Max(560, viewWidth * 0.80);
-            double dialogH = Math.Max(420, viewHeight * 0.78);
             double innerH = Math.Max(280, dialogH - 150) - 48;
 
             string bodyHtml = string.IsNullOrEmpty(release.body_html) ? MarkdownHtml.ToHtml(release.body ?? "") : release.body_html;
@@ -1990,7 +1995,7 @@ namespace EricGameLauncher
             grid.Children.Add((UIElement)dialogContent);
             grid.Children.Add(channelNote);
 
-            return (grid, dialogW, dialogH);
+            return grid;
         }
         }
 

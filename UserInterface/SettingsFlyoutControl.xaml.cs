@@ -12,7 +12,6 @@ public sealed partial class SettingsFlyoutControl : UserControl
     public event Action<Exception>? OperationFailed;
     private const string GitHubTokenUrl = "https://github.com/settings/personal-access-tokens";
     private bool _syncingQuickStart = false;
-    private bool _syncingSplashAnimation = false;
     private readonly List<(Button Button, Func<string> Text)> _helpButtons = new();
 
     public Flyout Flyout => SettingsFlyout;
@@ -20,7 +19,7 @@ public sealed partial class SettingsFlyoutControl : UserControl
     public SettingsFlyoutControl()
     {
         InitializeComponent();
-        RegisterHelpButton(QuickStartHelpButton, QuickStartHelpText);
+        RegisterHelpButton(QuickStartHelpButton, () => Text.T("Settings_QuickStart_Desc"));
         RegisterHelpButton(UpdateChannelHelpButton, () => Text.T("Settings_UpdateChannel_Desc"));
         RegisterHelpButton(GitHubTokenHelpButton, () => Text.T("Settings_GitHubTokenDesc"));
         RegisterHelpButton(StorageLocationHelpButton, () => Text.T("Settings_MigrateNote"));
@@ -62,11 +61,6 @@ public sealed partial class SettingsFlyoutControl : UserControl
         _syncingQuickStart = true;
         ToggleQuickStart.IsOn = ConfigService.QuickStart;
         _syncingQuickStart = false;
-        _syncingSplashAnimation = true;
-        ToggleSplashFadeIn.IsOn = ConfigService.SplashFadeIn;
-        ToggleSplashFadeOut.IsOn = ConfigService.SplashFadeOut;
-        _syncingSplashAnimation = false;
-        UpdateSplashAnimationVisibility();
         ToggleCloseAfterLaunch.IsOn = ConfigService.CloseAfterLaunch;
         ComboUpdateChannel.SelectedIndex = ConfigService.UpdateChannel == "latest" ? 1 : 0;
         UpdateGitHubTokenStatus();
@@ -80,10 +74,6 @@ public sealed partial class SettingsFlyoutControl : UserControl
     {
         SettingsTitle.Text = Text.T("Settings_Title");
         SettingsQuickStartLabel.Text = Text.T("Settings_QuickStart");
-        SettingsSplashAnimationLabel.Text = Text.T("Settings_SplashAnimation");
-        SettingsSplashFadeInLabel.Text = Text.T("Settings_SplashFadeIn");
-        SettingsSplashFadeOutLabel.Text = Text.T("Settings_SplashFadeOut");
-        UpdateSplashAnimationVisibility();
         RefreshHelpTexts();
         SettingsCloseAfterLaunchLabel.Text = Text.T("Settings_CloseAfterLaunch");
         SettingsLaunchModeLabel.Text = Text.T("Settings_LaunchMode");
@@ -142,46 +132,11 @@ public sealed partial class SettingsFlyoutControl : UserControl
             _syncingQuickStart = true;
             toggle.IsOn = ConfigService.QuickStart;
             _syncingQuickStart = false;
-            UpdateSplashAnimationVisibility();
             LogService.Write("QuickStart", "Quick start toggle reverted, auto start registration failed", null, null, LogService.LogLevel.Error);
             return;
         }
 
-        UpdateSplashAnimationVisibility();
         LogService.Write("UI", $"SettingsFlyoutControl quick start changed to={toggle.IsOn}");
-    }
-
-    private void UpdateSplashAnimationVisibility()
-    {
-        SplashAnimationPanel.Visibility = ToggleQuickStart.IsOn ? Visibility.Visible : Visibility.Collapsed;
-        RefreshHelpTexts();
-    }
-
-    private string QuickStartHelpText()
-    {
-        string text = Text.T("Settings_QuickStart_Desc");
-        if (ToggleQuickStart.IsOn) text += "\n" + Text.T("Settings_SplashAnimation_Desc");
-        return text;
-    }
-
-    private void ToggleSplashFadeIn_Toggled(object sender, RoutedEventArgs e)
-    {
-        if (_syncingSplashAnimation) return;
-        if (sender is not ToggleSwitch toggle) return;
-        if (ConfigService.SplashFadeIn == toggle.IsOn) return;
-        ConfigService.SplashFadeIn = toggle.IsOn;
-        PersistSettings();
-        LogService.Write("UI", $"SettingsFlyoutControl splash fade-in changed to={toggle.IsOn}");
-    }
-
-    private void ToggleSplashFadeOut_Toggled(object sender, RoutedEventArgs e)
-    {
-        if (_syncingSplashAnimation) return;
-        if (sender is not ToggleSwitch toggle) return;
-        if (ConfigService.SplashFadeOut == toggle.IsOn) return;
-        ConfigService.SplashFadeOut = toggle.IsOn;
-        PersistSettings();
-        LogService.Write("UI", $"SettingsFlyoutControl splash fade-out changed to={toggle.IsOn}");
     }
 
     private void ComboLaunchMode_SelectionChanged(object sender, SelectionChangedEventArgs e)

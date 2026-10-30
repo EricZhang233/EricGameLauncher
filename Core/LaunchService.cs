@@ -33,6 +33,11 @@ public static class LaunchService
 
             var result = ProcessRunner.Run(path, admin);
             if (!result.Success) return result;
+            try
+            {
+                item.LaunchCount = LaunchCountCache.Increment(item.Id);
+            }
+            catch (Exception ex) { LogService.Write("Launch", "Launch count persistence failed", ex); }
 
             var alongside = GetAlongsideTarget(item);
             if (alongside.HasValue)

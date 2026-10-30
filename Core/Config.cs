@@ -24,12 +24,6 @@ public class AppSettings
     [YamlMember(Alias = "quickStart")]
     public bool QuickStart { get; set; } = false;
 
-    [YamlMember(Alias = "splashFadeIn")]
-    public bool SplashFadeIn { get; set; } = true;
-
-    [YamlMember(Alias = "splashFadeOut")]
-    public bool SplashFadeOut { get; set; } = true;
-
     [YamlMember(Alias = "iconSize")]
     public double IconSize { get; set; } = 118;
 
@@ -444,6 +438,7 @@ public static class ConfigService
         var dtos = _itemsData?.Items ?? [];
         LogService.Write("Config", $"LoadItems count={dtos.Count}");
         var items = dtos.Select(dto => dto.ToViewModel(FixedCachePath)).ToList();
+        LaunchCountCache.Populate(items);
         for (int i = 0; i < items.Count; i++)
         {
             items[i].SortOrder = i;
@@ -457,6 +452,7 @@ public static class ConfigService
         var dtos = _itemsData?.RecycleBinItems ?? [];
         LogService.Write("Config", $"LoadRecycleBinItems count={dtos.Count}");
         var items = dtos.Select(dto => dto.ToViewModel(FixedCachePath)).ToList();
+        LaunchCountCache.Populate(items);
         for (int i = 0; i < items.Count; i++)
         {
             items[i].SortOrder = i;
@@ -598,10 +594,26 @@ public static class ConfigService
             }
             var activeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var dto in _itemsData.Items)
+            {
+                if (!dto.IsPlatform.HasValue || !dto.Pin.HasValue)
+                {
+                    dto.IsPlatform ??= PlatformRecognition.IsPlatform(dto.Actions?.Main?.Path);
+                    dto.Pin ??= dto.IsPlatform.Value;
+                    normalized = true;
+                }
                 if (string.IsNullOrWhiteSpace(dto.Id) || !activeIds.Add(dto.Id)) { _itemsInvalid = true; throw new DataFileException(itemsPath); }
+            }
             var recycleIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var dto in _itemsData.RecycleBinItems)
+            {
+                if (!dto.IsPlatform.HasValue || !dto.Pin.HasValue)
+                {
+                    dto.IsPlatform ??= PlatformRecognition.IsPlatform(dto.Actions?.Main?.Path);
+                    dto.Pin ??= dto.IsPlatform.Value;
+                    normalized = true;
+                }
                 if (string.IsNullOrWhiteSpace(dto.RecycleId) || !recycleIds.Add(dto.RecycleId)) { _itemsInvalid = true; throw new DataFileException(itemsPath); }
+            }
             if (normalized)
             {
                 SaveItemsData();
@@ -651,8 +663,6 @@ public static class ConfigService
             if (!existingYaml.Contains("appIconPath:")) needsSave = true;
             if (!existingYaml.Contains("appTitle:")) needsSave = true;
             if (!existingYaml.Contains("quickStart:")) needsSave = true;
-            if (!existingYaml.Contains("splashFadeIn:")) needsSave = true;
-            if (!existingYaml.Contains("splashFadeOut:")) needsSave = true;
             if (needsSave)
             {
                 SaveSettingsData();
@@ -742,22 +752,6 @@ public static class ConfigService
         get => _settings?.QuickStart ?? false;
         set { if (_settings != null) { LogService.Write("Config", $"QuickStart changed to={value}"); _settings.QuickStart = value; } }
     }
-
-    public static bool SplashFadeIn
-    {
-        get => _settings?.SplashFadeIn ?? true;
-        set { if (_settings != null) { LogService.Write("Config", $"SplashFadeIn changed to={value}"); _settings.SplashFadeIn = value; } }
-    }
-
-    public static bool SplashFadeOut
-    {
-        get => _settings?.SplashFadeOut ?? true;
-        set { if (_settings != null) { LogService.Write("Config", $"SplashFadeOut changed to={value}"); _settings.SplashFadeOut = value; } }
-    }
-
-    public static bool SplashFadeInApplied => !QuickStart || SplashFadeIn;
-
-    public static bool SplashFadeOutApplied => !QuickStart || SplashFadeOut;
 
     public static string Language => Text.DetectSystemLanguage();
 
@@ -1001,14 +995,6 @@ public static class ConfigService
                 if (value != "true" && value != "false") return "ErrQuickStart";
                 if (!QuickStartService.SetEnabled(bool.Parse(value))) return "ErrQuickStartApply";
                 return null;
-            case "splashfadein":
-                if (value != "true" && value != "false") return "ErrSplashFadeIn";
-                SplashFadeIn = bool.Parse(value);
-                break;
-            case "splashfadeout":
-                if (value != "true" && value != "false") return "ErrSplashFadeOut";
-                SplashFadeOut = bool.Parse(value);
-                break;
             case "iconsize":
                 if (!double.TryParse(value, out var iconSize) || iconSize < 32 || iconSize > 512) return "ErrIconSize";
                 IconSize = iconSize;

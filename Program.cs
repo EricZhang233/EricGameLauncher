@@ -12,6 +12,15 @@ public static class Program
     {
         StartupArgs.Parse();
         DebugPaths.ApplyIfDebug();
+        if (args.Length == 2 && args[0] == "--jump-launch")
+        {
+            ConfigService.Initialize();
+            JumpListService.Initialize();
+            var item = ConfigService.LoadItems().FirstOrDefault(x => x.Id == args[1] && x.Status == 0);
+            int code = item != null && LaunchService.Launch(item, item.UseAlternativeLaunch).Success ? 0 : 1;
+            LogService.FlushAndStop();
+            return code;
+        }
 
         if (!StartupArgs.IsServiceStart)
         {

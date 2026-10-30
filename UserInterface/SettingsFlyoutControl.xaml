@@ -8,6 +8,16 @@
             <Setter Property="MinWidth" Value="0"/>
             <Setter Property="Margin" Value="0,-8,-12,-8"/>
         </Style>
+        <Style x:Key="SettingsHelpAreaStyle" TargetType="Button"
+               BasedOn="{StaticResource DefaultButtonStyle}">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        </Style>
     </UserControl.Resources>
     <Button x:Name="SettingsButton" Visibility="Collapsed">
         <Button.Flyout>
@@ -16,40 +26,19 @@
                     <TextBlock x:Name="SettingsTitle" Text="" FontSize="20" FontWeight="SemiBold"/>
                     <StackPanel Spacing="8">
                         <Grid ColumnDefinitions="Auto,*,Auto">
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                                <FontIcon Glyph="&#xE945;" FontSize="16" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="SettingsQuickStartLabel" Text="" VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <Button x:Name="QuickStartHelpButton" Grid.Column="1" Click="HelpButton_Click"
-                                    Padding="4,2" MinWidth="0" Background="Transparent"
-                                    BorderThickness="1" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                                    CornerRadius="4"
-                                    HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0">
-                                <FontIcon Glyph="&#xE897;" FontSize="12" Opacity="0.7"/>
+                            <Button x:Name="QuickStartHelpButton" Grid.Column="0" Click="HelpButton_Click"
+                                    AutomationProperties.Name="{Binding Text, ElementName=SettingsQuickStartLabel}"
+                                    Style="{StaticResource SettingsHelpAreaStyle}">
+                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                    <FontIcon Glyph="&#xE945;" FontSize="16" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="SettingsQuickStartLabel" Text="" VerticalAlignment="Center"/>
+                                </StackPanel>
                             </Button>
                             <ToggleSwitch x:Name="ToggleQuickStart" Grid.Column="2"
                                           Style="{StaticResource SettingsToggleSwitchStyle}"
                                           OffContent="" OnContent=""
                                           VerticalAlignment="Center"
                                           Toggled="ToggleQuickStart_Toggled"/>
-                        </Grid>
-                        <Grid x:Name="SplashAnimationPanel" ColumnDefinitions="*,Auto,Auto,Auto,Auto"
-                              Margin="28,0,0,0" Visibility="Collapsed">
-                            <TextBlock x:Name="SettingsSplashAnimationLabel" Text="" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="SettingsSplashFadeInLabel" Grid.Column="1" Text=""
-                                       VerticalAlignment="Center" Margin="10,0,2,0"/>
-                            <ToggleSwitch x:Name="ToggleSplashFadeIn" Grid.Column="2"
-                                          Style="{StaticResource SettingsToggleSwitchStyle}"
-                                          OffContent="" OnContent=""
-                                          VerticalAlignment="Center"
-                                          Toggled="ToggleSplashFadeIn_Toggled"/>
-                            <TextBlock x:Name="SettingsSplashFadeOutLabel" Grid.Column="3" Text=""
-                                       VerticalAlignment="Center" Margin="10,0,2,0"/>
-                            <ToggleSwitch x:Name="ToggleSplashFadeOut" Grid.Column="4"
-                                          Style="{StaticResource SettingsToggleSwitchStyle}"
-                                          OffContent="" OnContent=""
-                                          VerticalAlignment="Center"
-                                          Toggled="ToggleSplashFadeOut_Toggled"/>
                         </Grid>
                         <Border Height="1" Margin="0,4,0,4" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
                         <Grid HorizontalAlignment="Stretch">
@@ -79,44 +68,32 @@
                                           Toggled="ToggleCloseAfterLaunch_Toggled"/>
                         </Grid>
                         <Border Height="1" Margin="0,4,0,4" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
-                        <Grid HorizontalAlignment="Stretch">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="12"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <FontIcon Glyph="&#xE895;" FontSize="16" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="SettingsUpdateChannelLabel" Grid.Column="2" Text=""
-                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <Button x:Name="UpdateChannelHelpButton" Grid.Column="3" Click="HelpButton_Click"
-                                    Padding="4,2" MinWidth="0" Background="Transparent"
-                                    BorderThickness="1" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                                    CornerRadius="4"
-                                    VerticalAlignment="Center" Margin="0,0,8,0">
-                                <FontIcon Glyph="&#xE897;" FontSize="12" Opacity="0.7"/>
+                        <Grid ColumnDefinitions="Auto,*" HorizontalAlignment="Stretch">
+                            <Button x:Name="UpdateChannelHelpButton" Click="HelpButton_Click"
+                                    AutomationProperties.Name="{Binding Text, ElementName=SettingsUpdateChannelLabel}"
+                                    Style="{StaticResource SettingsHelpAreaStyle}" Margin="0,0,8,0">
+                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                    <FontIcon Glyph="&#xE895;" FontSize="16" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="SettingsUpdateChannelLabel" Text="" VerticalAlignment="Center"/>
+                                </StackPanel>
                             </Button>
-                            <ComboBox x:Name="ComboUpdateChannel" Grid.Column="4"
+                            <ComboBox x:Name="ComboUpdateChannel" Grid.Column="1"
                                       HorizontalAlignment="Stretch"
                                       SelectionChanged="ComboUpdateChannel_SelectionChanged"/>
                         </Grid>
                         <Border Height="1" Margin="0,4,0,4" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
-                        <Grid ColumnDefinitions="Auto,Auto,*,Auto">
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                                <FontIcon Glyph="&#xE72E;" FontSize="16" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="SettingsGitHubTokenLabel" Text="" VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <Button x:Name="GitHubTokenHelpButton" Grid.Column="1" Click="HelpButton_Click"
-                                    Padding="4,2" MinWidth="0" Background="Transparent"
-                                    BorderThickness="1" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                                    CornerRadius="4"
-                                    HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0">
-                                <FontIcon Glyph="&#xE897;" FontSize="12" Opacity="0.7"/>
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Button x:Name="GitHubTokenHelpButton" Click="HelpButton_Click"
+                                    AutomationProperties.Name="{Binding Text, ElementName=SettingsGitHubTokenLabel}"
+                                    Style="{StaticResource SettingsHelpAreaStyle}">
+                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                    <FontIcon Glyph="&#xE72E;" FontSize="16" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="SettingsGitHubTokenLabel" Text="" VerticalAlignment="Center"/>
+                                </StackPanel>
                             </Button>
-                            <TextBlock x:Name="GitHubTokenStatusText" Grid.Column="2" Text=""
+                            <TextBlock x:Name="GitHubTokenStatusText" Grid.Column="1" Text=""
                                        HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="13"/>
-                            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                 <Button x:Name="SettingsGitHubTokenLink"
                                         Click="GitHubTokenLink_Click" Padding="8,4"
                                         ToolTipService.ToolTip="">
@@ -139,22 +116,19 @@
                         </Grid>
                     </StackPanel>
                     <Border Height="1" Margin="0,4,0,4" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
-                    <Grid ColumnDefinitions="Auto,Auto,*,Auto">
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                            <FontIcon Glyph="&#xE74E;" FontSize="16" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="SettingsDataLocationLabel" Text="" VerticalAlignment="Center"/>
-                        </StackPanel>
-                        <Button x:Name="StorageLocationHelpButton" Grid.Column="1" Click="HelpButton_Click"
-                                Padding="4,2" MinWidth="0" Background="Transparent"
-                                BorderThickness="1" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                                CornerRadius="4"
-                                HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0">
-                            <FontIcon Glyph="&#xE897;" FontSize="12" Opacity="0.7"/>
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Button x:Name="StorageLocationHelpButton" Click="HelpButton_Click"
+                                AutomationProperties.Name="{Binding Text, ElementName=SettingsDataLocationLabel}"
+                                Style="{StaticResource SettingsHelpAreaStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <FontIcon Glyph="&#xE74E;" FontSize="16" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="SettingsDataLocationLabel" Text="" VerticalAlignment="Center"/>
+                            </StackPanel>
                         </Button>
-                        <TextBlock x:Name="StorageModeText" Grid.Column="2" Text=""
+                        <TextBlock x:Name="StorageModeText" Grid.Column="1" Text=""
                                    HorizontalAlignment="Center" VerticalAlignment="Center"
                                    FontWeight="SemiBold" ToolTipService.ToolTip=""/>
-                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <Button x:Name="BtnSwitchStorageMode"
                                     Click="BtnSwitchStorageMode_Click" Padding="8,4" ToolTipService.ToolTip="">
                                 <FontIcon Glyph="&#xE8AB;" FontSize="12"/>

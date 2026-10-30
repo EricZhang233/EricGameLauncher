@@ -11,6 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WPF" />
     <Reference Include="EricGameLauncher" Condition="'$(MainDllPath)' != ''">
       <HintPath>$(MainDllPath)</HintPath>
     </Reference>

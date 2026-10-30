@@ -304,6 +304,7 @@
                                     </DropDownButton.Flyout>
                                 </DropDownButton>
                             </Grid>
+                            <CheckBox x:Name="PropIsPlatform" Checked="PropIsPlatform_Checked" Unchecked="PropIsPlatform_Unchecked"/>
                         </StackPanel>
 
                         <StackPanel Spacing="8" 
@@ -520,9 +521,10 @@
                 </ScrollViewer>
                 <Grid Grid.Row="2" 
                       Margin="0,16,0,0" 
-                      ColumnDefinitions="Auto,*,Auto">
+                      ColumnDefinitions="*,Auto,*">
                     <Button x:Name="PropBtnDelete" 
                             Grid.Column="0"
+                            HorizontalAlignment="Left"
                             Click="BtnDeleteProperty_Click"
                             ToolTipService.ToolTip="">
                         <StackPanel Orientation="Horizontal" Spacing="8">
@@ -531,7 +533,13 @@
                         </StackPanel>
                     </Button>
                     
-                    <Button Grid.Column="2"
+                    <ToggleButton x:Name="PropPin" Grid.Column="1"
+                                  Width="32" Height="32" Padding="0"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE718;" FontSize="16"/>
+                    </ToggleButton>
+
+                    <Button Grid.Column="2" HorizontalAlignment="Right"
                             Style="{ThemeResource AccentButtonStyle}" 
                             Click="BtnSaveProperty_Click"
                             ToolTipService.ToolTip="">

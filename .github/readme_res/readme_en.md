@@ -44,15 +44,14 @@
 
 ## Highlights
 
-*   🧩 **End-to-end execution**: Four configurable chains — main program, manager, substitute launch and launch alongside; EXE, shortcuts, URL protocols, web pages and Store apps all run directly.
-*   🖱️ **Dynamic context menu**: Entries come and go per item, and a detected platform shows "Run Steam / Run Xbox"; each item takes up to 10 custom entries with their own title, command, arguments and elevation.
-*   🗂️ **One library, every platform**: Steam, Epic Games, Xbox, WeGame, standalone executables, web links and Store apps share a single grid in whatever order you choose.
-*   🔍 **Flexible search**: Full Pinyin, Pinyin initials, Chinese, English, paths and URL protocols all work as keywords — `yxlm` reaches 英雄联盟, `C:\Program Files` matches by path, and `steam` sweeps up everything behind that protocol.
-*   📥 **Scan and import**: Automatically detects games installed through Steam, Epic Games and Xbox, groups them into New / Existing / Invalid, and imports or cleans them up in bulk.
-*   💻 **Complete CLI & Skill**: Everything the desktop UI can do is available from the command line, with full documentation built into `-help` and the `skill` command for scripts and AI agents.
-*   🚀 **Quick Start**: A background host pre-reads configuration and warms up icons and the interface, so the next launch appears almost instantly. Turn it off and the process exits right away.
-*   🗑️ **Three-stage deletion**: Deleting in the main window only moves an item to the Recycle Bin; only deleting it there starts the 72-hour countdown, and it is purged on the next launch after that. A slip of the hand is recoverable.
-*   🎒 **Fully portable**: Configuration and icon cache can travel with the program — drop it on a USB drive and take your library anywhere. Switch between system and portable modes in one click.
+Eric Game Launcher brings local games, platform clients and other launch targets into one library, accessible through the desktop UI, taskbar and command line.
+
+* **Unified library**: Organize EXEs, shortcuts, URL protocols, websites and Store apps, with drag sorting, adjustable icons and Pinyin search.
+* **Five platform scanners**: Discover installed Steam, Epic Games, Xbox, Google Play Games and WeGame titles, classified as new, existing or invalid.
+* **Configurable launches**: Configure commands and elevation separately for the main program, manager, alternative launch and companion command, plus up to 10 custom context menu actions per item.
+* **Taskbar access**: The Jump List shows pinned platforms and frequent items; manage pins in Properties or through the CLI.
+* **Optional Quick Start**: Disabled by default; enabling it registers sign-in startup and uses a background host to preload data and warm the UI.
+* **Data and automation**: Migrate between system and portable storage, recover entries from the recycle bin, and use the same core services and configuration through the CLI.
 
 <a name="quickstart"></a>
 
@@ -62,19 +61,16 @@
 
 | Item | Requirement |
 | :--- | :--- |
-| Operating system | Windows 11 24H2 (Build 26100) or later, x64 |
-| Runtime | [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) and Windows App SDK 1.8 runtime, installed separately |
-| Download size | Under 15 MB. The launcher itself needs no installation — just extract and run |
+| Operating system | Windows 11 24H2 (Build 26100) or later |
+| Application architecture | x64; no native ARM64 build is provided |
+| Dependencies | .NET 10 Desktop Runtime and Windows App SDK 1.8 |
+| Deployment | Fully extract the release ZIP and keep its components together; the application uses external runtimes |
 
-### Three steps
+### Three Steps
 
-1. **Download**: Grab the latest archive from [Releases](https://github.com/EricZhang233/EricGameLauncher/releases) and extract it anywhere (paths with spaces or non-ASCII characters are fine).
-2. **Run**: Double-click `EricGameLauncher.exe`; initialization happens automatically on first launch. Want desktop and Start menu shortcuts as well? Run `.install.cmd` instead.
-3. **Fill your library**: Click **More → Scan** in the top-right corner to detect installed games and import them in one click, or use **More → Add** to point at an exe, shortcut, web page or Store app.
-
-> 💡 Turn on **Settings → Quick Start** and the launcher warms up in the background after sign-in, so every later launch appears almost instantly.
->
-> 💡 Prefer the command line? Run `EricGameLauncher.Cli.exe -help` for every command, or `EricGameLauncher.Cli.exe skill` for the agent integration guide.
+1. **Download**: Get the package from [Releases](https://github.com/EricZhang233/EricGameLauncher/releases) and fully extract it into a writable directory.
+2. **Run**: Open `EricGameLauncher.exe`. If dependencies are missing, follow the system prompts to prepare the runtimes. Run the included `.install.cmd` to create desktop and Start menu shortcuts.
+3. **Add games**: Select and import local games through **More → Scan**, or create entries manually through **More → Add**.
 
 ---
 
@@ -83,110 +79,116 @@
 ## Features
 
 <div align="center">
-  <img src="readme.overview.gif" width="100%" alt="Main window: icon grid, hover hint, Pinyin search and icon size adjustment" />
+  <img src="readme.overview.gif" width="100%" alt="Main view: icon grid, tooltips, Pinyin search and icon sizing" />
 </div>
 
-### Every game in one grid
+### All Your Games in One View
 
-*   **No platform divide**: Steam, Epic Games, Xbox, WeGame, standalone executables, web links and Store apps share one grid, ordered exactly how you like.
-*   **Icons from small to huge**: Continuous scaling from a compact list to an immersive large grid, applied instantly and remembered next time.
-*   **Multiple matching paths**: `yxlm` (initials), `yingxionglianmeng` (full Pinyin), `部落` (Chinese) and `pcl` (path) all find their target.
-*   **Manual ordering**: Enable **More → Sort**, then drag items in the grid. Turn off the sorting switch at the left of the title-bar buttons to resume launching. Sorting mode resets at each launch.
-*   **Hover to fill in the blanks**: Rest the pointer for a moment and the full title appears — no more guessing long names.
-*   **Launch gesture**: Single or double click, switched whenever you like in Settings.
+* **Unified access**: Games from different platforms, standalone programs, websites and Store apps share one grid.
+* **Order and appearance**: Drag items to reorder them; icon size, window position and dimensions are saved.
+* **Search**: Match titles, paths, full Pinyin or Pinyin initials, such as `yxlm` for “英雄联盟”.
+* **Interaction**: Choose single-click or double-click launching; hover over long names to read the full title.
 
-### End-to-end execution: more than a shortcut
-
-Configuring a game means configuring a complete launch chain:
+### End-to-End Execution: Beyond Shortcuts
 
 | Capability | Description |
 | :--- | :--- |
-| **Main program** | Native `EXE`, `LNK` shortcuts, URL protocols such as `steam://` / `epic://` / `starward://`, web links and `shell:AppsFolder\` Store apps can all serve as the launch target. |
-| **Run as administrator** | Elevate the main program and the manager separately, which settles permission-related launch failures for good. |
-| **Manager** | Point at a platform manager path so platform services come up correctly alongside the game. |
-| **Substitute launch** | Let a custom command (for example `starward://`) fully take over the original executable's launch logic. |
-| **Launch alongside** | Start a translator, timer, performance monitor or key mapper together with the game in one click. |
-| **Custom context menu** | Up to 10 entries per item, each with its own title, command, arguments and elevation flag; deleting a middle entry shifts the rest up automatically. |
-| **Arguments and environment variables** | Every execution target accepts full arguments; `%AppData%`, `%LocalAppData%` and friends expand automatically; long paths with spaces need no manual quoting. |
+| **Main program** | Supports EXE, LNK, registered URL protocols, HTTP(S) websites and `shell:AppsFolder\` app targets. Protocol launches require the corresponding client to be installed locally. |
+| **Manager** | Specify a manager or use a recognized platform entry point; launch it separately from the context menu. |
+| **Alternative launch** | Configure and enable another command to replace the main program launch, for example another launcher's protocol. |
+| **Companion command** | When enabled, runs an additional command after the main launch command is successfully submitted, such as a translator or monitoring tool. |
+| **Elevation and arguments** | Configure administrator privileges and arguments separately for each target, with environment variable expansion. Commands with arguments can be split for editing in Properties. |
+| **Custom context menu** | Up to 10 actions per item, each with its own title, command, arguments and administrator setting. |
 
-### Quick Start: shrink the wait until it disappears
+A successful launch means the command was handed to the system, rather than confirmation that the game has finished loading.
 
-*   **Background host**: After sign-in a resident host pre-reads configuration and items, validates and rebuilds icons and completes a full warm-up pass of the interface, then releases it — leaving no window on screen.
-*   **Almost instant next time**: The resources are already warm, so the window appears in a flash.
-*   **Animation can be switched off**: Fade-in and fade-out are toggled separately; turned off, the splash screen simply appears and disappears, which starts a little faster.
-*   **To exit completely**: **More → Exit** ends the window and the background host right away without changing the Quick Start setting. On Windows 11 24H2 and later you can also right-click the taskbar entry and choose "End task".
-*   **No background process wanted**: Turn the switch off and the auto-start entry is removed immediately.
+### Quick Start: Background Warmup and Window Activation
 
-### Property panel: every detail is editable
+* **Disabled by default**: Enabling it adds a sign-in startup entry for the current user. The background host preloads configuration, checks icons and warms the UI once, then releases the interface.
+* **Closing the window**: With Quick Start enabled, the host remains resident after the window closes; running the application again opens the interface.
+* **Full exit**: Use **More → Exit** or CLI `exit` to stop the interface and host while keeping the Quick Start setting.
+* **Disabling Quick Start**: Removes sign-in startup registration; this setting does not control system animations.
+* **Animations**: Application animations follow the Windows animation setting and switch visual states directly when system animations are disabled.
 
-*   **Name and icon**: Rename anything at any time, or upload your own image as a cover.
-*   **Four execution targets, one column each**: Main program, manager, substitute launch and alongside execution are independent rows, each with a file picker and argument splitting.
-*   **Visual custom menu editing**: Title, command and elevation flag line up in a column, up to 10 groups.
-*   **Save takes effect immediately**: Changes are written to the local configuration and the interface refreshes on the spot.
+### Properties: Edit Every Detail
+
+* **Basic information**: Edit the name, icon, platform label and launch commands; saving writes them to configuration.
+* **Platform flag**: “This is a game platform” distinguishes platform clients from regular games. Older configurations infer missing flags only; explicit choices are preserved.
+* **Pin**: Controls pinning within the taskbar list. Platform entries default to pinned; regular entries can also be pinned.
+* **Context menu**: Edit up to 10 custom actions with their own arguments and privileges.
 
 <div align="center">
-  <img src="readme.editor.panel.png" width="49%" alt="Property panel: display name, icon, four execution targets, elevation and custom context menu" />
-  <img src="readme.scan.result.png" width="49%" alt="Scan results grouped into New, Existing and Invalid" />
+  <img src="readme.editor.panel.png" width="49%" alt="Properties: name, icon, execution targets and custom context menu" />
+  <img src="readme.scan.result.png" width="49%" alt="Scan results: new, existing and invalid groups" />
   <br/>
-  <sub>Left: property panel (every configurable field) — Right: scan results (New / Existing / Invalid)</sub>
+  <sub>Left: Properties. Right: scan results. Images illustrate the interface; available options depend on the current version.</sub>
 </div>
 
-### One-click scan across three platforms
+### Scan Installed Games from Five Platforms
 
-*   **Automatic discovery**: Natively detects games installed through Steam, Epic Games and Xbox (Microsoft Store / UWP), extracting paths and fetching icons.
-*   **Grouped results**: Results are listed as **New / Existing / Invalid**, and anything already in your library is never imported twice.
-*   **One-click import**: Select all or tick entries individually, then import them.
-*   **Invalid cleanup**: Uninstalled or broken-path entries are gathered together for batch removal.
+| Platform | Discovery scope and boundaries |
+| :--- | :--- |
+| Steam | Reads local Steam libraries and installation information. |
+| Epic Games | Reads local Epic Games installation records. |
+| Xbox | Discovers supported local Store / Xbox game entry points. |
+| Google Play Games | Reads and locally decrypts the current user's app library, excluding packages prefixed with `com.google` or `com.android`. |
+| WeGame | Reads the current user's installation manifest, checks only recorded libraries and Rail game identities, and requires a valid WeGame launch target; names come from game directories. |
 
-### Three-stage deletion: a slip of the hand is still recoverable
+Results are grouped as **New / Existing / Invalid**, with selectable import or cleanup. Imports preserve platform labels and available managers; different executables in the same WeGame game directory are treated as the same game.
+
+Google Play Games and WeGame use internal client data formats. Incompatible, damaged or undecryptable data reports a scan error and cannot establish that existing games were uninstalled. WeGame scanning neither traverses all disks nor enumerates system installed programs.
+
+### Three-Stage Deletion: Time to Recover Mistakes
 
 | Stage | Behavior |
 | :--- | :--- |
-| Stage one | Delete in the main window → the item only moves to the Recycle Bin; the game is still there and can be restored at any time. |
-| Stage two | Delete in the Recycle Bin → a 72-hour countdown starts and the remaining time is shown in the interface. |
-| Stage three | The countdown ends → the item is purged automatically on the next launch. |
+| Delete from the main view | Moves the entry to the recycle bin for restoration; does not uninstall the game or delete game files. |
+| Delete / empty in the recycle bin | Marks entries for cleanup and starts a 72-hour retention period, during which restoration remains available. |
+| Retention expires | Removes expired records on a subsequent startup or cleanup operation. |
 
-The Recycle Bin can also be emptied in one click, besides restoring or deleting items permanently.
+Restoration reports a conflict if the main library already contains the same path or item ID. CLI `remove --permanent` and `recycle --purge` explicitly delete records immediately, bypassing this retention period.
 
-### Updates and announcements
+### Updates and Announcements
 
-*   **Silent update checks**: GitHub Releases is queried on startup; when a new version exists the version number turns red with an update icon — no pop-ups interrupting you.
-*   **Two channels**: **Stable** receives only official releases, while **Latest** gets new builds first.
-*   **One-click download and install**: The launcher restarts and completes the replacement automatically; you can also force a reinstall at any time.
-*   **Update history**: A version list on the left and the full notes on the right, with jump-to-any-version navigation, sourced from GitHub release records.
-*   **Announcement center**: Cloud announcements are fetched on startup, bodies support Markdown in Chinese and English, read state is persisted locally, and unread items carry a red dot.
-*   **Update protection**: The downloaded ZIP must match the GitHub asset SHA256 before the launcher exits and installation begins. Verification failures can be retried or dismissed. Installation failures trigger rollback; failed rollback preserves the recovery backup.
-*   **Configuration protection**: Atomic replacement retains a `.bak` file. Corrupt configuration cannot be silently overwritten with an empty library. GUI and CLI item changes use transactions across processes.
-*   **Deletion scope**: GUI recycle-bin deletion retains items for 72 hours. CLI `remove --permanent` and `recycle --purge` explicitly delete immediately.
+* **Version checks**: Retrieves versions and release notes from GitHub Releases. The stable channel uses official releases; the development channel permits prereleases.
+* **Installation and repair**: Download updates or force a reinstall. Packages must pass verification against the GitHub asset SHA256 digest; missing or invalid digests and hash mismatches prevent installation.
+* **Failure recovery**: Failed installations attempt rollback; backups remain available for recovery if rollback fails.
+* **History and announcements**: View release history and cloud announcements, with Markdown and Chinese / English content. Read status is stored locally.
+* **Configuration protection**: Atomic replacement retains a `.bak` backup. Corrupt configuration blocks writes to prevent replacement with empty data. GUI and CLI item mutations use cross-process transactions.
 
 <a name="settings"></a>
 
-### Settings at a glance
+### Settings Overview
 
-*   **General**: Quick Start, splash animation (fade-in / fade-out), launch gesture (single / double click), and exit after launching.
-*   **Updates**: Update channel (Stable / Latest) and a GitHub token, which raises the API rate limit and is encrypted with DPAPI before it is stored locally.
-*   **Data**: One-click migration of your data location (portable / system), plus quick access to the configuration and cache folders.
-*   **Title bar**: Icon size, sorting, Recycle Bin, shortcut creation and removal, privacy and permission notes, and update checks.
+| Entry point | Available settings |
+| :--- | :--- |
+| General | Quick Start, single-click / double-click launching, close after launch |
+| Updates | Stable / development channel, GitHub token |
+| Data | System / portable storage migration, open configuration and cache directories |
+| Other UI entry points | Icon size, recycle bin, shortcut creation and removal, privacy and permissions, update checks |
 
-Every setting has a "?" button beside it — hover for an explanation, click to pin it open.
-
+Hover over the icons and labels of supported settings to see descriptions, or click to expand help. GitHub tokens are encrypted with Windows DPAPI before storage; moving to another computer or Windows user environment may require entering the token again.
 
 ---
 
 <a name="cli"></a>
 
-## Command line: everything the desktop UI can do
+## CLI: Shared Access to the Desktop Library
 
-`EricGameLauncher.Cli.exe` shares one core with the desktop app and reads and writes the same data — a game added from the terminal appears in the interface right away.
+`EricGameLauncher.Cli.exe` sits beside the main program and provides library management, launching, search, sorting, scanning, recycle bin operations, settings, updates, announcements, shortcuts and storage modes.
 
-Two documents are built into the program, so there is nothing else to look up:
+Open PowerShell in the application directory:
 
 ```powershell
-EricGameLauncher.Cli.exe -help     # every command and option
-EricGameLauncher.Cli.exe skill     # integration guide for scripts and AI agents
+.\EricGameLauncher.Cli.exe -help
+.\EricGameLauncher.Cli.exe skill
+.\EricGameLauncher.Cli.exe list --json
+.\EricGameLauncher.Cli.exe scan --all --classify --json
 ```
 
-`-help` covers every command and argument in the version you are running, and `skill` prints the complete integration guide for scripts and AI agents. Both ship and update with the program, so they always match the version in front of you — which is why this page does not repeat the command list.
+`-help` lists commands and arguments for the current version; `skill` prints the complete guide embedded at build time. The release directory's `SKILL.md` provides the integration entry point.
+
+Scripts should prefer stable item IDs and `--json`. In JSON mode, stdout contains JSON only, while diagnostics and progress go to stderr. Exit code `0` means success and `1` means failure. When multiple recycled records share an item ID, use `recycleId` to restore the exact record.
 
 ---
 
@@ -194,31 +196,25 @@ EricGameLauncher.Cli.exe skill     # integration guide for scripts and AI agents
 
 ## Architecture
 
-Every piece of business logic in **Eric Game Launcher** exists exactly once: both shells — the desktop interface and the console — share a single Core, with no parallel implementations.
+The desktop UI and CLI share Core services; the interface handles rendering and interaction, while the console handles command parsing and output.
 
 ```mermaid
 flowchart TB
-    subgraph Shell["Shells · zero business logic"]
-        GUI["main.exe<br/>WinUI 3 rendering / animation / dialogs"]
-        CLI["cli.exe<br/>argument parsing / output formatting"]
-    end
-    subgraph Core["Core · the single business layer"]
-        SVC["Config and item services<br/>launch execution · scan and import<br/>updates and announcements · icon extraction"]
-    end
-    GUI --> SVC
-    CLI --> SVC
-    SVC --> DATA["settings.yaml · items.yaml · icon cache"]
-    SVC --> OS["Windows registry / processes / icons / protocols"]
+    GUI["EricGameLauncher.exe<br/>WinUI 3 interface"]
+    CLI["EricGameLauncher.Cli.exe<br/>Command parsing and output"]
+    CORE["Core services<br/>Library · Launching · Scanning<br/>Updates · Announcements · Icons · Jump List"]
+    GUI --> CORE
+    CLI --> CORE
+    CORE --> DATA["settings.yaml · items.yaml · ico"]
+    CORE --> CACHE["Temporary cache"]
+    CORE --> OS["Windows processes / protocols / registry"]
 ```
 
-*   **Modern stack**: **Windows App SDK 1.8** + **WinUI 3** + **.NET 10**, using Mica / Acrylic materials and an adaptive grid.
-*   **Single Core principle**: The desktop app and the CLI share one business layer, so features stay aligned and every operation is logged consistently.
-*   **Human- and machine-readable configuration**: YAML (`YamlDotNet`) storage with `settings.yaml` and `items.yaml` kept separate, so frequent changes never rewrite everything.
-*   **Native performance**: P/Invoke calls into system APIs handle icon extraction and caching, while window materials and the title bar are composed by the OS.
-*   **Pinyin index**: `TinyPinyin` builds full-Pinyin and initial-letter indexes for titles in memory, so search responds with no delay.
-*   **Secure storage**: The GitHub token is encrypted with DPAPI before it touches disk — never stored in plain text.
-*   **Unpackaged distribution**: No MSIX packaging or certificate import — just a portable build you extract and run. Updates are applied from a temporary directory by embedded shadow components.
-*   **Single instance and fast wake-up**: Win32 single-instance and message wake-up handling means launching again never opens a second window; it simply brings the existing one forward.
+* **Stack**: .NET 10, Windows App SDK 1.8 and WinUI 3; win-x64 releases only, deployed as an unpackaged application.
+* **Configuration**: YamlDotNet stores settings and items separately in `settings.yaml` and `items.yaml`, with icons in the data directory's `ico` folder.
+* **Search**: TinyPinyin builds title indexes for Pinyin matching alongside title and path searches.
+* **Taskbar**: The Jump List has platform and frequent-item sections. Pinned platforms follow main view order, pinned regular items lead the frequent section, and other frequent items are arranged automatically. Unpinned platforms are hidden; screen space limits the number visible.
+* **Instances and updates**: Single-instance activation handles repeated opens. Update components are embedded in the main program and extracted to a temporary directory when needed.
 
 ---
 
@@ -227,59 +223,59 @@ flowchart TB
 ## FAQ
 
 <details>
-<summary><b>Why is there an EricGameLauncher process in Task Manager after I sign in?</b></summary>
+<summary><b>Why is there still a background process after closing the window?</b></summary>
 
-That is the Quick Start background host, which pre-reads configuration and warms up the interface so the next launch is almost instant. It collects no data and uploads nothing.
-
-If you would rather not have it, turn off **Settings → Quick Start** and the auto-start entry is removed immediately; you can also end it at any time with **More → Exit**.
+With Quick Start enabled, the host stays resident after the window closes. Disable Quick Start in Settings, or use **More → Exit** / CLI `exit` to stop the current host.
 </details>
 
 <details>
-<summary><b>How do I exit completely instead of staying in the background?</b></summary>
+<summary><b>How do I pin or hide taskbar entries?</b></summary>
 
-Use **More → Exit** and both the window and the background host terminate, without changing the Quick Start setting. On Windows 11 24H2 and later you can also right-click the taskbar entry and choose "End task".
+Change Pin in Properties and save, or edit it through the CLI. Unpinned platforms are hidden; unpinned regular items may still appear in the frequent section. The application manages this list, so adjust it through the application's Pin setting. Legacy system pins can be unpinned manually.
 </details>
 
 <details>
-<summary><b>Does it need installing, and does it write to the registry?</b></summary>
+<summary><b>Is installation required, and which system locations are changed?</b></summary>
 
-No installation is required — extract and run. The only times it writes to the system are when Quick Start is enabled (registering sign-in auto-start) and when shortcuts are created (written to the Start menu or desktop). Game scanning reads local disks and the registry to locate installed games, but uploads nothing.
+The application is distributed as a ZIP and requires external runtimes. Creating shortcuts writes to the desktop and Start menu; Quick Start writes the current user's sign-in startup entry. Scanning reads local installation records, while updates and announcements access GitHub. Shortcut “uninstall” removes shortcuts and disables Quick Start without deleting the library or game files.
 </details>
 
 <details>
-<summary><b>Where is my data stored?</b></summary>
+<summary><b>Where is my data? Does portable mode move every cache?</b></summary>
 
-System mode is the default, storing data in `%ProgramData%\eric\EricGameLauncher` (configuration and icon cache in separate locations). You can switch to portable mode to keep everything in a `Data` folder inside the program directory and take it with you. Migration between the two modes is one click.
+Configuration and icons default to `%ProgramData%\eric\EricGameLauncher`; portable mode uses `Data` in the application directory. Migrate between them in Settings. Temporary cache remains in `%TEMP%\eric\ericgamelauncher` and does not travel with the portable directory. Back up the entire data directory to preserve your library.
 </details>
 
 <details>
-<summary><b>Is Windows 10 supported?</b></summary>
+<summary><b>Are Windows 10 or native ARM64 builds supported?</b></summary>
 
-No. Built on Windows App SDK 1.8 and WinUI 3, this project requires **Windows 11 24H2 (Build 26100)** or later.
+The current project targets Windows 11 24H2 (Build 26100) or later on x64. It provides neither Windows 10 support nor native ARM64 release packages.
 </details>
 
 ---
 
-## Contribution & Support
+## Contributing and Support
 
-We welcome contributions of any kind — bug reports, documentation improvements or code (PRs).
+Report problems or suggestions through [Issues](https://github.com/EricZhang233/EricGameLauncher/issues), including the version, steps, expected and actual results, and relevant sanitized logs.
 
-*   Found a problem or have an idea? Open an [Issue](https://github.com/EricZhang233/EricGameLauncher/issues) with reproduction steps and it will be handled faster.
-*   Want to get involved in development? The project builds with Visual Studio, and the desktop app and CLI share one Core, so a single change takes effect on both sides.
+Read the [repository rules](../../agent.md) before contributing. Use the .NET 10 SDK and build `EricGameLauncher.csproj` directly. Use Debug for routine local work; GitHub workflows build release packages. Run `dotnet test` for tests; see the [test guide](../../Test/README.md) for dependencies and groups and the [build guide](../BUILDING.md) for publishing.
 
-If you find this project helpful, please give it a heart-felt ⭐️ **Star**!
+If this project helps you, consider supporting it with a Star.
 
 <a name="thanks"></a>
 
-## Special Thanks / Links
-*   [**Starward**](https://github.com/Scighost/Starward): A powerful Mihoyo game launcher. Our initial vision for this project was just a collection launcher for local games, with no plans to support distribution platforms. The reason we initially supported URL-scheme protocols was to support Starward's protocol for recording playtime in Mihoyo games. Later, we thought if we already support URL-schemes, why not support protocols from platforms like Steam/Epic Games? Thus, the current feature of supporting distribution platform launchers was born. Starward's innovation and contribution in the field of Mihoyo game launchers are indelible. We hope to pay tribute by supporting its protocol and provide players with more choices. With this opportunity, our launcher should support the vast majority of launcher URL-scheme protocols and parameterised execution.
-*   [**Snap Hutao**](https://github.com/DGP-Studio/Snap.Hutao): Thanks to its team for their past outstanding contributions. It was the most powerful Genshin Impact toolbox I ever used. Although its curtain has closed, its open-source spirit will be passed on, inspiring those who follow. [**R.I.P**](https://hut.ao/)
-*   [**Snap Hutao Remastered**](https://github.com/SnapHutaoRemasteringProject/Snap.Hutao.Remastered): A remaster of Snap Hutao. Dedicated to continuing the original features and revitalising them on a modern tech stack. Respect! This is also the toolbox I currently use when playing Genshin Impact.
+## Special Thanks
 
-## Friendly Links
-*   [**TaskbarLyrics**](https://github.com/ANYNC/TaskbarLyrics): A genuinely useful taskbar lyrics tool, and another project I help maintain. The author listens to feedback, the features make sense, the details are polished, and its quality far exceeds similar projects.
+* [**Starward**](https://github.com/Scighost/Starward): URL protocol support originally enabled launching HoYoverse games through Starward and recording playtime, inspiring support for other platform protocols and command arguments.
+* [**Snap Hutao**](https://github.com/DGP-Studio/Snap.Hutao): Thanks to the original team for its contributions and open-source spirit. [**R.I.P**](https://hut.ao/)
+* [**Snap Hutao Remastered**](https://github.com/SnapHutaoRemasteringProject/Snap.Hutao.Remastered): Thanks for continuing Snap Hutao's functionality and community; it is also the Genshin Impact toolbox the author currently uses.
+
+## Friends
+
+* [**TaskbarLyrics**](https://github.com/ANYNC/TaskbarLyrics): Taskbar lyrics software the author also helps maintain.
 
 ---
+
 <div align="center">
   Made with ❤️ by EricZhang233
 </div>

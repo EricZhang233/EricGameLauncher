@@ -41,6 +41,7 @@ public static class CliService
             DebugPaths.ApplyIfDebug();
             ConfigService.Initialize();
             Text.Load(_lang);
+            JumpListService.Initialize();
             ServerConfigManager.LoadReadIds();
 
             var args = rawArgs.Skip(1).Where(a => !string.Equals(a, "-debug", StringComparison.OrdinalIgnoreCase)).ToArray();
@@ -394,6 +395,8 @@ public static class CliService
             }
 
             var item = ItemService.CreateItem(title, path, admin, icon, platform, mgr, alt, alongside);
+            if (opts.TryGetValue("isplatform", out var platformFlag)) { item.IsPlatform = ParseBool(platformFlag); item.Pin = item.IsPlatform; }
+            if (opts.TryGetValue("pin", out var pinFlag)) item.Pin = ParseBool(pinFlag);
             await ItemService.AddItemAsync(item);
 
             WriteLine(string.Format(Text.Cli("MsgAdded"), item.Id, title), ConsoleColor.Green);
@@ -548,13 +551,26 @@ public static class CliService
             bool steam = opts.ContainsKey("steam");
             bool epic = opts.ContainsKey("epic");
             bool xbox = opts.ContainsKey("xbox");
-            bool all = opts.ContainsKey("all") || (!steam && !epic && !xbox);
+            bool google = opts.ContainsKey("google");
+            bool wegame = opts.ContainsKey("wegame");
+            bool all = opts.ContainsKey("all") || (!steam && !epic && !xbox && !google && !wegame);
             bool import = opts.ContainsKey("import");
             bool classify = opts.ContainsKey("classify");
             bool invalid = opts.ContainsKey("invalid");
             bool deleteInvalid = opts.ContainsKey("delete-invalid");
 
             var scannedGames = new List<ScannedGame>();
+            if (all || wegame)
+            {
+                var wegameGames = ScanService.ScanWeGame();
+                scannedGames.AddRange(wegameGames);
+                WriteLine(string.Format(Text.Cli("MsgFoundCount"), wegameGames.Count, "WeGame"));
+            }
+            if (all || google)
+            {
+                WriteLine(Text.Cli("ScanGoogle"), ConsoleColor.Cyan);
+                scannedGames.AddRange(GooglePlayGamesHelper.GetInstalledGames());
+            }
 
             if (all || steam)
             {
@@ -792,8 +808,6 @@ public static class CliService
                     quickStartRegistered = QuickStartService.IsAutoStartRegistered(),
                     quickStartCommand = QuickStartService.GetRegisteredCommand() ?? "",
                     quickStartHostRunning = ServiceHost.IsHostRunning(),
-                    splashFadeIn = ConfigService.SplashFadeIn,
-                    splashFadeOut = ConfigService.SplashFadeOut,
                     iconSize = ConfigService.IconSize,
                     updateChannel = ConfigService.UpdateChannel,
                     githubToken = string.IsNullOrEmpty(ConfigService.GitHubToken) ? Text.Cli("LblNotSet") : Text.Cli("LblConfigured"),
@@ -824,8 +838,6 @@ public static class CliService
                     WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "quickStart", ConfigService.QuickStart));
                     WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "quickStartRegistered", QuickStartService.IsAutoStartRegistered()));
                     WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "quickStartHostRunning", ServiceHost.IsHostRunning()));
-                    WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "splashFadeIn", ConfigService.SplashFadeIn));
-                    WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "splashFadeOut", ConfigService.SplashFadeOut));
                     WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "iconSize", ConfigService.IconSize));
                     WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "updateChannel", ConfigService.UpdateChannel));
                     WriteLine(string.Format(Text.Cli("FmtSettingsLine"), "githubToken", (string.IsNullOrEmpty(ConfigService.GitHubToken) ? Text.Cli("LblNotSet") : Text.Cli("LblConfigured"))));
@@ -899,8 +911,6 @@ public static class CliService
                     "launchmode" => ConfigService.LaunchMode,
                     "closeafterlaunch" => ConfigService.CloseAfterLaunch.ToString(),
                     "quickstart" => ConfigService.QuickStart.ToString(),
-                    "splashfadein" => ConfigService.SplashFadeIn.ToString(),
-                    "splashfadeout" => ConfigService.SplashFadeOut.ToString(),
                     "iconsize" => ConfigService.IconSize.ToString(),
                     "updatechannel" => ConfigService.UpdateChannel,
                     "githubtoken" => string.IsNullOrEmpty(ConfigService.GitHubToken) ? Text.Cli("LblNotSet") : Text.Cli("LblConfigured"),
@@ -1162,6 +1172,8 @@ public static class CliService
                 if (opts.TryGetValue("admin", out v)) { i.IsAdmin = ParseBool(v); modified = true; }
                 if (opts.TryGetValue("icon", out v)) { i.IconPath = v; modified = true; }
                 if (opts.TryGetValue("platform", out v)) { i.Platform = v; modified = true; }
+                if (opts.TryGetValue("isplatform", out v)) { bool next = ParseBool(v); if (next && !i.IsPlatform) i.Pin = true; i.IsPlatform = next; modified = true; }
+                if (opts.TryGetValue("pin", out v)) { i.Pin = ParseBool(v); modified = true; }
                 if (opts.TryGetValue("mgr", out v)) { i.MgrPath = v; modified = true; }
                 if (opts.TryGetValue("mgr-admin", out v)) { i.IsMgrAdmin = ParseBool(v); modified = true; }
                 if (opts.TryGetValue("alt", out v)) { i.AlternativeLaunchCommand = v; modified = true; }
@@ -1474,6 +1486,9 @@ public static class CliService
             item.IsAdmin,
             item.Platform,
             item.PlatformName,
+            item.IsPlatform,
+            item.Pin,
+            item.LaunchCount,
             item.IconPath,
             item.RecycleId,
             item.MgrPath,
@@ -1500,15 +1515,15 @@ public static class CliService
         new("launch",         ["--id", "--title", "--path", "--admin", "--alt", "--alongside"],
                                                                        "Help_CmdLaunchDesc",         "Help_Launch_Text"),
         new("platform",       ["--id", "--title"],                     "Help_CmdPlatformDesc",       "Help_Platform_Text"),
-        new("add",            ["--title", "--path", "--admin", "--icon", "--platform", "--mgr", "--alt", "--alongside"],
+        new("add",            ["--title", "--path", "--admin", "--icon", "--platform", "--isplatform", "--pin", "--mgr", "--alt", "--alongside"],
                                                                        "Help_CmdAddDesc",            "Help_Add_Text"),
-        new("edit",           ["--id", "--title", "--path", "--admin", "--icon", "--platform", "--mgr", "--mgr-admin", "--alt", "--alt-admin", "--alt-enable", "--alongside", "--alongside-admin", "--alongside-enable", "--custom-add", "--custom-remove", "--custom-clear"],
+        new("edit",           ["--id", "--title", "--path", "--admin", "--icon", "--platform", "--isplatform", "--pin", "--mgr", "--mgr-admin", "--alt", "--alt-admin", "--alt-enable", "--alongside", "--alongside-admin", "--alongside-enable", "--custom-add", "--custom-remove", "--custom-clear"],
                                                                        "Help_CmdEditDesc",           "Help_Edit_Text"),
         new("remove",         ["--id", "--title", "--permanent"],      "Help_CmdRemoveDesc",         "Help_Remove_Text"),
         new("restore",        ["--id", "--recycle-id", "--title", "--all"], "Help_CmdRestoreDesc",   "Help_Restore_Text"),
         new("recycle",        ["--list", "--mark", "--empty", "--purge", "--clean", "--json"],
                                                                        "Help_CmdRecycleDesc",        "Help_Recycle_Text"),
-        new("scan",           ["--steam", "--epic", "--xbox", "--all", "--classify", "--invalid", "--delete-invalid", "--import", "--json"],
+        new("scan",           ["--steam", "--epic", "--xbox", "--google", "--wegame", "--all", "--classify", "--invalid", "--delete-invalid", "--import", "--json"],
                                                                        "Help_CmdScanDesc",           "Help_Scan_Text"),
         new("search",         ["--json"],                              "Help_CmdSearchDesc",         "Help_Search_Text"),
         new("sort",           ["--list", "--id", "--move-up", "--move-down", "--swap-with", "--json"],

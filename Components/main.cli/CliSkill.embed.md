@@ -22,6 +22,12 @@ Use the CLI when the user wants to control their EricGameLauncher library from a
 
 ## Commands
 
+`add` and `edit` accept `--isplatform true|false` and `--pin true|false` for all items. Pin is managed solely by application configuration and the property Pin toggle. Platform items default to pinned; explicit choices persist. All Jump List entries use Tasks in two sections: pinned platforms, then frequent nonplatform items. Fixed nonplatform items lead the frequent section in main panel order, followed without a separator by unpinned items ranked by successful launch count, ties in main panel order. A single system separator divides platforms and frequent items when both sections have entries. Unpinned platforms stay hidden. There are no custom destination categories, system pin synchronization, temporary pin candidates, or manual system pin prompts. Tasks cannot be pinned or removed through Windows. Screen space still limits visibility. Existing legacy system pins can be unpinned manually. JSON item output includes IsPlatform, Pin and LaunchCount.
+
+`scan --google [--import] [--json]` reads the Google Play Games SQLite library, decrypting locally with the current Windows user's DPAPI key and AES-GCM. `scan --all` includes it. Packages prefixed with com.google or com.android are excluded. An unavailable library is an error, not evidence of an uninstall. GUI, CLI and Jump List main launches share successful launch counts; manager, alongside and custom actions do not count separately.
+
+`scan --wegame [--import] [--classify] [--json]` reads the current user's WeGame SQLite installation manifest and decodes its two QQTEA-encrypted fields locally. It checks only immediate child directories of the recorded library roots, matches Rail game IDs against the installed list, and requires the game's WeGameLauncher/launcher.exe. Names come from directory names with the matching numeric suffix removed. The WeGame manager is preserved on import when found. Existing entries pointing to another executable inside the same game directory are treated as the same game. No installed-program enumeration or whole-disk scan is used; unsupported or damaged manifest data is an error. `scan --all` and GUI scanning include WeGame. Uninstall records remain a researched fallback, not an enabled scanner.
+
 - `list [--recycle] [--json]` — list active items or the recycle bin (recycle entries include `recycleId`)
 - `launch --id <id> | --title <title> | --path <path> [--admin] [--alt] [--alongside]` — launch a game or application
 - `platform --id <id> | --title <title>` — launch the platform manager (Steam, Epic, Xbox)
@@ -30,7 +36,7 @@ Use the CLI when the user wants to control their EricGameLauncher library from a
 - `remove --id <id> | --title <title> [--permanent]` — remove an item (to recycle bin by default)
 - `restore --id <id> | --recycle-id <recycleId> | --title <title> | --all` — restore items from the recycle bin; restore fails if the main list already holds the same path or ID
 - `recycle --list | --mark <id> | --empty | --purge | --clean [--json]` — manage the recycle bin (for `--mark`, an item ID or recycle ID is accepted)
-- `scan [--steam | --epic | --xbox | --all] [--classify] [--invalid] [--delete-invalid] [--import] [--json]` — scan for installed games
+- `scan [--steam | --epic | --xbox | --google | --wegame | --all] [--classify] [--invalid] [--delete-invalid] [--import] [--json]` — scan for installed games
 - `search <query> [--json]` — search by title, path, pinyin, or pinyin initials
 - `sort --list | --id <id> --move-up | --move-down | --swap-with <id>` — reorder items
 
@@ -46,11 +52,13 @@ Update installation and repair verify the downloaded ZIP against the GitHub asse
 
 ## Settings keys
 
-`launchMode` (single|double), `closeAfterLaunch` (true|false), `quickStart` (true|false), `splashFadeIn` (true|false), `splashFadeOut` (true|false), `iconSize` (32-512), `updateChannel` (stable|latest), `githubToken`, `appIconPath`, `appTitle`, `lang` (Zh-CN|EN), `storageMode` (system|portable), `windowX`, `windowY`, `windowWidth`, `windowHeight`.
+LaunchCount is runtime data hydrated from an independent ID-to-count JSON cache under the application cache directory, scoped by configuration directory. It is never serialized into items.yaml. Successful launches update only this cache; clearing the cache resets counts without changing project configuration. No historical count migration is performed.
+
+`launchMode` (single|double), `closeAfterLaunch` (true|false), `quickStart` (true|false), `iconSize` (32-512), `updateChannel` (stable|latest), `githubToken`, `appIconPath`, `appTitle`, `lang` (Zh-CN|EN), `storageMode` (system|portable), `windowX`, `windowY`, `windowWidth`, `windowHeight`.
 
 `quickStart` makes the launcher run as a background host registered for auto start at sign-in; it is disabled by default. The host preloads configuration data, validates and rebuilds icons, completes one warm UI pass and then releases the interface. The main window keeps normal window semantics — closing it closes the window — while the host stays resident with the warmed resources, so the next launch shows the window within a fraction of a second. Use `settings --set quickStart=true|false` to control it; `settings --list` also reports `quickStartRegistered`, `quickStartCommand` and `quickStartHostRunning`.
 
-`splashFadeIn` and `splashFadeOut` control the splash animations but apply only while `quickStart` is enabled; with quick start off the splash always animates.
+Startup animations are enabled by default and follow the Windows animation setting, independently of Quick Start. Disabling system animations switches directly between the splash and main view.
 
 ## Examples
 

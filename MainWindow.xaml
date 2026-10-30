@@ -7,10 +7,10 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid x:Name="RootGrid">
+    <Grid x:Name="RootGrid" Background="Transparent">
         <Grid x:Name="StartupOverlay"
               Canvas.ZIndex="3000"
-              Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+              Background="Transparent"
               Opacity="0"
               IsHitTestVisible="True"
               Loaded="StartupOverlay_Loaded">

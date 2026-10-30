@@ -20,6 +20,7 @@ namespace EricGameLauncher
         private bool _startupHidePending = false;
         private Storyboard? _startupFadeInStoryboard;
         private TaskCompletionSource<bool>? _startupFadeInCompletion;
+        private MainView? _mainView;
         private readonly UISettings _uiSettings = new();
         private readonly Stopwatch _startupOverlayStopwatch = Stopwatch.StartNew();
 
@@ -343,7 +344,8 @@ namespace EricGameLauncher
         {
             try
             {
-                var main = new MainView();
+                var main = new MainView { Opacity = 0, IsEnabled = false };
+                _mainView = main;
                 RootGrid.Children.Insert(0, main);
                 main.Start(this);
                 LogService.Write("Startup", $"Main view created at {_startupOverlayStopwatch.ElapsedMilliseconds}ms");
@@ -459,11 +461,11 @@ namespace EricGameLauncher
                     return;
                 }
 
-                if (!ConfigService.SplashFadeInApplied || !_uiSettings.AnimationsEnabled)
+                if (!_uiSettings.AnimationsEnabled)
                 {
                     StartupOverlay.Opacity = 1;
                     completion.TrySetResult(true);
-                    LogService.Write("Startup", "Splash fade-in skipped by configuration or system animation preference");
+                    LogService.Write("Startup", "Splash fade-in skipped by system animation preference");
                     return;
                 }
 
@@ -521,12 +523,9 @@ namespace EricGameLauncher
                     ? $"Startup overlay hidden by timeout after {_startupOverlayStopwatch.ElapsedMilliseconds}ms data={_startupDataLoaded} ui={_startupUiLoaded} loaded={_startupOverlayLoaded}"
                     : $"Startup overlay hidden after {_startupOverlayStopwatch.ElapsedMilliseconds}ms");
 
-                MarkStartupComplete();
-
                 if (WarmupMode)
                 {
-                    StartupOverlay.Opacity = 0;
-                    StartupOverlay.Visibility = Visibility.Collapsed;
+                    CompleteStartupOverlay();
                     LogService.Write("Startup", "Warmup window overlay collapsed without animation");
                     return;
                 }
@@ -547,31 +546,63 @@ namespace EricGameLauncher
         {
             try
             {
-                if (!ConfigService.SplashFadeOutApplied || !_uiSettings.AnimationsEnabled)
+                if (!_uiSettings.AnimationsEnabled)
                 {
-                    StartupOverlay.Opacity = 0;
-                    StartupOverlay.Visibility = Visibility.Collapsed;
-                    LogService.Write("Startup", "Startup overlay hidden without fade-out by configuration or system animation preference");
+                    CompleteStartupOverlay();
+                    LogService.Write("Startup", "Startup overlay hidden without fade-out by system animation preference");
                     return;
                 }
 
+                var duration = TimeSpan.FromMilliseconds(500);
+                var gridDelay = TimeSpan.FromTicks(duration.Ticks * 2 / 3);
                 var fadeOut = new DoubleAnimation
                 {
                     To = 0,
-                    Duration = new Duration(TimeSpan.FromMilliseconds(500))
+                    Duration = new Duration(duration)
                 };
                 var storyboard = new Storyboard();
                 Storyboard.SetTarget(fadeOut, StartupOverlay);
                 Storyboard.SetTargetProperty(fadeOut, "Opacity");
                 storyboard.Children.Add(fadeOut);
+                if (_mainView != null)
+                {
+                    var gridFadeIn = new DoubleAnimation
+                    {
+                        From = 0,
+                        To = 1,
+                        BeginTime = gridDelay,
+                        Duration = new Duration(duration - gridDelay)
+                    };
+                    Storyboard.SetTarget(gridFadeIn, _mainView);
+                    Storyboard.SetTargetProperty(gridFadeIn, "Opacity");
+                    storyboard.Children.Add(gridFadeIn);
+                }
                 storyboard.Completed += (sender, args) =>
                 {
-                    StartupOverlay.Visibility = Visibility.Collapsed;
+                    storyboard.Stop();
+                    CompleteStartupOverlay();
                 };
                 storyboard.Begin();
-                LogService.Write("Startup", $"Startup overlay fade-out started duration=500ms at={_startupOverlayStopwatch.ElapsedMilliseconds}ms");
+                LogService.Write("Startup", $"Startup overlay fade-out started duration={duration.TotalMilliseconds}ms gridFadeInDelay={gridDelay.TotalMilliseconds:F1}ms at={_startupOverlayStopwatch.ElapsedMilliseconds}ms");
             }
-            catch (Exception ex) { LogService.Write("Startup", "Startup overlay fade-out failed", ex); }
+            catch (Exception ex)
+            {
+                LogService.Write("Startup", "Startup overlay fade-out failed", ex);
+                CompleteStartupOverlay();
+            }
+        }
+
+        private void CompleteStartupOverlay()
+        {
+            StartupOverlay.Opacity = 0;
+            StartupOverlay.Visibility = Visibility.Collapsed;
+            if (_mainView != null)
+            {
+                _mainView.Opacity = 1;
+                _mainView.IsEnabled = true;
+            }
+            LogService.Write("Startup", "Splash finished; main view revealed over transparent backdrop");
+            MarkStartupComplete();
         }
 
         private async Task EnforceStartupOverlayTimeoutAsync()

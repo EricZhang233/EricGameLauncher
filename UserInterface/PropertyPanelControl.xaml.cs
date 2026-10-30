@@ -19,6 +19,8 @@ public sealed partial class PropertyPanelControl : UserControl
     private CancellationTokenSource? _iconPreviewCts;
     private bool _suppressIconPreview;
     private bool _customIconChosen;
+    private bool _loadingFlags;
+    private bool _platformChoiceMade;
     private string? _iconPreviewSource;
     private readonly PropertyDraftSession _draftSession = new();
     private readonly UISettings _uiSettings = new();
@@ -44,6 +46,12 @@ public sealed partial class PropertyPanelControl : UserControl
     public PropertyPanelControl()
     {
         InitializeComponent();
+        PropIsPlatform.Click += (_, _) => _platformChoiceMade = true;
+        PropExePath.TextChanged += (_, _) =>
+        {
+            if (!_loadingFlags && _isNewItemMode && !_platformChoiceMade)
+                PropIsPlatform.IsChecked = PlatformRecognition.IsPlatform(PropExePath.Text);
+        };
         foreach (var menu in new[] { MenuExeStartMenu, MenuExeDesktop, MenuAltStartMenu, MenuAltDesktop, MenuAlongStartMenu, MenuAlongDesktop, MenuMgrStartMenu, MenuMgrDesktop }) HookLazyMenu(menu);
         Unloaded += (_, _) => { _platformDetectCts?.Cancel(); _iconPreviewCts?.Cancel(); _draftSession.Advance(); };
 
@@ -149,6 +157,8 @@ public sealed partial class PropertyPanelControl : UserControl
         PropSubstituteExeLabel.Text = Text.T("Property_SubstituteExe");
         PropRunAtLaunchLabel.Text = Text.T("Property_RunAtLaunch");
         PropManagerPathLabel.Text = Text.T("Property_ManagerPath");
+        PropIsPlatform.Content = Text.T("Property_IsPlatform");
+        UpdatePinControl();
         PropOptionalLabel.Text = Text.T("Property_Optional");
 
         string adminText = Text.T("Property_Admin");
@@ -215,6 +225,7 @@ public sealed partial class PropertyPanelControl : UserControl
             _draftSession.Advance();
             _editingItem = AppItemDto.FromViewModel(item).ToViewModel(ConfigService.FixedCachePath);
             _isNewItemMode = isNew;
+            if (isNew) { _editingItem.IsPlatform = PlatformRecognition.IsPlatform(_editingItem.ExePath); _editingItem.Pin = _editingItem.IsPlatform; }
             _customIconChosen = false;
             _iconPreviewSource = null;
 
@@ -260,6 +271,8 @@ public sealed partial class PropertyPanelControl : UserControl
                 _editingItem.Title = ItemService.SuggestTitle(newExePath) ?? "";
 
             _editingItem.IsAdmin = PropIsAdmin.IsChecked ?? false;
+            _editingItem.IsPlatform = PropIsPlatform.IsChecked ?? false;
+            _editingItem.Pin = PropPin.IsChecked ?? false;
             _editingItem.IsAltAdmin = PropIsAltAdmin.IsChecked ?? false;
             _editingItem.IsAlongsideAdmin = PropIsAlongsideAdmin.IsChecked ?? false;
             _editingItem.IsMgrAdmin = PropIsMgrAdmin.IsChecked ?? false;
@@ -356,9 +369,15 @@ public sealed partial class PropertyPanelControl : UserControl
     {
         try
         {
+            _loadingFlags = true;
+            _platformChoiceMade = false;
             PropTitle.Text = _editingItem!.Title ?? "";
             PropExePath.Text = _editingItem.ExePath ?? "";
             PropIsAdmin.IsChecked = _editingItem.IsAdmin;
+            PropIsPlatform.IsChecked = _editingItem.IsPlatform;
+            PropPin.IsChecked = _editingItem.Pin;
+            UpdatePinControl();
+            _loadingFlags = false;
             PropMgrPath.Text = _editingItem.MgrPath ?? "";
             PropIsMgrAdmin.IsChecked = _editingItem.IsMgrAdmin;
             PropDisplayNameLabel.Text = Text.T("Property_DisplayName");
@@ -570,6 +589,24 @@ public sealed partial class PropertyPanelControl : UserControl
             HidePanel();
         }
         catch (Exception ex) { LogService.Write("UI", "BtnCloseProperty_Click failed", ex); }
+    }
+
+    private void PropIsPlatform_Checked(object sender, RoutedEventArgs e)
+    {
+        if (!_loadingFlags) PropPin.IsChecked = true;
+        UpdatePinControl();
+    }
+
+    private void PropIsPlatform_Unchecked(object sender, RoutedEventArgs e)
+    {
+        UpdatePinControl();
+    }
+
+    private void UpdatePinControl()
+    {
+        if (PropPin == null) return;
+        PropPin.IsEnabled = true;
+        ToolTipService.SetToolTip(PropPin, Text.T("Property_Pin"));
     }
 
     private void BtnSaveProperty_Click(object sender, RoutedEventArgs e)
