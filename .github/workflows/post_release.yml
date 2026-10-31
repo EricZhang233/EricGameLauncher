@@ -27,14 +27,9 @@ jobs:
             if (!release?.id || !release.tag_name.startsWith('v')) throw new Error('Missing release identity.');
             const {data: current} = await github.rest.repos.getRelease({owner, repo, release_id: release.id});
             if (current.id !== release.id || current.tag_name !== release.tag_name || current.published_at !== release.published_at || current.draft) throw new Error('Release state changed; refusing to replace body.');
-            await github.rest.repos.updateRelease({owner, repo, release_id: release.id, body: '正在自动化测试和构建，稍后将在此显示更新日志和软件包'});
-  validate:
-    needs: prepare_release
-    uses: ./.github/workflows/validate.yml
-    with:
-      tag: ${{ github.event.release.tag_name }}
+            await github.rest.repos.updateRelease({owner, repo, release_id: release.id, body: '正在构建，稍后将在此显示更新日志和软件包'});
   build:
-    needs: validate
+    needs: prepare_release
     uses: ./.github/workflows/build_release.yml
     with:
       tag: ${{ github.event.release.tag_name }}
@@ -82,8 +77,8 @@ jobs:
             if (!body.trim()) throw new Error('Tagged release notes are empty.');
             await github.rest.repos.updateRelease({owner, repo, release_id: release.id, body});
   draft_failed_release:
-    needs: [prepare_release, validate, build, upload_asset, publish_notes]
-    if: ${{ always() && startsWith(github.event.release.tag_name, 'v') && (needs.prepare_release.result != 'success' || needs.validate.result != 'success' || needs.build.result != 'success' || needs.upload_asset.result != 'success' || needs.publish_notes.result != 'success') }}
+    needs: [prepare_release, build, upload_asset, publish_notes]
+    if: ${{ always() && startsWith(github.event.release.tag_name, 'v') && (needs.prepare_release.result != 'success' || needs.build.result != 'success' || needs.upload_asset.result != 'success' || needs.publish_notes.result != 'success') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

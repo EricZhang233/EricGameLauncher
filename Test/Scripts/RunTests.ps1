@@ -1,12 +1,8 @@
-param(
-    [ValidateSet('All', 'Integration', 'Contracts', 'Packaging')][string]$Area = 'All',
-    [ValidateRange(1, 100)][int]$LifecycleCycles = 1,
-    [ValidateRange(30, 3600)][int]$StepTimeoutSeconds = 600,
-    [string]$ReportsRoot
-)
 $ErrorActionPreference = 'Stop'
+$LifecycleCycles = 1
+$StepTimeoutSeconds = 600
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-if (-not $ReportsRoot) { $ReportsRoot = Join-Path $repo 'Test/artifacts/machine-tests' }
+$ReportsRoot = Join-Path $repo 'Test/artifacts/machine-tests'
 $runId = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
 $reportDirectory = Join-Path ([IO.Path]::GetFullPath($ReportsRoot)) $runId
 Import-Module "$PSScriptRoot/TestWorkspace.psm1" -Force
@@ -33,7 +29,7 @@ function Save-Report {
     $result = [ordered]@{
         run_id = $runId; started_utc = $started.ToString('O'); updated_utc = [DateTime]::UtcNow.ToString('O')
         status = $(if ($failed) { 'failed' } elseif ($script:finished -and $records.Count -gt 0 -and @($records | Where-Object { $_.status -ne 'passed' }).Count -eq 0) { 'passed' } else { 'running' })
-        checks_passed = $script:checks; lifecycle_cycles = $(if ($Area -in @('All', 'Packaging')) { $LifecycleCycles } else { 0 }); version = $version; area = $Area
+        checks_passed = $script:checks; lifecycle_cycles = $LifecycleCycles; version = $version
         error = $script:errorMessage
         test_data = $testRoot; test_data_retained = (Test-Path -LiteralPath $testRoot); phases = @($records.ToArray())
     }
@@ -56,8 +52,7 @@ function Invoke-Native([string]$Executable, [string[]]$CommandArguments) {
     $start.RedirectStandardError = $true
     $start.StandardOutputEncoding = [Text.UTF8Encoding]::new($false)
     $start.StandardErrorEncoding = [Text.UTF8Encoding]::new($false)
-    $start.Environment['TEMP'] = $testRoot
-    $start.Environment['TMP'] = $testRoot
+    $start.Environment['UseSharedCompilation'] = 'false'
     $start.Environment['EglTestBuildRoot'] = (Join-Path $testRoot 'build') + [IO.Path]::DirectorySeparatorChar
     foreach ($argument in $CommandArguments) { $start.ArgumentList.Add($argument) }
     [IO.File]::AppendAllText($script:activeLog, "COMMAND: $Executable $($CommandArguments -join ' ')`n")
@@ -90,25 +85,31 @@ $definitions = @(
     @{ Name = 'Preflight'; Action = {
         if (-not $IsWindows) { throw 'Run machine tests on Windows.' }
         foreach ($tool in @('pwsh', 'dotnet')) { Get-Command $tool -CommandType Application -ErrorAction Stop | Out-Null }
-        if ($Area -in @('All', 'Contracts')) { Get-Command 'node' -CommandType Application -ErrorAction Stop | Out-Null }
+        Get-Command 'node' -CommandType Application -ErrorAction Stop | Out-Null
         if (Get-Process -Name EricGameLauncher -ErrorAction SilentlyContinue) { throw 'Close running EricGameLauncher windows before testing. They have not been modified or stopped.' }
         $key = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($repo.ToLowerInvariant())))
         $script:mutex = [Threading.Mutex]::new($false, "Local\EricGameLauncher.MachineTests.$key")
         try { $script:lockHeld = $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $script:lockHeld = $true }
         if (-not $lockHeld) { throw 'Another machine-test run is using this checkout.' }
         Invoke-Native 'dotnet' @('--version')
-        if ($Area -in @('All', 'Contracts')) { Invoke-Native 'node' @('--version') }
+        Invoke-Native 'node' @('--version')
     } },
     @{ Name = 'Test-runner safeguards'; Action = { Invoke-Native 'pwsh' @('-NoProfile', '-NonInteractive', '-File', 'Test/Scripts/test-machine-runner.ps1') } },
-    @{ Name = 'Dependency audit'; Action = { Invoke-Native 'dotnet' @('restore', 'EricGameLauncher.csproj', '-p:NuGetAudit=true', '-p:NuGetAuditMode=all', '-warnaserror') } },
+    @{ Name = 'Dependency audit'; Action = {
+        Invoke-Native 'dotnet' @('restore', 'EricGameLauncher.csproj', '-p:NuGetAudit=true', '-p:NuGetAuditMode=all', '-warnaserror')
+        Invoke-Native 'dotnet' @('restore', 'Test/Core/Core.Tests.csproj', '-p:NuGetAudit=true', '-p:NuGetAuditMode=all', '-warnaserror')
+    } },
+    @{ Name = 'Core unit tests'; Action = { Invoke-Native 'dotnet' @('test', 'Test/Core/Core.Tests.csproj', '-c', 'Debug', '-warnaserror', '--logger', 'trx', '--results-directory', $reportDirectory) } },
     @{ Name = 'Debug build'; Action = { Invoke-Native 'dotnet' @('build', 'EricGameLauncher.csproj', '-c', 'Debug', '--nologo', '-p:NuGetAudit=false', '-warnaserror') } },
     @{ Name = 'Build version and runtime'; Action = { Invoke-Native 'pwsh' @('-NoProfile', '-NonInteractive', '-File', 'Test/Scripts/test-build-output.ps1', '-MainDirectory', $main) } },
     @{ Name = 'Incremental payload repair'; Action = { Invoke-Native 'pwsh' @('-NoProfile', '-NonInteractive', '-File', 'Test/Scripts/test-payload-repair.ps1') } },
     @{ Name = 'Core regressions'; Action = {
+        Invoke-Native 'dotnet' @('build', 'Test/LaunchFixture/LaunchFixture.csproj', '--nologo', '-p:NuGetAudit=false', '-warnaserror')
         Invoke-Native 'dotnet' @('build', 'Test/Regression/Regression.csproj', '--nologo', '-p:NuGetAudit=false', '-warnaserror')
         $probe = Join-Path $main 'EricGameLauncher.Regression.dll'
         Copy-Item -LiteralPath (Join-Path $testRoot 'build/Regression/bin/Debug/net10.0-windows10.0.26100/EricGameLauncher.Regression.dll') -Destination $probe
-        try { Invoke-Native 'dotnet' @('exec', '--runtimeconfig', "$main/EricGameLauncher.runtimeconfig.json", '--depsfile', "$main/EricGameLauncher.deps.json", $probe, "$main/EricGameLauncher.Cli.exe") }
+        $launchFixture = Join-Path $testRoot 'build/LaunchFixture/bin/Debug/net10.0/EricGameLauncher.LaunchFixture.exe'
+        try { Invoke-Native 'dotnet' @('exec', '--runtimeconfig', "$main/EricGameLauncher.runtimeconfig.json", '--depsfile', "$main/EricGameLauncher.deps.json", $probe, "$main/EricGameLauncher.Cli.exe", $launchFixture) }
         finally { Remove-Item -LiteralPath $probe -ErrorAction SilentlyContinue }
     } },
     @{ Name = 'Updater integrity and command modes'; Action = { Invoke-Native 'dotnet' @('run', '--project', 'Test/UpdateIntegrity/UpdateIntegrity.csproj', '-p:NuGetAudit=false', '--', 'Components/updater.main/bin/Debug/net10.0/win-x64/updater.main.exe') } },
@@ -122,13 +123,6 @@ $definitions = @(
     @{ Name = 'Release build'; Action = { Invoke-Native 'dotnet' @('build', 'EricGameLauncher.csproj', '-c', 'Release', '--nologo', '-p:NuGetAudit=false', '-p:TestHostRunning=true', '-warnaserror', "-p:ReleasePackageDirectory=$packages") } },
     @{ Name = 'Package and lifecycle'; Action = { Invoke-Native 'pwsh' @('-NoProfile', '-NonInteractive', '-File', 'Test/Scripts/test-package.ps1', '-PackagePath', $package, '-FixtureDirectory', $fixture, '-Cycles', "$LifecycleCycles", '-MetricsPath', (Join-Path $reportDirectory 'lifecycle.json')) } }
 )
-$selected = switch ($Area) {
-    'Integration' { @('Preflight', 'Debug build', 'Build version and runtime', 'Incremental payload repair', 'Core regressions', 'Updater integrity and command modes', 'Log pressure') }
-    'Contracts' { @('Preflight', 'Test-runner safeguards', 'Promotion gates', 'Failed release draft recovery', 'Release body lifecycle', 'Release input gates', 'Shared package policy', 'Runtime preparation metadata') }
-    'Packaging' { @('Preflight', 'Dependency audit', 'Release build', 'Package and lifecycle') }
-    default { @($definitions | ForEach-Object { $_.Name }) }
-}
-$definitions = @($definitions | Where-Object { $_.Name -in $selected })
 foreach ($definition in $definitions) { $records.Add([pscustomobject]@{ name = $definition.Name; status = 'not_run'; seconds = 0; log = ('{0:D2}.log' -f $records.Count) }) }
 Push-Location $repo
 try {
@@ -174,5 +168,5 @@ try {
 }
 Write-Host "Report: $reportDirectory"
 if ($failed) { Write-Host "VALIDATION FAILED: $script:errorMessage"; exit 1 }
-Write-Host "VALIDATION PASSED: $script:checks checks. Area=$Area."
+Write-Host "TESTS PASSED: $script:checks checks."
 exit 0

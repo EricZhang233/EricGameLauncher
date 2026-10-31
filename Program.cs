@@ -18,6 +18,7 @@ public static class Program
             JumpListService.Initialize();
             var item = ConfigService.LoadItems().FirstOrDefault(x => x.Id == args[1] && x.Status == 0);
             int code = item != null && LaunchService.Launch(item, item.UseAlternativeLaunch).Success ? 0 : 1;
+            JumpListService.FlushPending();
             LogService.FlushAndStop();
             return code;
         }
@@ -51,6 +52,7 @@ public static class Program
             SynchronizationContext.SetSynchronizationContext(context);
             _ = new App();
         });
+        JumpListService.FlushPending();
         LogService.FlushAndStop();
         return 0;
     }

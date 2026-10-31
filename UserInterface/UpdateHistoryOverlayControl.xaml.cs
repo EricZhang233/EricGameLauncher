@@ -46,6 +46,7 @@ public sealed partial class UpdateHistoryOverlayControl : UserControl
     private bool _suppressScroll;
     private int _requestVersion;
     private CancellationTokenSource? _requestCancellation;
+    public event Action? Hidden;
 
     public UpdateHistoryOverlayControl()
     {
@@ -109,6 +110,7 @@ public sealed partial class UpdateHistoryOverlayControl : UserControl
         HistoryViewHost.Children.Clear();
         _webView = null;
         LogService.Write("Update", "History overlay hidden");
+        Hidden?.Invoke();
     }
 
     private void ResetContent()
@@ -190,7 +192,7 @@ public sealed partial class UpdateHistoryOverlayControl : UserControl
         }
 
         var (html, plainText) = BuildMarkup(entries);
-        var (view, webView) = await HtmlViewBuilder.CreateAsync(this, html, plainText, 0, 0, SpyScript);
+        var (view, webView) = await HtmlViewBuilder.CreateAsync(this, html, plainText, 0, 0, SpyScript, _requestCancellation?.Token ?? default);
         if (version != _requestVersion) { webView?.Close(); return; }
         _webView = webView;
 

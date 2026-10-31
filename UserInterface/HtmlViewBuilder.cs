@@ -8,8 +8,9 @@ namespace EricGameLauncher;
 
 internal static class HtmlViewBuilder
 {
-    public static async Task<(FrameworkElement View, WebView2? WebView)> CreateAsync(FrameworkElement owner, string bodyHtml, string plainFallback, double width, double height, string extraScript)
+    public static async Task<(FrameworkElement View, WebView2? WebView)> CreateAsync(FrameworkElement owner, string bodyHtml, string plainFallback, double width, double height, string extraScript, System.Threading.CancellationToken token = default)
     {
+        token.ThrowIfCancellationRequested();
         if (!System.IO.Directory.Exists(ConfigService.SystemCachePath))
             System.IO.Directory.CreateDirectory(ConfigService.SystemCachePath);
         Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", System.IO.Path.Combine(ConfigService.SystemCachePath, "WebView2"));
@@ -21,10 +22,20 @@ internal static class HtmlViewBuilder
         };
         if (width > 0) webView.Width = width;
         if (height > 0) webView.Height = height;
-
+        bool closed = false;
+        void CloseView()
+        {
+            if (closed) return;
+            closed = true;
+            try { webView.Close(); }
+            catch (Exception ex) { LogService.Write("Update", "WebView close failed", ex); }
+        }
+        Task? initialization = null;
         try
         {
-            await webView.EnsureCoreWebView2Async();
+            initialization = webView.EnsureCoreWebView2Async().AsTask();
+            await initialization.WaitAsync(token);
+            token.ThrowIfCancellationRequested();
             webView.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = false;
             webView.CoreWebView2.NavigationStarting += async (_, args) =>
             {
@@ -65,8 +76,14 @@ internal static class HtmlViewBuilder
         }
         catch (Exception ex)
         {
+            if (token.IsCancellationRequested)
+            {
+                if (initialization == null || initialization.IsCompleted) CloseView();
+                else _ = CloseAfterInitializationAsync(initialization, CloseView);
+                token.ThrowIfCancellationRequested();
+            }
+            CloseView();
             LogService.Write("Update", "HtmlViewBuilder fallback to plain text", ex);
-            try { webView.Close(); } catch { }
             var fallback = new ScrollViewer
             {
                 Content = new TextBlock { Text = plainFallback, TextWrapping = TextWrapping.Wrap }
@@ -74,6 +91,13 @@ internal static class HtmlViewBuilder
             if (height > 0) fallback.Height = height;
             return (fallback, null);
         }
+    }
+
+    private static async Task CloseAfterInitializationAsync(Task initialization, Action close)
+    {
+        try { await initialization; }
+        catch (Exception ex) { LogService.Write("Update", "Cancelled WebView initialization completed with an error", ex); }
+        finally { close(); }
     }
 
     private static string AccentHex()

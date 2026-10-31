@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 
 const workflow = readFileSync(new URL('../../.github/workflows/post_release.yml', import.meta.url), 'utf8');
+assert.equal(existsSync(new URL('../../.github/workflows/validate.yml', import.meta.url)), false);
+assert.doesNotMatch(workflow, /needs\.validate|needs: validate|^  validate:/m);
+assert.match(workflow, /build:\r?\n    needs: prepare_release/);
+assert.match(workflow, /needs: \[prepare_release, build, upload_asset, publish_notes\]/);
+for (const name of readdirSync(new URL('../../.github/workflows/', import.meta.url))) {
+  const contents = readFileSync(new URL('../../.github/workflows/' + name, import.meta.url), 'utf8');
+  assert.doesNotMatch(contents, /dotnet test|Test\/Scripts\/validate\.ps1|workflows\/validate\.yml/);
+}
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 function script(job) {
   const section = workflow.split(new RegExp(`\\r?\\n  ${job}:`))[1].split(/\r?\n  [a-z_]+:/)[0];
@@ -10,7 +18,7 @@ function script(job) {
 }
 const prepare = script('prepare_release');
 const finalize = script('publish_notes');
-const pending = '正在自动化测试和构建，稍后将在此显示更新日志和软件包';
+const pending = '正在构建，稍后将在此显示更新日志和软件包';
 const notes = '# Tagged release notes\n\nVerified package is ready.\n';
 let checks = 0;
 async function check(name, execute, options = {}) {

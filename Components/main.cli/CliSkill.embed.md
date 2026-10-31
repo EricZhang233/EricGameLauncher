@@ -30,6 +30,8 @@ Use the CLI when the user wants to control their EricGameLauncher library from a
 
 - `list [--recycle] [--json]` — list active items or the recycle bin (recycle entries include `recycleId`)
 - `launch --id <id> | --title <title> | --path <path> [--admin] [--alt] [--alongside]` — launch a game or application
+
+For stored items, `--alongside` runs the configured alongside command for this launch even when its saved switch is off. Without the flag, the saved switch applies. It never changes that switch or starts the command twice. An empty alongside command does nothing. Alongside failures return a launch error; a successful main launch still counts once. `--path` launches only the supplied command.
 - `platform --id <id> | --title <title>` — launch the platform manager (Steam, Epic, Xbox)
 - `add --title <title> --path <path> [--admin] [--icon <path>] [--platform <name>] [--mgr <path>] [--alt <path>] [--alongside <path>]` — add a new item
 - `edit --id <id> [options]` — edit an item; run `edit --help` for all supported fields

@@ -7,7 +7,7 @@ using System.Net;
 using System.Net.Http;
 using updater.main;
 
-if (args.Length != 1) throw new ArgumentException("Pass the CLI executable path.");
+if (args.Length != 2) throw new ArgumentException("Pass the CLI and launch-fixture executable paths.");
 string cli = Path.GetFullPath(args[0]);
 string root = EricGameLauncher.Testing.TestWorkspace.NewFixture("EGL.Regression.");
 Directory.CreateDirectory(root);
@@ -38,6 +38,7 @@ async Task<(int Code, string Output, string Error)> Cli(params string[] argument
 try
 {
     JumpListFeatures.Run(Check);
+    await AlongsideFeatures.RunAsync(Check, Cli, root, Path.GetFullPath(args[1]));
     await WeGameFeatures.RunAsync(Check, Cli, root);
     await LaunchCountFeatures.RunAsync(Check);
     await LegacyFeatures.RunAsync(Check, Cli, root);

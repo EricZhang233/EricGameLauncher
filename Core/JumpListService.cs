@@ -6,8 +6,18 @@ namespace EricGameLauncher;
 public static class JumpListService
 {
     public const string AppId = "EricSoft.EricGameLauncher";
-    private static readonly object Gate = new();
     private static List<AppItem>? _catalog;
+    private static readonly StaRefreshQueue Queue = new(RefreshSnapshot, ex =>
+    {
+        _catalog = null;
+        LogService.Write("JumpList", "Refresh failed; next request will reload configuration", ex);
+    });
+
+    public static void FlushPending()
+    {
+        if (!Queue.Idle.Wait(TimeSpan.FromSeconds(5)))
+            LogService.Write("JumpList", "Refresh did not finish within the exit deadline");
+    }
     internal static List<List<AppItem>> TaskGroups(List<AppItem> items)
     {
         var active = items.Where(x => x.Status == 0).ToList();
@@ -41,33 +51,24 @@ public static class JumpListService
     private static void RefreshCore(bool reloadItems)
     {
         if (DebugPaths.IsDebug()) return;
-        var thread = new Thread(() =>
+        try { Queue.Request(reloadItems); }
+        catch (Exception ex) { LogService.Write("JumpList", "Could not schedule refresh", ex); }
+    }
+
+    private static void RefreshSnapshot(bool reloadItems)
+    {
+        if (reloadItems || _catalog == null) _catalog = ConfigService.LoadItems().Where(x => x.Status == 0).ToList();
+        var items = _catalog;
+        LaunchCountCache.Populate(items);
+        var list = new JumpList { ShowRecentCategory = false, ShowFrequentCategory = false };
+        foreach (var group in TaskGroups(items))
         {
-            lock (Gate)
-            {
-                try
-                {
-                    if (reloadItems) _catalog = ConfigService.LoadItems().Where(x => x.Status == 0).ToList();
-                    if (_catalog == null) return;
-                    var items = _catalog;
-                    if (!reloadItems) LaunchCountCache.Populate(items);
-                    var list = new JumpList { ShowRecentCategory = false, ShowFrequentCategory = false };
-                    foreach (var group in TaskGroups(items))
-                    {
-                        if (list.JumpItems.Count > 0) list.JumpItems.Add(new JumpTask());
-                        foreach (var item in group) list.JumpItems.Add(Task(item));
-                    }
-                    list.JumpItemsRejected += (_, e) => LogService.Write("JumpList", $"Rejected {e.RejectedItems.Count} items");
-                    list.Apply();
-                    LogService.Write("JumpList", $"Updated tasks={list.JumpItems.Count}");
-                }
-                catch (Exception ex) { LogService.Write("JumpList", "Refresh failed", ex); }
-            }
-        });
-        thread.IsBackground = true;
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        thread.Join();
+            if (list.JumpItems.Count > 0) list.JumpItems.Add(new JumpTask());
+            foreach (var item in group) list.JumpItems.Add(Task(item));
+        }
+        list.JumpItemsRejected += (_, e) => LogService.Write("JumpList", $"Rejected {e.RejectedItems.Count} items: {string.Join(", ", e.RejectionReasons)}");
+        list.Apply();
+        LogService.Write("JumpList", $"Updated tasks={list.JumpItems.Count}");
     }
 
     public static void UpdateShortcutIds()

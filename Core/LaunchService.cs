@@ -9,9 +9,9 @@ public static class LaunchService
         return (item.ExePath ?? "", item.IsAdmin);
     }
 
-    public static (string path, bool admin)? GetAlongsideTarget(AppItem item)
+    public static (string path, bool admin)? GetAlongsideTarget(AppItem item, bool requestAlongside = false)
     {
-        if (item.RunAlongside && !string.IsNullOrEmpty(item.AlongsideCommand))
+        if ((item.RunAlongside || requestAlongside) && !string.IsNullOrEmpty(item.AlongsideCommand))
             return (item.AlongsideCommand, item.IsAlongsideAdmin);
         return null;
     }
@@ -24,7 +24,7 @@ public static class LaunchService
         return null;
     }
 
-    public static LaunchResult Launch(AppItem item, bool useAlt = false)
+    public static LaunchResult Launch(AppItem item, bool useAlt = false, bool requestAlongside = false)
     {
         using (LogService.StartOperation("Launch", $"Launch {item.Title}"))
         {
@@ -39,7 +39,7 @@ public static class LaunchService
             }
             catch (Exception ex) { LogService.Write("Launch", "Launch count persistence failed", ex); }
 
-            var alongside = GetAlongsideTarget(item);
+            var alongside = GetAlongsideTarget(item, requestAlongside);
             if (alongside.HasValue)
                 return ProcessRunner.Run(alongside.Value.path, alongside.Value.admin);
             return result;

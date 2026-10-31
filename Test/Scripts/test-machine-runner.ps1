@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$sourcePath = Join-Path $PSScriptRoot 'validate.ps1'
+$sourcePath = Join-Path $PSScriptRoot 'RunTests.ps1'
 $ast = [Management.Automation.Language.Parser]::ParseFile($sourcePath, [ref]$null, [ref]$null)
 $functionNode = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-Native' }, $true)
 if (-not $functionNode) { throw 'Machine-test command runner was not found.' }

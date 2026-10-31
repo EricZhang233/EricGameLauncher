@@ -1785,6 +1785,10 @@ namespace EricGameLauncher
 
         private async Task ShowReleaseDialogAsync(UpdateService.ReleaseInfo? release, bool hasUpdate, bool isForced = false, bool checkForUpdates = false)
         {
+            bool reopenForced;
+            do
+            {
+            reopenForced = false;
             using (LogService.StartOperation("Update", "ShowReleaseDialogAsync"))
             {
             double viewWidth = this.ActualWidth > 0 ? this.ActualWidth : 950;
@@ -1800,14 +1804,40 @@ namespace EricGameLauncher
             {
                 Title = Text.T("Update_NoUpdateTitle"),
                 Content = loadingContent,
-                CloseButtonText = Text.T("Close"),
+                CloseButtonText = isForced ? Text.T("Update_Exit") : Text.T("Close"),
                 DefaultButton = ContentDialogButton.Close,
                 XamlRoot = this.XamlRoot
             };
             dialog.Resources["ContentDialogMaxWidth"] = dialogWidth;
             dialog.Resources["ContentDialogMaxHeight"] = dialogHeight;
             bool closed = false;
+            bool showHistory = false;
+            bool isUpdating = false;
+            bool updateStarted = false;
+            WebView2? releaseWebView = null;
+            void CloseReleaseWebView()
+            {
+                var view = releaseWebView;
+                releaseWebView = null;
+                if (view != null)
+                {
+                    try { view.Close(); }
+                    catch (Exception ex) { LogService.Write("Update", "Release WebView close failed", ex); }
+                }
+            }
+            dialog.Closing += (_, e) =>
+            {
+                if (_lifetime.IsCancellationRequested || updateStarted || showHistory) return;
+                if (isUpdating) { e.Cancel = true; return; }
+                if (isForced)
+                {
+                    e.Cancel = true;
+                    LogService.Write("App", "Exit requested (forced update dialog)");
+                    Application.Current.Exit();
+                }
+            };
             dialog.Closed += (_, _) => { closed = true; loadingLifetime.Cancel(); };
+            using var closeOnUnload = _lifetime.Token.Register(() => DispatcherQueue.TryEnqueue(() => dialog.Hide()));
             var showTask = dialog.ShowAsync().AsTask();
             try
             {
@@ -1818,6 +1848,7 @@ namespace EricGameLauncher
                 release = status.Release;
                 hasUpdate = status.HasUpdate;
                 isForced = status.IsForced;
+                dialog.CloseButtonText = isForced ? Text.T("Update_Exit") : Text.T("Close");
                 _pendingUpdate = hasUpdate ? release : null;
                 HasUpdate = hasUpdate;
             }
@@ -1834,12 +1865,10 @@ namespace EricGameLauncher
             var asset = release.assets?.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
             string downloadUrl = asset?.browser_download_url ?? "";
             if (hasUpdate && string.IsNullOrEmpty(downloadUrl)) throw new InvalidOperationException(Text.T("Update_PackageUnavailable"));
-            var contentGrid = await BuildReleaseContentAsync(release, true, dialogWidth, dialogHeight).WaitAsync(loadingLifetime.Token);
+            var contentGrid = await BuildReleaseContentAsync(release, true, dialogWidth, dialogHeight, loadingLifetime.Token, view => releaseWebView = view);
             loadingLifetime.Token.ThrowIfCancellationRequested();
             loadingRing.IsActive = false;
-            var showHistory = false;
             var updateFailed = false;
-            var isUpdating = false;
             var updateAttempt = 0;
             dialog.Title = hasUpdate
                     ? (object)Text.T("Update_DialogTitle")
@@ -1850,20 +1879,6 @@ namespace EricGameLauncher
             dialog.CloseButtonText = isForced ? Text.T("Update_Exit") : (hasUpdate ? Text.T("Update_DialogCancel") : Text.T("Update_OK"));
             dialog.DefaultButton = hasUpdate ? ContentDialogButton.Primary : ContentDialogButton.Close;
             LogService.Write("Update", "Update dialog loading content replaced with release details");
-
-                if (isForced)
-            {
-                dialog.Closing += (s, e) =>
-                {
-                    if (showHistory || updateFailed || isUpdating) return;
-                    if (e.Result != ContentDialogResult.Primary)
-                    {
-                        e.Cancel = true;
-                        LogService.Write("App", "Exit requested (forced update dialog)");
-                        try { Application.Current.Exit(); } catch (Exception ex) { LogService.Write("App", "Exit failed (forced update dialog)", ex); }
-                    }
-                };
-            }
 
             var tcs = new TaskCompletionSource<bool>();
 
@@ -1907,8 +1922,8 @@ namespace EricGameLauncher
                     dialog.PrimaryButtonText = ex is UpdateVerificationException ? ex.Message : Text.T("Update_Failed");
                     dialog.IsPrimaryButtonEnabled = true;
                     dialog.IsSecondaryButtonEnabled = true;
-                    dialog.CloseButtonText = Text.T("Close");
-                    LogService.Write("Update", "Update failed; dialog remains open and can be dismissed", ex);
+                    dialog.CloseButtonText = isForced ? Text.T("Update_Exit") : Text.T("Close");
+                    LogService.Write("Update", $"Update failed; dialog remains open, forced={isForced}", ex);
                     return;
                 }
                 finally
@@ -1916,13 +1931,9 @@ namespace EricGameLauncher
                     isUpdating = false;
                 }
 
-                tcs.SetResult(true);
+                updateStarted = true;
+                tcs.TrySetResult(true);
                 dialog.Hide();
-            };
-
-            dialog.Closing += (s, e) =>
-            {
-                if (isUpdating) e.Cancel = true;
             };
 
             await showTask;
@@ -1933,7 +1944,9 @@ namespace EricGameLauncher
             }
             else if (showHistory)
             {
-                await ShowUpdateHistoryAsync();
+                CloseReleaseWebView();
+                await ShowUpdateHistoryAsync(waitForClose: isForced);
+                reopenForced = isForced && !_lifetime.IsCancellationRequested;
             }
             }
             catch (OperationCanceledException) when (loadingLifetime.IsCancellationRequested)
@@ -1952,18 +1965,22 @@ namespace EricGameLauncher
                     dialog.Content = new TextBlock { Text = ex.Message, TextWrapping = TextWrapping.Wrap, MaxWidth = 480 };
                     dialog.PrimaryButtonText = "";
                     dialog.SecondaryButtonText = "";
-                    dialog.CloseButtonText = Text.T("Close");
+                    CloseReleaseWebView();
+                    dialog.CloseButtonText = isForced ? Text.T("Update_Exit") : Text.T("Close");
                     await showTask;
                 }
             }
             finally
             {
                 loadingRing.IsActive = false;
+                CloseReleaseWebView();
             }
             }
+            }
+            while (reopenForced && !_lifetime.IsCancellationRequested);
         }
 
-        private async Task<Grid> BuildReleaseContentAsync(UpdateService.ReleaseInfo release, bool prependTitle, double dialogW, double dialogH)
+        private async Task<Grid> BuildReleaseContentAsync(UpdateService.ReleaseInfo release, bool prependTitle, double dialogW, double dialogH, CancellationToken token, Action<WebView2?> ownWebView)
         {
             using (LogService.StartOperation("Update", "BuildReleaseContentAsync"))
             {
@@ -1972,7 +1989,10 @@ namespace EricGameLauncher
             string bodyHtml = string.IsNullOrEmpty(release.body_html) ? MarkdownHtml.ToHtml(release.body ?? "") : release.body_html;
             if (prependTitle) bodyHtml = $"<h2>{System.Net.WebUtility.HtmlEncode(release.name)}</h2>{bodyHtml}";
 
-            FrameworkElement dialogContent = (await HtmlViewBuilder.CreateAsync(this, bodyHtml, release.body ?? string.Empty, dialogW - 48, innerH, "")).View;
+            var result = await HtmlViewBuilder.CreateAsync(this, bodyHtml, release.body ?? string.Empty, dialogW - 48, innerH, "", token);
+            ownWebView(result.WebView);
+            token.ThrowIfCancellationRequested();
+            FrameworkElement dialogContent = result.View;
 
             string channelName = ConfigService.UpdateChannel == "latest"
                 ? Text.T("Settings_UpdateChannel_Latest")
@@ -1999,12 +2019,23 @@ namespace EricGameLauncher
         }
         }
 
-        private async Task ShowUpdateHistoryAsync()
+        private async Task ShowUpdateHistoryAsync(bool waitForClose = false)
         {
             using (LogService.StartOperation("Update", "ShowUpdateHistoryAsync"))
             {
                 LogService.Write("Update", "History overlay requested");
-                await HistoryOverlayControl.ShowAsync();
+                var hidden = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                void OnHidden() => hidden.TrySetResult(true);
+                if (waitForClose) HistoryOverlayControl.Hidden += OnHidden;
+                try
+                {
+                    await HistoryOverlayControl.ShowAsync();
+                    if (waitForClose) await hidden.Task.WaitAsync(_lifetime.Token);
+                }
+                finally
+                {
+                    if (waitForClose) HistoryOverlayControl.Hidden -= OnHidden;
+                }
             }
         }
 

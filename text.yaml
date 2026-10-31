@@ -556,7 +556,7 @@ CLI:
       --path <path>       Launch by executable path directly
       --admin             Run as administrator
       --alt               Use alternative launch command
-      --alongside         Also run alongside command
+      --alongside         Run configured alongside command for this launch, even if disabled
   Help_Platform_Text: |
     Usage: EricGameLauncher.Cli.exe platform [options]
 

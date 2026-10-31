@@ -23,7 +23,7 @@ public static class CliService
             if (_jsonMode && !_jsonWritten) WriteJson(new { success = code == 0, exitCode = code });
             return code;
         }
-        finally { LogService.FlushAndStop(); }
+        finally { JumpListService.FlushPending(); LogService.FlushAndStop(); }
     }
 
     private static void ConfigureRedirectedEncodings()
@@ -358,8 +358,8 @@ public static class CliService
             }
 
             WriteLine(string.Format(Text.Cli("MsgLaunching"), item.Title), ConsoleColor.Green);
-            LaunchService.Launch(item, alt || item.UseAlternativeLaunch).EnsureSuccess();
-            if (alongside && !string.IsNullOrEmpty(item.AlongsideCommand))
+            LaunchService.Launch(item, alt || item.UseAlternativeLaunch, alongside).EnsureSuccess();
+            if (LaunchService.GetAlongsideTarget(item, alongside).HasValue)
                 WriteLine(string.Format(Text.Cli("MsgAlongside"), item.AlongsideCommand), ConsoleColor.Green);
 
             return 0;

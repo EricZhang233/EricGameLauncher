@@ -11,6 +11,7 @@
     <Compile Include="../../Core/TimestampYaml.cs" Link="Production/TimestampYaml.cs" />
     <Compile Include="../../Core/UpdatePackageIntegrity.cs" Link="Production/UpdatePackageIntegrity.cs" />
     <Compile Include="../../Core/SensitiveText.cs" Link="Production/SensitiveText.cs" />
+    <Compile Include="../../Core/StaRefreshQueue.cs" Link="Production/StaRefreshQueue.cs" />
     <Compile Include="../../Components/updater.main/UpdateTransaction.cs" Link="Production/UpdateTransaction.cs" />
     <Compile Include="../../Components/updater.cfgver/MigrationRules.cs" Link="Production/MigrationRules.cs" />
   </ItemGroup>
