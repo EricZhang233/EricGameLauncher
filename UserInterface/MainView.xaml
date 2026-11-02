@@ -217,7 +217,7 @@
                   Padding="4,0,4,0"
                   DesiredWidth="{x:Bind DesiredIconWidth, Mode=OneWay}"
                   StretchContentForSingleRow="False"
-                  SelectionMode="Single"
+                  SelectionMode="None"
                   ScrollViewer.VerticalScrollBarVisibility="Auto"
                   ScrollViewer.VerticalScrollMode="Enabled"
                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"

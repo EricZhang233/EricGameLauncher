@@ -927,15 +927,14 @@ namespace EricGameLauncher
                     LogService.Write("App", "AppGrid_DoubleTapped ignored due to dragging or single launch mode");
                     return;
                 }
-                if (AppGrid.SelectedItem is AppItem item)
+                var source = e.OriginalSource as DependencyObject;
+                while (source != null && source != AppGrid && source is not GridViewItem)
+                    source = VisualTreeHelper.GetParent(source);
+                if (source is GridViewItem { Content: AppItem item })
                 {
-                    LogService.Write("App", $"AppGrid_DoubleTapped launching selected itemId={item.Id} title={item.Title}");
+                    e.Handled = true;
+                    LogService.Write("App", $"AppGrid_DoubleTapped launching itemId={item.Id} title={item.Title}");
                     LaunchItem(item);
-                }
-                else if (e.OriginalSource is FrameworkElement fe && fe.DataContext is AppItem ctxItem)
-                {
-                    LogService.Write("App", $"AppGrid_DoubleTapped launching context itemId={ctxItem.Id} title={ctxItem.Title}");
-                    LaunchItem(ctxItem);
                 }
             }
             catch (Exception ex) { LogService.Write("App", "AppGrid_DoubleTapped failed", ex); }
@@ -952,12 +951,15 @@ namespace EricGameLauncher
 
             try
             {
-                LaunchService.Launch(item, item.UseAlternativeLaunch).EnsureSuccess();
+                HideCustomToolTip();
+                var result = await LaunchService.LaunchAsync(item, item.UseAlternativeLaunch);
+                if (_lifetime.IsCancellationRequested) return;
+                result.EnsureSuccess();
                 TriggerItemLoadingAnimation(item);
                 if (ConfigService.CloseAfterLaunch)
                     StartCloseAfterLaunchTimer();
             }
-            catch (Exception ex) { ShowOperationError(ex); }
+            catch (Exception ex) { if (!_lifetime.IsCancellationRequested) ShowOperationError(ex); }
         }
 
         private AppItem? GetTag(object sender)
@@ -1107,7 +1109,7 @@ namespace EricGameLauncher
         }
 
 
-        private void MenuCustom_Click(object sender, RoutedEventArgs e)
+        private async void MenuCustom_Click(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -1115,13 +1117,14 @@ namespace EricGameLauncher
                 {
                     if ((DateTime.Now - _lastLaunchTime).TotalMilliseconds < 500) return;
                     _lastLaunchTime = DateTime.Now;
-                    LaunchService.LaunchCustomCommand(ci);
+                    HideCustomToolTip();
+                    await LaunchService.LaunchCustomCommandAsync(ci);
                 }
             }
             catch (Exception ex) { LogService.Write("App", "MenuCustom_Click failed", ex); }
         }
 
-        private void MenuRunMgr_Click(object sender, RoutedEventArgs e)
+        private async void MenuRunMgr_Click(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -1131,10 +1134,13 @@ namespace EricGameLauncher
                 if ((DateTime.Now - _lastLaunchTime).TotalMilliseconds < 500) return;
                 _lastLaunchTime = DateTime.Now;
 
+                HideCustomToolTip();
+                var result = await LaunchService.LaunchManagerAsync(item);
+                if (_lifetime.IsCancellationRequested) return;
+                result.EnsureSuccess();
                 TriggerItemLoadingAnimation(item);
-                LaunchService.LaunchManager(item).EnsureSuccess();
             }
-            catch (Exception ex) { ShowOperationError(ex); }
+            catch (Exception ex) { if (!_lifetime.IsCancellationRequested) ShowOperationError(ex); }
         }
 
         private void TriggerItemLoadingAnimation(AppItem item)
@@ -1471,7 +1477,7 @@ namespace EricGameLauncher
             AppGrid.ReorderMode = ListViewReorderMode.Enabled;
             AppGrid.AllowDrop = true;
             AppGrid.IsItemClickEnabled = ConfigService.LaunchMode != "double";
-            AppGrid.SelectionMode = ListViewSelectionMode.Single;
+            AppGrid.SelectionMode = ListViewSelectionMode.None;
         }
 
         private void AppGrid_DragItemsStarting(object sender, DragItemsStartingEventArgs e)

@@ -26,6 +26,7 @@
 | L02 | 空/不存在启动目标、CLI 失败传播 | 返回失败及非零退出码 | 自动 Regression / LegacyFeatures |
 | L03 | 引号、带空格现存路径、参数中的引号、环境变量 | 路径和参数正确拆分、展开 | 自动 LegacyFeatures；环境变量另见实机 M04 |
 | L04 | 主启动失败后的伴随/关闭策略 | 不执行后续启动、不自动退出 | 失败结果自动；真实顺序与前台活动见实机 M05 |
+| L05 | 异步启动等待、线程模型、异常与计数 | 启动等待不阻塞调用线程；Shell 使用独立 STA；异常返回调用方；伴随失败仍计主启动，主启动失败不计数 | 自动 Regression / AsyncLaunchFeatures；闪白与焦点框需实机验收 |
 | P01 | Steam/Epic URL、普通 URL、大小写 | 平台识别正确，不误认普通网页 | 自动 LegacyFeatures |
 | P02 | Steam run/rungameid 与整数溢出 | 提取正确 ID，溢出拒绝 | 自动 LegacyFeatures |
 | P03 | 自定义平台管理器覆盖 | 显式配置优先于平台默认 | 自动 LegacyFeatures |

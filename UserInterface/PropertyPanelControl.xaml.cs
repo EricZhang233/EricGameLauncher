@@ -158,6 +158,7 @@ public sealed partial class PropertyPanelControl : UserControl
         PropRunAtLaunchLabel.Text = Text.T("Property_RunAtLaunch");
         PropManagerPathLabel.Text = Text.T("Property_ManagerPath");
         PropIsPlatform.Content = Text.T("Property_IsPlatform");
+        ToolTipService.SetToolTip(PropIsPlatform, Text.T("Property_IsPlatformTooltip"));
         UpdatePinControl();
         PropOptionalLabel.Text = Text.T("Property_Optional");
 

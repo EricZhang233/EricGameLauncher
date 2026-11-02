@@ -38,6 +38,7 @@ async Task<(int Code, string Output, string Error)> Cli(params string[] argument
 try
 {
     JumpListFeatures.Run(Check);
+    await AsyncLaunchFeatures.RunAsync(Check, root, Path.GetFullPath(args[1]));
     await AlongsideFeatures.RunAsync(Check, Cli, root, Path.GetFullPath(args[1]));
     await WeGameFeatures.RunAsync(Check, Cli, root);
     await LaunchCountFeatures.RunAsync(Check);

@@ -1,5 +1,6 @@
 "Zh-CN":
-  Property_IsPlatform: "这是个游戏平台"
+  Property_IsPlatform: "标记为游戏平台"
+  Property_IsPlatformTooltip: "将此项目归类为游戏平台客户端。"
   Property_Pin: "在 Jump List 中显示"
   JumpList_Pinned: "已固定"
   JumpList_Frequent: "常用"
@@ -160,7 +161,8 @@
   Update_OK: "确定"
   Update_Repair: "强制重装"
 "EN":
-  Property_IsPlatform: "This is a game platform"
+  Property_IsPlatform: "Mark as a game platform"
+  Property_IsPlatformTooltip: "Classify this item as a game platform client."
   Property_Pin: "Show in Jump List"
   JumpList_Pinned: "Pinned"
   JumpList_Frequent: "Frequent"
