@@ -7,6 +7,33 @@ using System.Net;
 using System.Net.Http;
 using updater.main;
 
+if (args.Length == 3 && args[0] == "--hold-publication")
+{
+    ConfigService.ApplyDebugMode(args[1]);
+    ConfigService.Initialize();
+    using var publication = JumpListService.EnterPublication();
+    File.WriteAllText(args[2], "ready");
+    var deadline = DateTime.UtcNow.AddSeconds(30);
+    while (!File.Exists(args[2] + ".release"))
+    {
+        if (DateTime.UtcNow > deadline) throw new TimeoutException("Publication fixture timed out");
+        Thread.Sleep(10);
+    }
+    return;
+}
+if (args.Length == 3 && args[0] == "--mark-read")
+{
+    ConfigService.ApplyDebugMode(args[1]);
+    ConfigService.Initialize();
+    ServerConfigManager.LoadReadIds();
+    ServerConfigManager.MarkAsRead(args[2]);
+    return;
+}
+if (args.Length == 3 && args[0] == "--hold-update")
+{
+    P2Features.HoldUpdate(args[1], args[2]);
+    return;
+}
 if (args.Length != 2) throw new ArgumentException("Pass the CLI and launch-fixture executable paths.");
 string cli = Path.GetFullPath(args[0]);
 string root = EricGameLauncher.Testing.TestWorkspace.NewFixture("EGL.Regression.");
@@ -45,6 +72,11 @@ try
     await LegacyFeatures.RunAsync(Check, Cli, root);
     await IconFeatures.RunAsync(Check, root);
     await CoreGapFeatures.RunAsync(Check, root);
+    await P1Features.RunAsync(Check, Cli, root);
+    await P2Features.RunAsync(Check, Cli, root);
+    await P3Features.RunAsync(Check, root, Path.GetFullPath(args[1]));
+    await LaterFeatures.RunAsync(Check, Cli, root, Path.GetFullPath(args[1]));
+    await RemainingFeatures.RunAsync(Check, Cli, root);
     var first = ItemService.CreateItem("First", "C:\\EGL-regression-missing-A.exe");
     ItemService.AddItem(first);
     string id = first.Id;
@@ -139,6 +171,11 @@ try
         await File.WriteAllTextAsync(Path.Combine(install, "EricGameLauncher.exe"), "old fixture");
         Directory.CreateDirectory(Path.Combine(install, "Data"));
         await File.WriteAllTextAsync(Path.Combine(install, "Data", "keep.txt"), "user data");
+        await File.WriteAllTextAsync(Path.Combine(install, "personal.txt"), "personal document");
+        Directory.CreateDirectory(Path.Combine(install, "OtherTool"));
+        await File.WriteAllTextAsync(Path.Combine(install, "OtherTool", "tool.exe"), "unrelated tool");
+        await File.WriteAllTextAsync(Path.Combine(install, "obsolete.dll"), "managed old file");
+        await File.WriteAllTextAsync(Path.Combine(install, UpdateTransaction.ManifestName), JsonSerializer.Serialize(new[] { "EricGameLauncher.exe", "obsolete.dll" }));
         bool failed = false;
         try
         {
@@ -151,14 +188,19 @@ try
         }
         catch (IOException) { failed = true; }
         Check(File.ReadAllText(Path.Combine(install, "Data", "keep.txt")) == "user data", scenario + ": user data preserved");
+        Check(File.ReadAllText(Path.Combine(install, "personal.txt")) == "personal document" && File.ReadAllText(Path.Combine(install, "OtherTool", "tool.exe")) == "unrelated tool", scenario + ": unrelated files preserved");
+        if (scenario != "rollback-failure")
+            Check(File.Exists(Path.Combine(install, "obsolete.dll")) == (scenario != "success"), scenario + ": managed obsolete file follows transaction outcome");
         if (scenario == "success") Check(!failed && !Directory.Exists(Path.Combine(install, "._update_backup")), "successful transaction cleans backup");
         if (scenario == "install-failure") Check(failed && File.ReadAllText(Path.Combine(install, "EricGameLauncher.exe")) == "old fixture" && !File.Exists(Path.Combine(install, "new.dll")), "rollback restores old files and removes newly added files");
         if (scenario == "rollback-failure")
         {
             Check(failed && File.Exists(Path.Combine(install, "._update_backup", "files", "EricGameLauncher.exe")), "failed rollback preserves recoverable backup");
+            Check(File.Exists(Path.Combine(install, "._update_backup", "files", "obsolete.dll")), "failed rollback preserves obsolete managed file for recovery");
             using var retry = new ZipArchive(new MemoryStream(Package()), ZipArchiveMode.Read);
             UpdateTransaction.Apply(install, retry);
             Check(File.ReadAllText(Path.Combine(install, "EricGameLauncher.exe")).StartsWith("new fixture"), "next update recovers unfinished transaction before installing");
+            Check(!File.Exists(Path.Combine(install, "obsolete.dll")), "retried update removes recovered obsolete managed file");
         }
     }
     foreach (bool fail in new[] { false, true })

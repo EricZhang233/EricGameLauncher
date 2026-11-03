@@ -229,10 +229,20 @@ public class AppItem : INotifyPropertyChanged
         {
             if (Status == (int)AppItemStatus.PendingDeletion && DeletedAt.HasValue)
             {
-                var remaining = DeletedAt.Value.AddHours(72) - DateTimeOffset.UtcNow;
+                var remaining = DeletionDeadline!.Value - DateTimeOffset.UtcNow;
                 return $"{(int)Math.Max(0, remaining.TotalHours)}h";
             }
             return "";
+        }
+    }
+
+    public DateTimeOffset? DeletionDeadline
+    {
+        get
+        {
+            if (!DeletedAt.HasValue) return null;
+            var deleted = DeletedAt.Value.ToUniversalTime();
+            return deleted > DateTimeOffset.MaxValue.AddHours(-72) ? DateTimeOffset.MaxValue : deleted.AddHours(72);
         }
     }
 
@@ -593,7 +603,7 @@ public class AppItem : INotifyPropertyChanged
     public bool HasManager => !string.IsNullOrEmpty(MgrPath);
 
     [YamlIgnore]
-    public string? RuntimeManagerPath => GamePlatformHelper.GetRuntimeManagerPath(MgrPath, ExePath);
+    public string? RuntimeManagerPath => GamePlatformHelper.GetRuntimeManagerPath(MgrPath, ExePath, Platform);
 
     [YamlIgnore]
     public bool IsPlatformUrl => !string.IsNullOrEmpty(ExePath) && GamePlatformHelper.IsSupportedPlatformUrl(ExePath);
@@ -810,6 +820,7 @@ public static class IconHelper
         using (LogService.StartOperation("Item", "GetIconPathAsync"))
         {
             if (string.IsNullOrEmpty(exePath)) return null;
+            if (!exePath.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase)) exePath = ProcessRunner.FileTarget(exePath) ?? "";
             if (!exePath.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase) && !File.Exists(exePath)) return null;
             string iconPath = Path.Combine(CachePath, $"{itemId}.png");
             if (forceExtract && File.Exists(iconPath))
@@ -865,6 +876,7 @@ public static class IconHelper
                 string savePath = Path.Combine(CachePath, $"{itemId}.png");
                 await ForceDeleteFileAsync(savePath);
 
+                IconCacheMaintenance.Register(savePath);
                 Icon? icon = null;
                 if (isStoreApp)
                 {

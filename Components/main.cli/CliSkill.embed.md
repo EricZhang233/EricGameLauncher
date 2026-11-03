@@ -19,6 +19,8 @@ Use the CLI when the user wants to control their EricGameLauncher library from a
 7. Item IDs remain stable when paths are edited and are preserved when an item moves to the recycle bin. Add, edit and scan import check only the active list for duplicate paths: an item may be re-added while an older copy stays in the recycle bin. Each recycled entry also carries a `recycleId` (shown by `list --recycle` and emitted in JSON); use `restore --recycle-id <recycleId>` when several recycled entries share one item ID.
 8. A failed launch returns an error; it does not mean the game was started.
 9. A corrupt configuration is preserved and writes fail explicitly. Restore its `.bak` or repair it before retrying. Concurrent item modifications are serialized across processes.
+10. Options are checked before configuration writes: valued options require a value, Booleans accept only true/false/1/0, and unknown, repeated or conflicting options fail. An edit requires at least one change option.
+11. Scan selection limits invalid detection to the selected platforms; only all/default scans include local entries. Unavailable or incomplete platform scans do not prove uninstallation. A failed requested scan stops automatic actions. `--import` cannot be combined with `--invalid` or `--delete-invalid`; this is rejected before scanning in both output formats.
 
 ## Commands
 
@@ -32,9 +34,17 @@ Use the CLI when the user wants to control their EricGameLauncher library from a
 - `launch --id <id> | --title <title> | --path <path> [--admin] [--alt] [--alongside]` — launch a game or application
 
 For stored items, `--alongside` runs the configured alongside command for this launch even when its saved switch is off. Without the flag, the saved switch applies. It never changes that switch or starts the command twice. An empty alongside command does nothing. Alongside failures return a launch error; a successful main launch still counts once. `--path` launches only the supplied command.
+
+`launch --admin` temporarily elevates the selected main or alternative command for ID, title, and path selectors. Alongside commands use their saved independent privilege. Omitting `--admin` uses the selected command's saved privilege. A launch override preserves the stored settings.
+
+Executable Windows shortcuts imported through the property picker retain their `.lnk` path, including the shortcut's arguments and working directory. Keep the shortcut file available after importing. Bare commands such as `cmd.exe /d /c exit 0` may include arguments and use Windows command lookup. Existing unquoted file paths with spaces are supported, and quoting the executable path makes its boundary explicit. Shell built-ins require an explicit shell command.
+
+Google Play Games shortcut matching accepts mixed-case `id` keys and percent-encoded package IDs. Malformed or unmatched targets leave installed games available. Duplicate matches use a stable URI ordering, retaining the selected shortcut's original launch URI.
 - `platform --id <id> | --title <title>` — launch the platform manager (Steam, Epic, Xbox)
 - `add --title <title> --path <path> [--admin] [--icon <path>] [--platform <name>] [--mgr <path>] [--alt <path>] [--alongside <path>]` — add a new item
 - `edit --id <id> [options]` — edit an item; run `edit --help` for all supported fields
+
+Edits retain concurrent changes to other fields. A conflicting change returns an error. Reload the item before retrying. Property saves preserve custom menu entries beyond the first ten visible rows. Use `--custom-add`, `--custom-remove`, and `--custom-clear` to manage the full list.
 - `remove --id <id> | --title <title> [--permanent]` — remove an item (to recycle bin by default)
 - `restore --id <id> | --recycle-id <recycleId> | --title <title> | --all` — restore items from the recycle bin; restore fails if the main list already holds the same path or ID
 - `recycle --list | --mark <id> | --empty | --purge | --clean [--json]` — manage the recycle bin (for `--mark`, an item ID or recycle ID is accepted)
@@ -44,6 +54,24 @@ For stored items, `--alongside` runs the configured alongside command for this l
 
 Update installation and repair verify the downloaded ZIP against the GitHub asset SHA256 digest before proceeding. A missing or invalid digest, a hash mismatch, or an updater failure returns an error without reporting the update as ready.
 - `settings --list | --get <key> | --set <key>=<value>` — view or modify settings
+
+`settings --set lang=EN|Zh-CN|system` persists the language selection for the GUI and later CLI processes. `--get lang` returns the effective language. The default `system` follows Windows. CLI command messages use the CLI resource dictionary.
+
+Item JSON includes independent `IsMgrAdmin`, `IsAltAdmin`, and `IsAlongsideAdmin` flags. Recycled items with deletion timestamps also expose `DeletedAt` and `deletionDeadline` as ISO timestamps. Added fields preserve the existing item-query shape.
+
+Announcement refresh failures return a nonzero exit code and retain the last successful snapshot within a running process. Read markers merge current disk state under a cross-process lock before an atomic write. Failed marker writes retain the previous read state and report failure.
+
+GUI scans belong to one dialog session. Closing the dialog cancels that session. Import and deletion remove result rows only after successful persistence. Skipped deletion candidates remain available for review. Property saves determine automatic platform labels from the submitted command, and explicit custom platform labels persist across command changes. Platform-manager actions are available when Core can resolve a target, including an explicit custom manager.
+
+Icon sizes share the 32–512 range across interfaces. Icon extraction, title suggestions, and file location use the parsed executable target. Custom-command launches return the same failure result as main launches.
+
+Icon maintenance records ownership of newly generated and imported cache files. It preserves library, recycle-bin, active-draft, producer, and published Jump List references. Unreferenced owned files are collected on library changes and startup. Historic files without ownership records are retained. Failed producers may retain their pending files until that process exits. Bitmap lookup metadata is capped at 512 entries, with dead weak references removed during insertion.
+
+Storage transfer retains source data. Completed transactions and successful rollbacks remove their temporary backups. Incomplete transfers retain a journal for recovery on the next transfer. Historic backup folders without a journal are preserved for manual recovery.
+
+`iconSize` accepts finite numbers from 32 through 512, using a decimal point. Invalid stored sizes fall back to 118 and are recorded in the log. Complete any required configuration migration before changing settings. A rejected save returns failure. Token saves restore the previous active value on failure and can be retried with the same input.
+
+Updates and repairs take an exclusive installation-directory lock before recovering or applying files. A competing updater fails with `UPDATE_IN_PROGRESS`. The operating system releases the lock when its owner exits, allowing a later retry to recover an interrupted transaction.
 - `update --check [--channel <stable|latest>] [--json] | --install | --repair [--channel <stable|latest>] | --history [--json]` — check, install, or force-reinstall updates, or print the full update history (oldest first, requires network access to GitHub)
 - `announcements --list | --read <id>` — view server announcements
 - `install` / `uninstall` — create or remove desktop and start menu shortcuts

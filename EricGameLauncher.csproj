@@ -31,10 +31,20 @@
   </PropertyGroup>
 
   <!-- 3. 构建生命周期管理：构建前阶段 (Pre-Build Context) -->
+  <PropertyGroup Condition="'$(EglUiHarness)' == 'true' and '$(Configuration)' == 'Debug'">
+    <StartupObject>UiHarness</StartupObject>
+    <OutputType>Exe</OutputType>
+    <OutputPath>$(EglUiHarnessOutput)</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(EglUiHarness)' == 'true' and '$(Configuration)' == 'Debug'">
+    <Compile Include="Test\UiHarness.cs;Test\Regression\UiFeatures.cs" />
+  </ItemGroup>
 
   <!-- 强制预编译并发布 MainUpdater 影子组件 -->
   <ItemGroup>
-    <_MainUpdaterSource Include="Components\updater.main\*.cs;Components\updater.main\*.csproj;Core\UpdatePackageIntegrity.cs" />
+    <_MainUpdaterSource Include="Components\updater.main\*.cs;Components\updater.main\*.csproj;Core\UpdatePackageIntegrity.cs;Core\UpdateDownload.cs" />
     <_CfgUpdaterSource Include="Components\updater.cfgver\*.cs;Components\updater.cfgver\*.csproj;Components\updater.cfgver\*.yaml" />
   </ItemGroup>
   <Target Name="BuildMainUpdater" BeforeTargets="BeforeBuild" Inputs="@(_MainUpdaterSource);Build\Version.props;Version.cs" Outputs="Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.dll;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.runtimeconfig.json;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.exe;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.deps.json;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\YamlDotNet.dll">
@@ -89,12 +99,10 @@
   <ItemGroup>
     <Compile Include="Test\ProductionAccess.cs" />
     <FrameworkReference Include="Microsoft.WindowsDesktop.App.WPF" />
-    <PackageReference Include="CommunityToolkit.WinUI.UI.Controls" Version="7.1.2" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260101001" />
     <PackageReference Include="WinUIEx" Version="2.4.0" />
     <PackageReference Include="TinyPinyin.Net" Version="1.0.2" />
-    <PackageReference Include="CommunityToolkit.WinUI.UI.Controls.Markdown" Version="7.1.2" />
-    <PackageReference Include="YamlDotNet" Version="12.0.2" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 
   <ItemGroup>

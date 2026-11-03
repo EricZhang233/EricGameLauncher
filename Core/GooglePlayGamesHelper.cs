@@ -29,17 +29,8 @@ public static class GooglePlayGamesHelper
                 string shortcuts = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Start Menu\Programs\Google Play Games");
                 if (Directory.Exists(shortcuts))
                 {
-                    foreach (string file in Directory.EnumerateFiles(shortcuts, "*.lnk"))
-                    {
-                        string? uri = ShortcutResolver.GetShortcutInfo(file)?.TargetPath;
-                        if (uri == null || !uri.StartsWith("googleplaygames://launch/", StringComparison.OrdinalIgnoreCase)) continue;
-                        foreach (var game in games)
-                        {
-                            string package = new Uri(game.ExePath).Query.TrimStart('?').Split('&').First(x => x.StartsWith("id="))[3..];
-                            string? id = new Uri(uri).Query.TrimStart('?').Split('&').FirstOrDefault(x => x.StartsWith("id=", StringComparison.OrdinalIgnoreCase))?[3..];
-                            if (id != null && Uri.UnescapeDataString(id) == Uri.UnescapeDataString(package)) game.ExePath = uri;
-                        }
-                    }
+                    ApplyShortcutTargets(games, Directory.EnumerateFiles(shortcuts, "*.lnk")
+                        .Select(file => ShortcutResolver.GetShortcutInfo(file)?.TargetPath));
                 }
                 LogService.Write("Scan", $"Google Play Games discovered={games.Count}");
                 return games;
@@ -47,6 +38,39 @@ public static class GooglePlayGamesHelper
             finally { CryptographicOperations.ZeroMemory(key); if (plain != null) CryptographicOperations.ZeroMemory(plain); }
         }
         catch (Exception ex) { LogService.Write("Scan", "Google Play Games library unavailable", ex); throw; }
+    }
+
+    internal static void ApplyShortcutTargets(IEnumerable<ScannedGame> games, IEnumerable<string?> targets)
+    {
+        var byPackage = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (string? target in targets)
+        {
+            string? id = LaunchPackageId(target);
+            if (id == null) continue;
+            if (!byPackage.TryGetValue(id, out string? previous) || string.CompareOrdinal(target, previous) < 0)
+                byPackage[id] = target!;
+        }
+        foreach (var game in games)
+        {
+            string? id = LaunchPackageId(game.ExePath);
+            if (id != null && byPackage.TryGetValue(id, out string? target)) game.ExePath = target;
+        }
+        LogService.Write("Scan", $"Google shortcut targets matched against packages={byPackage.Count}");
+    }
+
+    private static string? LaunchPackageId(string? target)
+    {
+        if (!Uri.TryCreate(target, UriKind.Absolute, out var uri)
+            || !uri.Scheme.Equals("googleplaygames", StringComparison.OrdinalIgnoreCase)
+            || !uri.Host.Equals("launch", StringComparison.OrdinalIgnoreCase)) return null;
+        foreach (string pair in uri.Query.TrimStart('?').Split('&'))
+        {
+            int separator = pair.IndexOf('=');
+            if (separator < 0 || !Uri.UnescapeDataString(pair[..separator]).Equals("id", StringComparison.OrdinalIgnoreCase)) continue;
+            string id = Uri.UnescapeDataString(pair[(separator + 1)..]);
+            return string.IsNullOrEmpty(id) ? null : id;
+        }
+        return null;
     }
 
     internal static List<ScannedGame> ParseLibrary(byte[] plain)

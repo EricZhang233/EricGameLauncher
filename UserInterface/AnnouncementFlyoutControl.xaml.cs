@@ -10,6 +10,7 @@ namespace EricGameLauncher;
 public sealed partial class AnnouncementFlyoutControl : UserControl
 {
     private readonly AnnouncementListState _state = new();
+    public event Action<Exception>? OperationFailed;
     private ObservableCollection<AnnouncementListItem> _items => _state.Items;
 
     public AnnouncementFlyoutControl()
@@ -55,8 +56,12 @@ public sealed partial class AnnouncementFlyoutControl : UserControl
         item.IsExpanded = !item.IsExpanded;
         if (!item.IsRead)
         {
-            ServerConfigManager.MarkAsRead(item.Id, notify: false);
-            item.IsRead = true;
+            try
+            {
+                ServerConfigManager.MarkAsRead(item.Id, notify: false);
+                item.IsRead = true;
+            }
+            catch (Exception ex) { OperationFailed?.Invoke(ex); }
         }
         UpdateIndicator();
         LogService.Write("Announcement", $"Announcement clicked id={item.Id}");

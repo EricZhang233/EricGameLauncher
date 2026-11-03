@@ -34,7 +34,7 @@ Assert(!await UpdatePackageIntegrity.VerifyAsync(new MemoryStream(payload[..^1])
 foreach (string? invalid in new[] { null, "", digest[7..], "sha1:" + digest[7..], digest[..^1], digest + "0", "sha256:" + new string('z', 64) })
     Assert(!UpdatePackageIntegrity.IsValidDigest(invalid), $"malformed metadata rejected ({invalid?.Length.ToString() ?? "null"})");
 
-if (args.Length != 1) throw new ArgumentException("Pass the built updater.main.exe path to run updater integration checks.");
+if (args.Length != 2) throw new ArgumentException("Pass updater.main.exe and the launch fixture paths.");
 string updaterSource = Path.GetFullPath(args[0]);
 string fixtureRoot = EricGameLauncher.Testing.TestWorkspace.NewFixture("EricGameLauncher.UpdateIntegrity.");
 Directory.CreateDirectory(fixtureRoot);
@@ -45,6 +45,31 @@ try
     foreach (string file in Directory.GetFiles(Path.GetDirectoryName(updaterSource)!))
         File.Copy(file, Path.Combine(updaterDir, Path.GetFileName(file)));
     await File.WriteAllTextAsync(Path.Combine(updaterDir, "updater.main.tasks.yaml"), "[]");
+
+    foreach (string state in new[] { "SUCCESS", "FAIL" })
+    {
+        string signal = Path.Combine(fixtureRoot, "restart-" + state);
+        string capture = signal + ".json";
+        string target = Path.GetFullPath(args[1]);
+        var agent = RunModeAsync("--restart-agent", signal, Path.GetDirectoryName(target)!, Path.GetFileName(target), "--capture", capture);
+        Assert(!File.Exists(capture), "restart agent waits for explicit completion signal: " + state);
+        File.WriteAllText(signal + ".pending", state);
+        File.Move(signal + ".pending", signal);
+        Assert(await agent == 0, "restart agent exits after completion signal: " + state);
+        if (state == "SUCCESS")
+        {
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            while (!File.Exists(capture)) await Task.Delay(20, deadline.Token);
+            using var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(capture));
+            using var identity = OperatingSystem.IsWindows() ? System.Security.Principal.WindowsIdentity.GetCurrent() : null;
+            bool elevated = OperatingSystem.IsWindows() && identity != null && new System.Security.Principal.WindowsPrincipal(identity).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+            Assert(json.RootElement.GetProperty("User").GetString() == Environment.UserName &&
+                json.RootElement.GetProperty("WorkingDirectory").GetString() == Path.GetDirectoryName(target), "restart agent retains original user and working directory");
+            Assert(OperatingSystem.IsWindows() && json.RootElement.GetProperty("UserSid").GetString() == identity?.User?.Value &&
+                json.RootElement.GetProperty("IsAdministrator").GetBoolean() == elevated, "restart agent retains original account SID and elevation role");
+        }
+        else Assert(!File.Exists(capture), "failed update never launches application");
+    }
 
     await CheckUpdaterAsync("mismatch", "sha256:" + new string('0', 64), "ERROR HASH_MISMATCH", 200);
     await CheckUpdaterAsync("missing digest", "", null, 200);
@@ -110,7 +135,7 @@ try
         listener.Start();
         int port = ((IPEndPoint)listener.LocalEndpoint).Port;
         string pipeName = "EricGameLauncher.IntegrityTest." + Guid.NewGuid().ToString("N");
-        using var pipe = new NamedPipeServerStream(pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+        using var pipe = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
         Task connection = pipe.WaitForConnectionAsync(timeout.Token);
         Task serve = ServeAsync();
         var start = new ProcessStartInfo(Path.Combine(updaterDir, Path.GetFileName(updaterSource)))
@@ -161,6 +186,10 @@ try
                     try { using var writable = File.OpenWrite(packagePath); }
                     catch (IOException) { writeBlocked = true; }
                     Assert(writeBlocked, "verified archive remains locked against modification");
+                    pipe.Dispose();
+                    await child.WaitForExitAsync(timeout.Token);
+                    Assert(child.ExitCode != 0, "controller disconnect before PROCEED stops verified updater");
+                    Assert(Directory.GetFiles(tempDir, "update_*.zip", SearchOption.AllDirectories).Length == 0, "disconnected verified updater cleans its package");
                 }
                 else
                 {

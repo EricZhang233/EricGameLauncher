@@ -31,7 +31,31 @@ public static class ItemService
         target.AlternativeLaunchCommand = source.AlternativeLaunchCommand; target.UseAlternativeLaunch = source.UseAlternativeLaunch; target.IsAltAdmin = source.IsAltAdmin;
         target.AlongsideCommand = source.AlongsideCommand; target.RunAlongside = source.RunAlongside; target.IsAlongsideAdmin = source.IsAlongsideAdmin;
         target.Platform = source.Platform; target.Status = source.Status; target.DeletedAt = source.DeletedAt;
-        target.CustomMenuItems = source.CustomMenuItems; target.SortOrder = source.SortOrder; target.RecycleId = source.RecycleId;
+        target.CustomMenuItems = source.CustomMenuItems.Select(x => new CustomMenuItem { Title = x.Title, Command = x.Command, IsAdmin = x.IsAdmin }).ToList(); target.SortOrder = source.SortOrder; target.RecycleId = source.RecycleId;
+    }
+
+    public static AppItem Snapshot(AppItem source)
+    {
+        var copy = new AppItem { Id = source.Id };
+        CopyContent(copy, source);
+        return copy;
+    }
+
+    public static List<CustomMenuItem> ReplaceVisibleMenus(IReadOnlyList<CustomMenuItem> original, IEnumerable<CustomMenuItem> visible, int visibleCount)
+    {
+        var result = new List<CustomMenuItem>();
+        int index = 0;
+        foreach (var edited in visible.Take(visibleCount))
+        {
+            var before = index < original.Count ? original[index] : null;
+            if (before != null && (before.Title ?? "") == (edited.Title ?? "") && (before.Command ?? "") == (edited.Command ?? "") && before.IsAdmin == edited.IsAdmin)
+                result.Add(new CustomMenuItem { Title = before.Title, Command = before.Command, IsAdmin = before.IsAdmin });
+            else if (!string.IsNullOrWhiteSpace(edited.Command))
+                result.Add(new CustomMenuItem { Title = edited.Title?.Trim() ?? "", Command = edited.Command.Trim(), IsAdmin = edited.IsAdmin });
+            index++;
+        }
+        result.AddRange(original.Skip(visibleCount).Select(x => new CustomMenuItem { Title = x.Title, Command = x.Command, IsAdmin = x.IsAdmin }));
+        return result;
     }
 
     public static bool CheckDuplicate(string path, List<AppItem>? existingPool = null)
@@ -70,19 +94,32 @@ public static class ItemService
         if (!File.Exists(source)) throw new FileNotFoundException(Text.T("Icon_FileMissing"), source);
         Directory.CreateDirectory(ConfigService.FixedCachePath);
         string destination = Path.Combine(ConfigService.FixedCachePath, item.Id + "-" + Guid.NewGuid().ToString("N") + Path.GetExtension(source));
+        IconCacheMaintenance.Register(destination);
         File.Copy(source, destination);
         item.IconPath = destination;
     }
 
-    public static void AddItem(AppItem item)
+    public static void AddItem(AppItem item, CancellationToken cancellationToken = default)
     {
+        string? originalIcon = item.IconPath;
         PrepareIcon(item);
+        try
+        {
         ConfigService.MutateItems((items, _) =>
         {
+            cancellationToken.ThrowIfCancellationRequested();
             item.RecycleId = null;
             EnsureUnique(item, items);
             items.Add(item);
         });
+        }
+        catch
+        {
+            string? imported = item.IconPath;
+            item.IconPath = originalIcon;
+            if (imported != originalIcon) IconCacheMaintenance.Referenced([imported]);
+            throw;
+        }
     }
 
     private static readonly string[] IconSourceExtensions = [".exe", ".com", ".lnk", ".url", ".bat", ".cmd", ".msi", ".ps1", ".appref-ms"];
@@ -92,7 +129,7 @@ public static class ItemService
         if (string.IsNullOrWhiteSpace(path)) return false;
         string target = path.Trim();
         if (target.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase)) return true;
-        string extension = Path.GetExtension(Environment.ExpandEnvironmentVariables(target));
+        string extension = Path.GetExtension(ProcessRunner.FileTarget(target)) ?? "";
         return extension.Length > 0 && IconSourceExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
     }
 
@@ -102,7 +139,7 @@ public static class ItemService
         string target = path.Trim();
         if (target.Contains("://", StringComparison.Ordinal)) return null;
         if (target.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase)) return null;
-        string name = Path.GetFileNameWithoutExtension(Environment.ExpandEnvironmentVariables(target));
+        string? name = Path.GetFileNameWithoutExtension(ProcessRunner.FileTarget(target));
         return string.IsNullOrWhiteSpace(name) ? null : name;
     }
 
@@ -112,24 +149,107 @@ public static class ItemService
         if (!SupportsIconExtraction(item.ExePath)) return;
         try
         {
-            string source = Environment.ExpandEnvironmentVariables(item.ExePath!.Trim());
+            string source = item.ExePath!.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase) ? item.ExePath : ProcessRunner.FileTarget(item.ExePath) ?? "";
             string? iconPath = await IconHelper.GetIconPathAsync(source, item.Id);
             if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath)) item.IconPath = iconPath;
         }
         catch (Exception ex) { LogService.Write("Item", "EnsureIconAsync failed", ex); }
     }
 
-    public static async Task AddItemAsync(AppItem item)
+    public static async Task AddItemAsync(AppItem item, CancellationToken cancellationToken = default)
     {
+        await PreparePlatformAsync(item, null);
         await EnsureIconAsync(item);
-        AddItem(item);
+        cancellationToken.ThrowIfCancellationRequested();
+        AddItem(item, cancellationToken);
     }
 
     public static async Task EditItemAsync(AppItem item, Action<AppItem> apply)
     {
-        apply(item);
-        await EnsureIconAsync(item);
-        EditItem(item, _ => { });
+        var baseline = FindItem(item.Id, null) ?? throw new InvalidOperationException(Text.Cli("ErrItemNotFound"));
+        var draft = Snapshot(baseline);
+        apply(draft);
+        await SaveDraftAsync(baseline, draft);
+        CopyContent(item, draft);
+    }
+
+    public static async Task SaveDraftAsync(AppItem baseline, AppItem draft, CancellationToken cancellationToken = default)
+    {
+        var destination = draft;
+        draft = Snapshot(draft);
+        await PreparePlatformAsync(draft, baseline);
+        await EnsureIconAsync(draft);
+        cancellationToken.ThrowIfCancellationRequested();
+        string? originalIcon = draft.IconPath;
+        PrepareIcon(draft);
+        AppItem? saved = null;
+        try
+        {
+        ConfigService.MutateItems((items, _) =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var latest = items.FirstOrDefault(x => x.Id.Equals(baseline.Id, StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException(Text.Cli("ErrItemNotFound"));
+            var merged = MergeDraft(baseline, draft, latest);
+            EnsureUnique(merged, items.Where(x => x.Id != latest.Id));
+            CopyContent(latest, merged);
+            saved = merged;
+        });
+        CopyContent(destination, saved!);
+        }
+        catch
+        {
+            string? imported = draft.IconPath;
+            draft.IconPath = originalIcon;
+            if (imported != originalIcon) IconCacheMaintenance.Referenced([imported]);
+            throw;
+        }
+    }
+
+    private static async Task PreparePlatformAsync(AppItem draft, AppItem? baseline)
+    {
+        string[] detected = ["", "User", "Steam", "Epic Games", "Xbox", "Google Play Games", "WeGame"];
+        bool pathChanged = baseline == null || baseline.ExePath != draft.ExePath;
+        bool automatic = detected.Contains(draft.Platform ?? "", StringComparer.OrdinalIgnoreCase);
+        if (!pathChanged || !automatic || (baseline != null && baseline.Platform != draft.Platform)) return;
+        string command = draft.ExePath ?? "";
+        string? file = ProcessRunner.FileTarget(command);
+        if (file?.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) == true) command = ShortcutResolver.GetLnkTarget(file) ?? command;
+        draft.Platform = (await GamePlatformHelper.DetectPlatformAsync(command))?.PlatformName ?? "User";
+    }
+
+    private static AppItem MergeDraft(AppItem baseline, AppItem draft, AppItem latest)
+    {
+        var merged = Snapshot(latest);
+        T Merge<T>(T before, T edited, T current, string field)
+        {
+            if (EqualityComparer<T>.Default.Equals(before, edited)) return current;
+            if (!EqualityComparer<T>.Default.Equals(before, current) && !EqualityComparer<T>.Default.Equals(edited, current))
+            {
+                LogService.Write("Item", $"Edit conflict id={baseline.Id} field={field}");
+                throw new InvalidOperationException(Text.T("Property_EditConflict"));
+            }
+            return edited;
+        }
+        merged.Title = Merge(baseline.Title, draft.Title, latest.Title, nameof(AppItem.Title));
+        merged.ExePath = Merge(baseline.ExePath, draft.ExePath, latest.ExePath, nameof(AppItem.ExePath));
+        merged.IconPath = Merge(baseline.IconPath, draft.IconPath, latest.IconPath, nameof(AppItem.IconPath));
+        merged.IsPlatform = Merge(baseline.IsPlatform, draft.IsPlatform, latest.IsPlatform, nameof(AppItem.IsPlatform));
+        merged.Pin = Merge(baseline.Pin, draft.Pin, latest.Pin, nameof(AppItem.Pin));
+        merged.IsAdmin = Merge(baseline.IsAdmin, draft.IsAdmin, latest.IsAdmin, nameof(AppItem.IsAdmin));
+        merged.MgrPath = Merge(baseline.MgrPath, draft.MgrPath, latest.MgrPath, nameof(AppItem.MgrPath));
+        merged.IsMgrAdmin = Merge(baseline.IsMgrAdmin, draft.IsMgrAdmin, latest.IsMgrAdmin, nameof(AppItem.IsMgrAdmin));
+        merged.AlternativeLaunchCommand = Merge(baseline.AlternativeLaunchCommand, draft.AlternativeLaunchCommand, latest.AlternativeLaunchCommand, nameof(AppItem.AlternativeLaunchCommand));
+        merged.UseAlternativeLaunch = Merge(baseline.UseAlternativeLaunch, draft.UseAlternativeLaunch, latest.UseAlternativeLaunch, nameof(AppItem.UseAlternativeLaunch));
+        merged.IsAltAdmin = Merge(baseline.IsAltAdmin, draft.IsAltAdmin, latest.IsAltAdmin, nameof(AppItem.IsAltAdmin));
+        merged.AlongsideCommand = Merge(baseline.AlongsideCommand, draft.AlongsideCommand, latest.AlongsideCommand, nameof(AppItem.AlongsideCommand));
+        merged.RunAlongside = Merge(baseline.RunAlongside, draft.RunAlongside, latest.RunAlongside, nameof(AppItem.RunAlongside));
+        merged.IsAlongsideAdmin = Merge(baseline.IsAlongsideAdmin, draft.IsAlongsideAdmin, latest.IsAlongsideAdmin, nameof(AppItem.IsAlongsideAdmin));
+        merged.Platform = Merge(baseline.Platform, draft.Platform, latest.Platform, nameof(AppItem.Platform));
+        string Menus(AppItem item) => System.Text.Json.JsonSerializer.Serialize(item.CustomMenuItems);
+        string menus = Merge(Menus(baseline), Menus(draft), Menus(latest), nameof(AppItem.CustomMenuItems));
+        merged.CustomMenuItems = System.Text.Json.JsonSerializer.Deserialize<List<CustomMenuItem>>(menus)!;
+        return merged;
     }
 
     public static AppItem? FindItem(string? id, string? title, List<AppItem>? pool = null)
@@ -148,15 +268,19 @@ public static class ItemService
 
     public static void EditItem(AppItem item, Action<AppItem> apply)
     {
-        apply(item);
-        PrepareIcon(item);
+        AppItem? saved = null;
         ConfigService.MutateItems((items, _) =>
         {
             int index = items.FindIndex(x => x.Id.Equals(item.Id, StringComparison.OrdinalIgnoreCase));
             if (index < 0) throw new InvalidOperationException(Text.Cli("ErrItemNotFound"));
-            EnsureUnique(item, items.Where(x => !x.Id.Equals(item.Id, StringComparison.OrdinalIgnoreCase)));
-            items[index] = item;
+            var edited = Snapshot(items[index]);
+            apply(edited);
+            PrepareIcon(edited);
+            EnsureUnique(edited, items.Where(x => !x.Id.Equals(item.Id, StringComparison.OrdinalIgnoreCase)));
+            items[index] = edited;
+            saved = edited;
         });
+        CopyContent(item, saved!);
     }
 
     public static void RemoveItem(string? id, string? title, bool permanent = false)
@@ -174,7 +298,7 @@ public static class ItemService
         });
     }
 
-    public static int RemoveItems(IEnumerable<string> ids)
+    public static int RemoveItems(IEnumerable<string> ids, Func<AppItem, bool>? predicate = null)
     {
         int count = 0;
         var selected = ids.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -182,6 +306,7 @@ public static class ItemService
         {
             foreach (var item in items.Where(x => selected.Contains(x.Id)).ToArray())
             {
+                if (predicate != null && !predicate(item)) continue;
                 items.Remove(item);
                 item.Status = 1;
                 item.DeletedAt = null;
@@ -372,21 +497,26 @@ public static class ItemService
 
     public static void SaveOrder(List<AppItem> items) => SaveVisibleOrder(items.Select(x => x.Id).ToArray());
 
-    public static int ImportGames(List<ScannedGame> games)
+    public static int ImportGames(List<ScannedGame> games) => ImportGamesDetailed(games).Changed;
+
+    public static ScanActionResult ImportGamesDetailed(List<ScannedGame> games)
     {
         int count = 0;
+        var completed = new List<string>();
         ConfigService.MutateItems((items, _) =>
         {
             var keys = new HashSet<string>(items.Select(x => PathHashHelper.PathKey(x.ExePath)), StringComparer.Ordinal);
             foreach (var game in games)
             {
                 string key = PathHashHelper.PathKey(game.ExePath);
-                if (key.Length == 0 || !keys.Add(key)) continue;
+                if (key.Length == 0) continue;
+                completed.Add(game.ExePath);
+                if (!keys.Add(key)) continue;
                 if (items.Any(item => WeGameHelper.MatchesLaunchPath(game, item.ExePath))) continue;
                 items.Add(CreateItem(game.Title, game.ExePath, platform: game.PlatformBadge, mgr: game.ManagerPath));
                 count++;
             }
         });
-        return count;
+        return new(count, completed);
     }
 }

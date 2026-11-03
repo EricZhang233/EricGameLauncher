@@ -57,6 +57,7 @@ public static class JumpListService
 
     private static void RefreshSnapshot(bool reloadItems)
     {
+        using var publication = EnterPublication();
         if (reloadItems || _catalog == null) _catalog = ConfigService.LoadItems().Where(x => x.Status == 0).ToList();
         var items = _catalog;
         LaunchCountCache.Populate(items);
@@ -67,9 +68,15 @@ public static class JumpListService
             foreach (var item in group) list.JumpItems.Add(Task(item));
         }
         list.JumpItemsRejected += (_, e) => LogService.Write("JumpList", $"Rejected {e.RejectedItems.Count} items: {string.Join(", ", e.RejectionReasons)}");
+        if (!IconCacheMaintenance.ProtectJumpReferences(list.JumpItems.OfType<JumpTask>().Select(x => x.IconResourcePath)))
+            throw new DataFileException(Path.Combine(ConfigService.FixedCachePath, ".owned-icons.json"));
         list.Apply();
+        IconCacheMaintenance.JumpReferences(list.JumpItems.OfType<JumpTask>().Select(x => x.IconResourcePath));
         LogService.Write("JumpList", $"Updated tasks={list.JumpItems.Count}");
     }
+
+    internal static IDisposable EnterPublication(TimeSpan? timeout = null)
+        => ConfigPersistence.Enter(Path.Combine(ConfigService.SystemCachePath, "jump-list-publication"), timeout);
 
     public static void UpdateShortcutIds()
     {
@@ -156,6 +163,7 @@ public static class JumpListService
         }
         foreach (var frame in frames) writer.Write(frame);
         Directory.CreateDirectory(ConfigService.FixedCachePath);
+        IconCacheMaintenance.Register(target);
         File.WriteAllBytes(target, output.ToArray());
         return target;
     }

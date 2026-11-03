@@ -18,9 +18,11 @@ public static class PlatformRecognition
             var (path, args) = ProcessRunner.SplitPath(Environment.ExpandEnvironmentVariables(command));
             if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
             {
-                command = ShortcutResolver.GetLnkTarget(path);
-                if (string.IsNullOrEmpty(command)) return false;
-                (path, args) = ProcessRunner.SplitPath(command);
+                var info = ShortcutResolver.GetShortcutInfo(path);
+                if (info == null) return false;
+                path = string.IsNullOrEmpty(info.AUMID) ? info.TargetPath ?? "" : LauncherConstants.UwpAppsFolderPrefix + info.AUMID;
+                args = info.Arguments ?? "";
+                if (path.StartsWith("shell:AppsFolder\\Microsoft.GamingApp_", StringComparison.OrdinalIgnoreCase)) return true;
             }
             if (args.Contains("--launch-product", StringComparison.OrdinalIgnoreCase) || args.Contains("-applaunch", StringComparison.OrdinalIgnoreCase) || args.Contains("/gameId", StringComparison.OrdinalIgnoreCase)) return false;
             if (Names.Contains(Path.GetFileName(path))) return true;

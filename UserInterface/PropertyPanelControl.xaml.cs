@@ -14,6 +14,7 @@ namespace EricGameLauncher;
 public sealed partial class PropertyPanelControl : UserControl
 {
     private AppItem? _editingItem;
+    public AppItem? EditBaseline { get; private set; }
     private bool _isNewItemMode = false;
     private CancellationTokenSource? _platformDetectCts;
     private CancellationTokenSource? _iconPreviewCts;
@@ -49,6 +50,7 @@ public sealed partial class PropertyPanelControl : UserControl
         PropIsPlatform.Click += (_, _) => _platformChoiceMade = true;
         PropExePath.TextChanged += (_, _) =>
         {
+            _draftSession.InvalidateRequest();
             if (!_loadingFlags && _isNewItemMode && !_platformChoiceMade)
                 PropIsPlatform.IsChecked = PlatformRecognition.IsPlatform(PropExePath.Text);
         };
@@ -224,7 +226,13 @@ public sealed partial class PropertyPanelControl : UserControl
             _platformDetectCts?.Cancel();
             _iconPreviewCts?.Cancel();
             _draftSession.Advance();
-            _editingItem = AppItemDto.FromViewModel(item).ToViewModel(ConfigService.FixedCachePath);
+            PropSaveButton.IsEnabled = true;
+            PropertyFields.IsEnabled = true;
+            PropPin.IsEnabled = true;
+            PropBtnDelete.IsEnabled = true;
+            EditBaseline = ItemService.Snapshot(item);
+            _editingItem = ItemService.Snapshot(item);
+            _draftSession.Protect(item.IconPath);
             _isNewItemMode = isNew;
             if (isNew) { _editingItem.IsPlatform = PlatformRecognition.IsPlatform(_editingItem.ExePath); _editingItem.Pin = _editingItem.IsPlatform; }
             _customIconChosen = false;
@@ -261,10 +269,11 @@ public sealed partial class PropertyPanelControl : UserControl
         {
             if (_editingItem == null) return;
 
-            _editingItem.Title = PropTitle.Text?.Trim() ?? "";
+            if ((PropTitle.Text ?? "") != (_editingItem.Title ?? ""))
+                _editingItem.Title = PropTitle.Text?.Trim() ?? "";
 
             string newExePath = PropExePath.Text?.Trim() ?? "";
-            if (_editingItem.ExePath != newExePath)
+            if ((PropExePath.Text ?? "") != (_editingItem.ExePath ?? ""))
             {
                 _editingItem.ExePath = newExePath;
             }
@@ -277,32 +286,28 @@ public sealed partial class PropertyPanelControl : UserControl
             _editingItem.IsAltAdmin = PropIsAltAdmin.IsChecked ?? false;
             _editingItem.IsAlongsideAdmin = PropIsAlongsideAdmin.IsChecked ?? false;
             _editingItem.IsMgrAdmin = PropIsMgrAdmin.IsChecked ?? false;
-            _editingItem.MgrPath = PropMgrPath.Text?.Trim() ?? "";
+            if ((PropMgrPath.Text ?? "") != (_editingItem.MgrPath ?? ""))
+                _editingItem.MgrPath = PropMgrPath.Text?.Trim() ?? "";
 
             _editingItem.UseAlternativeLaunch = PropUseAlternativeLaunch.IsChecked ?? false;
-            _editingItem.AlternativeLaunchCommand = PropAlternativeLaunchCommand.Text?.Trim() ?? "";
+            if ((PropAlternativeLaunchCommand.Text ?? "") != (_editingItem.AlternativeLaunchCommand ?? ""))
+                _editingItem.AlternativeLaunchCommand = PropAlternativeLaunchCommand.Text?.Trim() ?? "";
             _editingItem.RunAlongside = PropRunAlongside.IsChecked ?? false;
-            _editingItem.AlongsideCommand = PropAlongsideCommand.Text?.Trim() ?? "";
+            if ((PropAlongsideCommand.Text ?? "") != (_editingItem.AlongsideCommand ?? ""))
+                _editingItem.AlongsideCommand = PropAlongsideCommand.Text?.Trim() ?? "";
 
             var customItems = new List<CustomMenuItem>();
             for (int i = 0; i < 10; i++)
             {
-                string cmd = _customCommands[i].Text?.Trim() ?? "";
-                if (!string.IsNullOrEmpty(cmd))
+                customItems.Add(new CustomMenuItem
                 {
-                    customItems.Add(new CustomMenuItem
-                    {
-                        Title = _customTitles[i].Text?.Trim() ?? "",
-                        Command = cmd,
-                        IsAdmin = _customAdmins[i].IsChecked ?? false
-                    });
-                }
+                    Title = _customTitles[i].Text ?? "",
+                    Command = _customCommands[i].Text ?? "",
+                    IsAdmin = _customAdmins[i].IsChecked ?? false
+                });
             }
-            _editingItem.SetCustomMenuItems(customItems);
+            _editingItem.SetCustomMenuItems(ItemService.ReplaceVisibleMenus(EditBaseline?.CustomMenuItems ?? _editingItem.CustomMenuItems, customItems, _customCommands.Length));
 
-            string? detectedPlatform = PropPlatformBadge.Text?.Trim();
-            if (!string.IsNullOrEmpty(detectedPlatform))
-                _editingItem.Platform = detectedPlatform;
         }
         catch (Exception ex) { LogService.Write("UI", "ApplyToItem failed", ex); }
     }
@@ -431,7 +436,9 @@ public sealed partial class PropertyPanelControl : UserControl
                 }
                 else
                 {
-                    isVisible = !string.IsNullOrEmpty(_customCommands[i - 1].Text?.Trim());
+                    isVisible = !string.IsNullOrWhiteSpace(_customCommands[i].Text)
+                        || !string.IsNullOrWhiteSpace(_customTitles[i].Text)
+                        || !string.IsNullOrWhiteSpace(_customCommands[i - 1].Text);
                 }
 
                 _customSections[i].Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
@@ -832,10 +839,28 @@ public sealed partial class PropertyPanelControl : UserControl
 
     private string DraftIconId() => "draft-" + Guid.NewGuid().ToString("N");
 
-    public void CommitDraft()
+    private PropertySaveController? _saveController;
+    internal Func<AppItem, AppItem, bool, Task>? SaveOperation { get; set; }
+
+    public async Task<bool> SaveDraftAsync(CancellationToken lifetime)
     {
-        _draftSession.Commit(_editingItem?.IconPath);
+        _saveController ??= new PropertySaveController(_draftSession);
+        var save = _saveController.SaveAsync(EditBaseline!, _editingItem!, _isNewItemMode, lifetime, SaveOperation);
+        UpdateSaveState();
+        try { return await save; }
+        finally { UpdateSaveState(); }
     }
+
+    private void UpdateSaveState()
+    {
+        bool enabled = _saveController?.IsSaving != true;
+        PropSaveButton.IsEnabled = enabled;
+        PropertyFields.IsEnabled = enabled;
+        PropPin.IsEnabled = enabled;
+        PropBtnDelete.IsEnabled = enabled;
+    }
+
+    public void EndSession() => _draftSession.Advance();
 
     private Task<string?> GetDraftIconAsync(string source) => _draftSession.TrackAsync(() => IconHelper.GetIconPathAsync(source, DraftIconId(), forceExtract: true));
 

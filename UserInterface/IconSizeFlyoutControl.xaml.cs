@@ -6,6 +6,7 @@ namespace EricGameLauncher;
 
 public sealed partial class IconSizeFlyoutControl : UserControl
 {
+    private bool _synchronizing;
     public event Action<double>? IconSizeChanged;
     public Flyout Flyout => SizeFlyout;
     public double Value => SizeSlider.Value;
@@ -13,11 +14,15 @@ public sealed partial class IconSizeFlyoutControl : UserControl
     public IconSizeFlyoutControl()
     {
         InitializeComponent();
+        SizeSlider.Minimum = AppSettings.MinimumIconSize;
+        SizeSlider.Maximum = AppSettings.MaximumIconSize;
     }
 
     public void SetValue(double value)
     {
-        SizeSlider.Value = Math.Clamp(value, SizeSlider.Minimum, SizeSlider.Maximum);
+        _synchronizing = true;
+        try { SizeSlider.Value = value; }
+        finally { _synchronizing = false; }
     }
 
     public void ApplyLocalization()
@@ -37,6 +42,6 @@ public sealed partial class IconSizeFlyoutControl : UserControl
 
     private void SizeSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
     {
-        IconSizeChanged?.Invoke(SizeSlider.Value);
+        if (!_synchronizing) IconSizeChanged?.Invoke(SizeSlider.Value);
     }
 }

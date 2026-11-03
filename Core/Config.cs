@@ -15,6 +15,8 @@ namespace EricGameLauncher;
 
 public class AppSettings
 {
+    public const double MinimumIconSize = 32;
+    public const double MaximumIconSize = 512;
     [YamlMember(Alias = "launchMode")]
     public string LaunchMode { get; set; } = "single";
 
@@ -25,7 +27,20 @@ public class AppSettings
     public bool QuickStart { get; set; } = false;
 
     [YamlMember(Alias = "iconSize")]
-    public double IconSize { get; set; } = 118;
+    public double IconSize
+    {
+        get => _iconSize;
+        set
+        {
+            if (double.IsFinite(value) && value >= MinimumIconSize && value <= MaximumIconSize) _iconSize = value;
+            else
+            {
+                _iconSize = 118;
+                LogService.Write("Config", "Invalid stored icon size replaced with default");
+            }
+        }
+    }
+    private double _iconSize = 118;
 
     [YamlMember(Alias = "updateChannel")]
     public string UpdateChannel { get; set; } = "stable";
@@ -41,6 +56,9 @@ public class AppSettings
 
     [YamlMember(Alias = "appTitle")]
     public string AppTitle { get; set; } = "";
+
+    [YamlMember(Alias = "language")]
+    public string Language { get; set; } = "system";
 }
 
 public class WindowBoundsInfo
@@ -89,12 +107,16 @@ public static class ServerConfigManager
     public static event Action? AnnouncementsUpdated;
     private static readonly string ReadIdsFileName = "announcements.read";
     private static HashSet<string> _readIds = new(StringComparer.OrdinalIgnoreCase);
+    public static string ReadIdsPath => Path.Combine(ConfigService.SystemCachePath, ReadIdsFileName);
 
-    public static void LoadReadIds()
+    public static bool LoadReadIds()
     {
         try
         {
+            lock (ConfigPersistence.Gate)
+            {
             string cacheDir = ConfigService.SystemCachePath;
+            using var lease = ConfigPersistence.Enter(cacheDir);
             if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
             string path = Path.Combine(cacheDir, ReadIdsFileName);
             if (File.Exists(path))
@@ -106,30 +128,37 @@ public static class ServerConfigManager
             {
                 _readIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             }
+            }
+            return true;
         }
-        catch { _readIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase); }
+        catch (Exception ex) { LogService.Write("Announcement", "Read markers reload failed", ex); return false; }
     }
 
     public static void SaveReadIds()
     {
-        try
+        lock (ConfigPersistence.Gate)
         {
             string cacheDir = ConfigService.SystemCachePath;
-            if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
-            string path = Path.Combine(cacheDir, ReadIdsFileName);
-            File.WriteAllLines(path, _readIds);
+            Directory.CreateDirectory(cacheDir);
+            using var lease = ConfigPersistence.Enter(cacheDir);
+            var latest = File.Exists(ReadIdsPath) ? File.ReadAllLines(ReadIdsPath).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase) : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            latest.UnionWith(_readIds);
+            AtomicFile.Write(ReadIdsPath, string.Join(Environment.NewLine, latest.Order(StringComparer.OrdinalIgnoreCase)));
+            _readIds = latest;
         }
-        catch { }
     }
 
-    public static bool IsRead(string id) => !string.IsNullOrEmpty(id) && _readIds.Contains(id);
+    public static bool IsRead(string id) { lock (ConfigPersistence.Gate) return !string.IsNullOrEmpty(id) && _readIds.Contains(id); }
 
     public static void MarkAsRead(string id, bool notify = true)
     {
         if (string.IsNullOrEmpty(id)) return;
-        if (_readIds.Add(id))
+        lock (ConfigPersistence.Gate)
         {
-            SaveReadIds();
+            var before = _readIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            _readIds.Add(id);
+            try { SaveReadIds(); }
+            catch { _readIds = before; throw; }
             if (notify)
             {
                 try { AnnouncementsUpdated?.Invoke(); } catch { }
@@ -137,7 +166,10 @@ public static class ServerConfigManager
         }
     }
 
-    public static async Task FetchConfigAsync(CancellationToken cancellationToken = default)
+    public static Task FetchConfigAsync(CancellationToken cancellationToken = default)
+        => FetchConfigAsync(client, "https://raw.githubusercontent.com/EricZhang233/EricGameLauncher/master/ServerCfg.yaml", cancellationToken);
+
+    internal static async Task FetchConfigAsync(HttpClient source, string url, CancellationToken cancellationToken = default)
     {
         using (LogService.StartOperation("Config", "FetchConfigAsync"))
         {
@@ -145,17 +177,20 @@ public static class ServerConfigManager
             try
             {
                 LogService.Write("Network", "ServerConfig Fetch Start");
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("EricGameLauncher");
-                var content = await client.GetStringAsync("https://raw.githubusercontent.com/EricZhang233/EricGameLauncher/master/ServerCfg.yaml", cancellationToken);
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.UserAgent.ParseAdd("EricGameLauncher");
+                using var response = await source.SendAsync(request, cancellationToken);
+                response.EnsureSuccessStatusCode();
+                var content = await response.Content.ReadAsStringAsync(cancellationToken);
 
                 var deserializer = new DeserializerBuilder()
                     .IgnoreUnmatchedProperties()
                     .Build();
 
-                CurrentConfig = deserializer.Deserialize<ServerConfigInfo>(content);
-                if (CurrentConfig?.Announcements != null)
+                var parsed = deserializer.Deserialize<ServerConfigInfo>(content) ?? throw new InvalidDataException(Text.T("ServerConfig_Invalid"));
+                if (parsed.Announcements != null)
                 {
-                    foreach (var a in CurrentConfig.Announcements)
+                    foreach (var a in parsed.Announcements)
                     {
                         a.Position = (a.Position ?? "").Trim().ToLowerInvariant();
                         a.TitleCn = NormalizeSingleLine(a.TitleCn);
@@ -166,23 +201,22 @@ public static class ServerConfigManager
                         a.BodyEn = NormalizeMultiline(a.BodyEn).Trim();
                     }
 
-                    var first = CurrentConfig.Announcements.FirstOrDefault();
+                    var first = parsed.Announcements.FirstOrDefault();
                     if (first != null)
                     {
-                        LogService.Write("Announcement", $"Parsed announcements count={CurrentConfig.Announcements.Count} firstId={first.Id} titleCnLen={first.TitleCn.Length} titleZhLen={first.TitleZh.Length} titleEnLen={first.TitleEn.Length} bodyCnLen={first.BodyCn.Length} bodyZhLen={first.BodyZh.Length} bodyEnLen={first.BodyEn.Length}");
+                        LogService.Write("Announcement", $"Parsed announcements count={parsed.Announcements.Count} firstId={first.Id} titleCnLen={first.TitleCn.Length} titleZhLen={first.TitleZh.Length} titleEnLen={first.TitleEn.Length} bodyCnLen={first.BodyCn.Length} bodyZhLen={first.BodyZh.Length} bodyEnLen={first.BodyEn.Length}");
                     }
                 }
+                cancellationToken.ThrowIfCancellationRequested();
+                CurrentConfig = parsed;
+                try { AnnouncementsUpdated?.Invoke(); } catch (Exception ex) { LogService.Write("Announcement", "Notification failed", ex); }
                 LogService.Write("Network", $"ServerConfig Fetch End (YAML) Duration={sw.ElapsedMilliseconds}ms Size={content?.Length ?? 0}");
             }
             catch (Exception ex)
             {
-                CurrentConfig = null;
                 LogService.Write("Network", $"ServerConfig Fetch Failed Duration={sw.ElapsedMilliseconds}ms", ex);
+                throw;
             }
-                finally
-                {
-                    try { AnnouncementsUpdated?.Invoke(); } catch { }
-                }
         }
     }
 
@@ -276,6 +310,8 @@ public static class ConfigService
             if (!Directory.Exists(FixedCachePath)) Directory.CreateDirectory(FixedCachePath);
             if (!Directory.Exists(SystemCachePath)) Directory.CreateDirectory(SystemCachePath);
             LoadConfigData();
+            Text.Load(Language);
+            IconCacheMaintenance.Sweep();
             LogService.Write("Config", $"Initialize End path={CurrentDataPath} mode=Debug duration={sw.ElapsedMilliseconds}ms");
             return;
         }
@@ -299,6 +335,8 @@ public static class ConfigService
         if (!Directory.Exists(FixedCachePath)) Directory.CreateDirectory(FixedCachePath);
 
         LoadConfigData();
+        Text.Load(Language);
+        IconCacheMaintenance.Sweep();
         NormalizeSettingsFile();
         LogService.Write("Config", $"Initialize End path={CurrentDataPath} mode={(CurrentDataPath == SystemBasePath ? "System" : "Portable")} duration={sw.ElapsedMilliseconds}ms");
     }
@@ -313,6 +351,7 @@ public static class ConfigService
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
         LoadConfigData();
+        Text.Load(Language);
         LogService.Write("Config", $"Reload End path={CurrentDataPath} duration={sw.ElapsedMilliseconds}ms");
     }
 
@@ -402,6 +441,7 @@ public static class ConfigService
             if (!ConfigPersistence.Equal(data, updated)) AtomicFile.Write(ItemsFilePath, ConfigPersistence.Serializer.Serialize(updated));
             _itemsData = updated;
             _itemsInvalid = false;
+            IconCacheMaintenance.Referenced(items.Concat(recycled).Select(x => x.IconPath));
         }
         if (triggerEvent) DataChanged?.Invoke();
     }
@@ -635,7 +675,7 @@ public static class ConfigService
         if (_blockSaving)
         {
             LogService.Write("Config", "SaveAll blocked (migration pending)");
-            return;
+            throw new InvalidOperationException(Text.T("DataFile_MigrationRequired"));
         }
         LogService.Write("Config", "SaveAll Start");
         SaveSettingsData();
@@ -679,6 +719,7 @@ public static class ConfigService
             if (string.IsNullOrEmpty(CurrentDataPath) || _settings == null) return;
             FollowStorageMode();
             using var lease = ConfigPersistence.Enter(CurrentDataPath);
+            if (_blockSaving) throw new InvalidOperationException(Text.T("DataFile_MigrationRequired"));
             if (_settingsInvalid) throw new DataFileException(SettingsFilePath);
             var latest = ConfigPersistence.Read<AppSettings>(SettingsFilePath);
             var baseline = _settingsBaseline ?? new AppSettings();
@@ -744,7 +785,11 @@ public static class ConfigService
     public static double IconSize
     {
         get => _settings?.IconSize ?? 118;
-        set { if (_settings != null) { LogService.Write("Config", $"IconSize changed to={value}"); _settings.IconSize = value; } }
+        set
+        {
+            if (!double.IsFinite(value) || value < AppSettings.MinimumIconSize || value > AppSettings.MaximumIconSize) throw new ArgumentOutOfRangeException(nameof(value), Text.Cli("ErrIconSize"));
+            if (_settings != null) { LogService.Write("Config", $"IconSize changed to={value}"); _settings.IconSize = value; }
+        }
     }
 
     public static bool QuickStart
@@ -753,7 +798,7 @@ public static class ConfigService
         set { if (_settings != null) { LogService.Write("Config", $"QuickStart changed to={value}"); _settings.QuickStart = value; } }
     }
 
-    public static string Language => Text.DetectSystemLanguage();
+    public static string Language => _settings?.Language is "EN" or "Zh-CN" ? _settings.Language : Text.DetectSystemLanguage();
 
     public static string UpdateChannel
     {
@@ -791,6 +836,25 @@ public static class ConfigService
     }
 
     public static bool IsSystemMode => CurrentDataPath == SystemBasePath;
+
+    public static void SaveGitHubToken(string value)
+    {
+        lock (ConfigPersistence.Gate)
+        {
+            string previous = _memoryToken;
+            try
+            {
+                GitHubToken = value;
+                SaveSettingsData();
+            }
+            catch
+            {
+                _memoryToken = previous;
+                LogService.Write("Config", "Token save failed; previous in-memory value restored");
+                throw;
+            }
+        }
+    }
 
     public static async Task<bool> ReconstructMissingConfigAsync()
     {
@@ -981,8 +1045,15 @@ public static class ConfigService
 
     public static string? SetSetting(string key, string value)
     {
+        if (_blockSaving) return "ErrMigrationRequired";
+        if (_settingsInvalid) throw new DataFileException(SettingsFilePath);
+        if (_itemsInvalid) throw new DataFileException(ItemsFilePath);
         switch (key.ToLowerInvariant())
         {
+            case "lang":
+                if (value is not ("EN" or "Zh-CN" or "system")) return "ErrLang";
+                _settings!.Language = value;
+                break;
             case "launchmode":
                 if (value != "single" && value != "double") return "ErrLaunchMode";
                 LaunchMode = value;
@@ -996,7 +1067,8 @@ public static class ConfigService
                 if (!QuickStartService.SetEnabled(bool.Parse(value))) return "ErrQuickStartApply";
                 return null;
             case "iconsize":
-                if (!double.TryParse(value, out var iconSize) || iconSize < 32 || iconSize > 512) return "ErrIconSize";
+                if (!double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var iconSize)
+                    || !double.IsFinite(iconSize) || iconSize < AppSettings.MinimumIconSize || iconSize > AppSettings.MaximumIconSize) return "ErrIconSize";
                 IconSize = iconSize;
                 break;
             case "updatechannel":
@@ -1004,8 +1076,8 @@ public static class ConfigService
                 UpdateChannel = value;
                 break;
             case "githubtoken":
-                GitHubToken = value;
-                break;
+                SaveGitHubToken(value);
+                return null;
             case "appiconpath":
                 AppIconPath = value;
                 break;
@@ -1033,6 +1105,7 @@ public static class ConfigService
         }
 
         SaveAll();
+        if (key.Equals("lang", StringComparison.OrdinalIgnoreCase)) Text.Load(Language);
         LogService.Write("Config", $"SetSetting {key}={SensitiveText.SettingValue(key, value)}");
         return null;
     }

@@ -71,6 +71,12 @@ public sealed class ImagePathConverter : IValueConverter
             }
 
             _bitmapCache[cacheEntry] = new WeakReference<BitmapImage>(bitmap);
+            if (_bitmapCache.Count > 128)
+            {
+                foreach (var entry in _bitmapCache)
+                    if (!entry.Value.TryGetTarget(out _)) _bitmapCache.TryRemove(entry.Key, out _);
+                foreach (string key in _bitmapCache.Keys.Take(Math.Max(0, _bitmapCache.Count - 512))) _bitmapCache.TryRemove(key, out _);
+            }
             return bitmap;
         }
         catch

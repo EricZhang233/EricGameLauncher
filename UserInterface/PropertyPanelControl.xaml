@@ -39,7 +39,7 @@
                 </Grid>
 
                 
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <ScrollViewer x:Name="PropertyFields" Grid.Row="1" VerticalScrollBarVisibility="Auto">
                     <StackPanel Spacing="16">
                         
                         <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
@@ -539,7 +539,7 @@
                         <FontIcon Glyph="&#xE718;" FontSize="16"/>
                     </ToggleButton>
 
-                    <Button Grid.Column="2" HorizontalAlignment="Right"
+                    <Button x:Name="PropSaveButton" Grid.Column="2" HorizontalAlignment="Right"
                             Style="{ThemeResource AccentButtonStyle}" 
                             Click="BtnSaveProperty_Click"
                             ToolTipService.ToolTip="">

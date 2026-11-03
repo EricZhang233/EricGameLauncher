@@ -1,4 +1,9 @@
 "Zh-CN":
+  Update_ControlLost: "更新控制连接已中断，本次更新已停止。"
+  Exit_SaveFailed: "保存失败，是否继续退出？"
+  Exit_Retry: "重试保存"
+  Exit_Discard: "放弃未保存更改并退出"
+  Exit_Stay: "留在程序中"
   Property_IsPlatform: "标记为游戏平台"
   Property_IsPlatformTooltip: "将此项目归类为游戏平台客户端。"
   Property_Pin: "在 Jump List 中显示"
@@ -7,6 +12,7 @@
   ScanWeGameFailed: "无法读取 WeGame 安装清单，请确认客户端配置完整且版本受支持。"
   _LangName: "简体中文"
   DataFile_Error: "无法读写配置，已保留原文件：{0}。请修复配置或从 .bak 恢复后重试。"
+  DataFile_MigrationRequired: "配置需要先完成迁移，当前更改尚未保存。"
   DataFile_Busy: "配置正在被其他进程使用，请重试。"
   ErrRestoreDuplicatePath: "已在主列表，无法还原"
   ErrRestoreIdConflict: "标识冲突，无法还原"
@@ -58,7 +64,7 @@
   Menu_Settings: "设置"
   Menu_SystemIntegration: "快捷方式"
   Menu_Uninstall: "卸载"
-  Migration_OverlaySubTitle: "这可能需要几秒钟，完成后应用将自动重启。"
+  Migration_OverlaySubTitle: "这可能需要几秒钟，完成后将继续加载应用。"
   Migration_OverlayTitle: "正在升级配置引擎..."
   Privacy_DialogClose: "关闭"
   Privacy_DialogContent: "【隐私声明】\n本应用程序不会收集或上传个人身份、账号、游戏库等隐私信息。所有配置与缓存原则上仅保存在本地。\n\n【权限与用途说明】\n1. 存储与注册表访问\n  • 游戏扫描：读取本地磁盘与注册表，定位已安装游戏目录并解析本地清单（如 AppxManifest）。\n  • 缓存管理：提取游戏执行文件或快捷方式图标并保存至本地，以提升加载性能。\n2. 进程控制与执行\n  • 程序启动：根据您的操作，启动游戏进程、平台协议（如 steam://）或自定义脚本。\n  • 权限提升：仅在您明确启用时，使用管理员权限 (RunAs) 启动。\n  • 组件运行：执行应用更新时，会在系统临时目录释放并运行更新组件。\n3. 网络访问（不上传隐私数据）\n  • 版本更新：与 GitHub 等开源平台建立单向连接，获取版本与更新信息。\n  • 分类校验：本地特征不足时，仅发送应用的 UWP 包名 (PFN) 至微软官方接口验证分类。该过程为单向，不包含第三方追踪、分析或隐私数据上传。\n\n【云控系统】\n部分应用配置由云端开发团队管理。以下是云控项，未列出的配置不受云控。\n  • 强制更新：作为独立能力，仅在紧急情况（T0 级别严重事故、关键安全/稳定修复）启用。我们鼓励用户主动更新，强制更新为最后手段并尽量降低对用户的影响。"
@@ -82,6 +88,7 @@
   Property_RunAsAdmin: "以管理员身份运行："
   Property_RunAtLaunch: "启动时同时执行"
   Property_Save: "保存"
+  Property_EditConflict: "此项目的相同字段已被其他操作修改。请重新读取项目后再编辑。"
   Property_SelectFile: "选择文件"
   Property_SubstituteExe: "代替主程序启动"
   Property_Title: "属性"
@@ -92,7 +99,11 @@
   RecycleBin_Title: "回收站"
   Scanner_Cancel: "取消"
   Scanner_DeleteInvalid: "删除失效项目"
-  Scanner_Description: "支持自动扫描 Steam、Epic Games 和 Xbox (UWP) 平台已安装的游戏。"
+  Scanner_Description: "扫描受支持游戏平台中已安装的游戏，包括 Steam、Epic Games、Xbox (UWP)、Google Play Games 和 WeGame。"
+  Scanner_Failed: "扫描失败，请关闭后重新扫描。"
+  Refresh_Failed: "刷新失败，将稍后重试。"
+  Shortcut_CreateFailed: "无法创建快捷方式，已保留原有入口。"
+  ServerConfig_Invalid: "服务器配置格式无效。"
   Scanner_DeselectAll: "全不选"
   Scanner_ExistingGames: "已存在 ({0})"
   Scanner_ImportAll: "导入全部新增项目"
@@ -107,7 +118,7 @@
   Settings_General: "常规"
   Settings_GitHubTokenCancel: "取消"
   Settings_GitHubTokenConfigured: "已配置"
-  Settings_GitHubTokenDesc: "用于更新检查与公告获取的 GitHub API 访问认证。未认证时 API 限额为 60 次/小时，认证后提升至 5000 次/小时。令牌仅在本地存储。"
+  Settings_GitHubTokenDesc: "用于更新检查和发行历史查询的 GitHub API 认证。认证可能提高请求限额，具体取决于 GitHub 的当前政策。令牌经本机用户加密后存储在本地。"
   Settings_GitHubTokenEdit: "编辑"
   Settings_GitHubTokenLabel: "GitHub 令牌"
   Settings_GitHubTokenLink: "获取 Fine-grained Personal Access Token"
@@ -161,6 +172,11 @@
   Update_OK: "确定"
   Update_Repair: "强制重装"
 "EN":
+  Update_ControlLost: "The update controller disconnected. This update has stopped."
+  Exit_SaveFailed: "Saving failed. Exit anyway?"
+  Exit_Retry: "Retry saving"
+  Exit_Discard: "Discard unsaved changes and exit"
+  Exit_Stay: "Stay in the application"
   Property_IsPlatform: "Mark as a game platform"
   Property_IsPlatformTooltip: "Classify this item as a game platform client."
   Property_Pin: "Show in Jump List"
@@ -169,6 +185,7 @@
   ScanWeGameFailed: "Unable to read the WeGame installation manifest. Check that the client configuration is intact and its version is supported."
   _LangName: "English"
   DataFile_Error: "Cannot access configuration; original preserved: {0}. Repair it or restore the .bak file and retry."
+  DataFile_MigrationRequired: "Complete configuration migration before saving changes."
   DataFile_Busy: "Configuration is busy in another process. Please retry."
   ErrRestoreDuplicatePath: "Already in the main list"
   ErrRestoreIdConflict: "Conflicting ID"
@@ -220,7 +237,7 @@
   Menu_Settings: "Settings"
   Menu_SystemIntegration: "Shortcuts"
   Menu_Uninstall: "Uninstall"
-  Migration_OverlaySubTitle: "This may take a few seconds; the app will restart automatically when finished."
+  Migration_OverlaySubTitle: "This may take a few seconds. Loading continues when migration finishes."
   Migration_OverlayTitle: "Upgrading configuration engine..."
   Privacy_DialogClose: "Close"
   Privacy_DialogContent: "【Privacy Statement】\nThis application never collects or secretly uploads your personal identification, account, or game library data. All configurations and caches are stored locally by default.\n\n【Required permissions and usage】\n1. Storage & Registry Access\n  • Game Scanning: Reads local drives and registries to locate installed games and parse local manifests (e.g., AppxManifest).\n  • Cache Management: Extracts executable or shortcut icons and caches them locally to improve load performance.\n2. Process Control & Execution\n  • App Launching: Reacts to your actions by launching game processes, platform protocols (e.g., steam://), or custom scripts.\n  • Permission Elevation: Only enters Administrator (RunAs) mode when explicitly configured by the user.\n  • Component Execution: During application updates, extracts and runs an update component from the system temporary directory.\n3. Network Access (No privacy data upload)\n  • Updates: One-way connection to open-source hosting platforms (e.g., GitHub) to fetch version metadata.\n  • Category Verification: When local data is insufficient, only the app's UWP Package Family Name (PFN) is sent to Microsoft's official interface for category verification. This is a one-way query with no third-party tracking, analytics, or privacy uploads.\n\n【Cloud control system】\nSome in-app configurations are managed by the cloud development team. The following settings are cloud-managed; settings not listed are not.\n  • Forced update: An independent capability enabled for critical T0 incidents and key security/stability fixes. Voluntary updates are encouraged; forced updates are a last resort and minimize user disruption."
@@ -244,6 +261,7 @@
   Property_RunAsAdmin: "Run as Administrator:"
   Property_RunAtLaunch: "Run at launch"
   Property_Save: "Save"
+  Property_EditConflict: "Another operation changed the same field. Reload the item and apply your changes again."
   Property_SelectFile: "Select File"
   Property_SubstituteExe: "Launch instead of main program"
   Property_Title: "Properties"
@@ -254,7 +272,11 @@
   RecycleBin_Title: "Recycle Bin"
   Scanner_Cancel: "Cancel"
   Scanner_DeleteInvalid: "Delete Invalid"
-  Scanner_Description: "Supports automatic scanning of installed games from Steam, Epic Games, and Xbox (UWP)."
+  Scanner_Description: "Scans installed games from supported platforms, including Steam, Epic Games, Xbox (UWP), Google Play Games, and WeGame."
+  Scanner_Failed: "Scan failed. Close this dialog and scan again."
+  Refresh_Failed: "Refresh failed. A retry will follow."
+  Shortcut_CreateFailed: "Unable to create the shortcut. Existing entries have been preserved."
+  ServerConfig_Invalid: "Invalid server configuration format."
   Scanner_DeselectAll: "Deselect All"
   Scanner_ExistingGames: "Existing ({0})"
   Scanner_ImportAll: "Import All New Items"
@@ -269,7 +291,7 @@
   Settings_General: "General"
   Settings_GitHubTokenCancel: "Cancel"
   Settings_GitHubTokenConfigured: "Configured"
-  Settings_GitHubTokenDesc: "GitHub API authentication for update checks and announcements. Unauthenticated API rate limit is 60 req/hour, increased to 5000 req/hour after authentication. Token stored locally only."
+  Settings_GitHubTokenDesc: "GitHub API authentication for update checks and release history. Authentication may increase request limits under GitHub's current policy. The token is encrypted for this Windows user and stored locally."
   Settings_GitHubTokenEdit: "Edit"
   Settings_GitHubTokenLabel: "GitHub Token"
   Settings_GitHubTokenLink: "Get Fine-grained Personal Access Token"
@@ -354,8 +376,9 @@ CLI:
   ErrQuickStart: "quickStart must be 'true' or 'false'."
   ErrQuickStartApply: "Failed to register the quick start background service."
   ErrIconSize: "iconSize must be a number between 32 and 512."
+  ErrMigrationRequired: "Complete configuration migration before changing settings."
   ErrUpdateChannel: "updateChannel must be 'stable' or 'latest'."
-  ErrLang: "lang must be 'Zh-CN' or 'EN'."
+  ErrLang: "lang must be 'Zh-CN', 'EN', or 'system'."
   ErrWindowX: "windowX must be an integer."
   ErrWindowY: "windowY must be an integer."
   ErrWindowWidth: "windowWidth must be >= 400."
@@ -372,6 +395,7 @@ CLI:
 
   # == Error Messages (Formatted) ==
   ErrFmt: "Error: {0}"
+  ErrCliArgument: "Invalid, missing, repeated or conflicting command argument:"
   ErrListItemsFmt: "Error listing items: {0}"
   ErrLaunchingFmt: "Error launching: {0}"
   ErrAddItemFmt: "Error adding item: {0}"
@@ -551,6 +575,10 @@ CLI:
       --recycle           List recycle bin items (each item shows its recycle ID)
       --json              Output in JSON format
   Help_Launch_Text: |
+    --admin temporarily elevates the selected main or alternative command for ID, title, or path launches.
+    Alongside commands retain their own saved privilege. Item settings are preserved.
+    Bare commands may include arguments and use Windows command lookup. Shell built-ins require an explicit shell.
+    Imported Windows executable shortcuts retain the .lnk file to preserve arguments and working directory.
     Usage: EricGameLauncher.Cli.exe launch [options]
 
       --id <id>           Launch by item ID
@@ -580,6 +608,8 @@ CLI:
 
     An item already in the recycle bin with the same path is not treated as a duplicate.
   Help_Edit_Text: |
+    Concurrent changes to different fields are retained. Conflicting changes fail. Reload and retry.
+    Custom menus beyond the first ten are preserved by property saves; use CLI options to edit them.
     --isplatform <bool>  Set platform flag; first enabling defaults Pin on.
     --pin <bool>         Set application-managed pin state for any item.
     Usage: EricGameLauncher.Cli.exe edit [options]
@@ -639,6 +669,9 @@ CLI:
       --invalid           Show only invalid (broken) games
       --delete-invalid    Remove all invalid games
       --import            Auto-import all found games
+    Invalid detection checks only selected platforms; all/default also checks local entries.
+    Incomplete scans cannot prove absence. A failed requested scan stops automatic actions.
+    --import cannot be combined with --invalid or --delete-invalid.
       --json              Output in JSON format
   Help_Search_Text: |
     Usage: EricGameLauncher.Cli.exe search <query> [options]
@@ -646,6 +679,8 @@ CLI:
       <query>             Search keyword
       --json              Output in JSON format
   Help_Settings_Text: |
+    iconSize accepts finite values from 32 through 512 using a decimal point.
+    Complete required configuration migration before changing settings.
     Usage: EricGameLauncher.Cli.exe settings [options]
 
       --list              List all settings
@@ -662,13 +697,15 @@ CLI:
       githubToken         GitHub personal access token
       appIconPath         Custom application icon path
       appTitle            Custom application title
-      lang                UI language (Zh-CN / EN)
+      lang                Persistent UI language (Zh-CN / EN / system)
       storageMode         Storage mode (system / portable)
       windowX             Window X position (-1 = centered)
       windowY             Window Y position (-1 = centered)
       windowWidth         Window width
       windowHeight        Window height
   Help_Update_Text: |
+    Updates and repairs lock the installation directory while applying or recovering files.
+    A competing updater fails with UPDATE_IN_PROGRESS. Retry after it exits.
     Usage: EricGameLauncher.Cli.exe update [options]
 
       --check             Check for available updates

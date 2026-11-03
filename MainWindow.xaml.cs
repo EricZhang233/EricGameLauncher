@@ -14,6 +14,10 @@ namespace EricGameLauncher
     public sealed partial class MainWindow : Window
     {
         private bool _startupOverlayLoaded = false;
+        private bool _closed;
+        private bool _closeApproved;
+        private Task<bool>? _saveConfirmation;
+        private readonly System.Threading.CancellationTokenSource _lifetime = new();
         private bool _startupDataLoaded = false;
         private bool _startupUiLoaded = false;
         private bool _startupOverlayHidden = false;
@@ -60,6 +64,12 @@ namespace EricGameLauncher
                 _hWnd = WindowNative.GetWindowHandle(this);
                 ApplyWindowIcon();
                 this.Closed += Window_Closing_Cleanup;
+                this.AppWindow.Closing += async (_, e) =>
+                {
+                    if (_closeApproved || WarmupMode) return;
+                    e.Cancel = true;
+                    if (await ConfirmSaveBeforeCloseAsync() && !_closed && !_closeApproved) { _closeApproved = true; Close(); }
+                };
                 LogService.Write("Startup", "Pre-activation window config and state applied");
             }
             catch (Exception ex) { LogService.Write("Startup", "PrepareWindowForActivation failed", ex); }
@@ -118,6 +128,11 @@ namespace EricGameLauncher
 
         private void Window_Closing_Cleanup(object sender, WindowEventArgs args)
         {
+            _closed = true;
+            _lifetime.Cancel();
+            _startupFadeInStoryboard?.Stop();
+            _startupFadeInCompletion?.TrySetResult(false);
+            _startupCompletion?.TrySetResult(false);
             if (_customIconHandle != IntPtr.Zero)
             {
                 DestroyIcon(_customIconHandle);
@@ -303,6 +318,7 @@ namespace EricGameLauncher
 
         private void StartMainView()
         {
+            if (_closed) return;
             StartStartupOverlayFadeIn();
             if (WarmupMode)
             {
@@ -324,11 +340,13 @@ namespace EricGameLauncher
                 painted = false;
                 LogService.Write("Startup", "First frame wait failed", ex);
             }
+            if (_closed) return;
             LogService.Write("Startup", painted
                 ? $"Splash first frame rendered at {_startupOverlayStopwatch.ElapsedMilliseconds}ms"
                 : $"Splash first frame wait timed out at {_startupOverlayStopwatch.ElapsedMilliseconds}ms");
 
             await WaitForStartupFadeInAsync();
+            if (_closed) return;
             BeginMainView();
         }
 
@@ -342,6 +360,7 @@ namespace EricGameLauncher
 
         private void BeginMainView()
         {
+            if (_closed || _mainView != null) return;
             try
             {
                 var main = new MainView { Opacity = 0, IsEnabled = false };
@@ -382,7 +401,30 @@ namespace EricGameLauncher
             Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnRendering;
             timer.Tick += OnTimeout;
             timer.Start();
+            using var registration = _lifetime.Token.Register(() => { Cleanup(); tcs.TrySetResult(false); });
             return await tcs.Task;
+        }
+
+        public Task<bool> ConfirmSaveBeforeCloseAsync() => _saveConfirmation ??= ConfirmAndResetAsync();
+
+        private async Task<bool> ConfirmAndResetAsync()
+        {
+            await Task.Yield();
+            try
+            {
+                return await ExitSaveController.ConfirmAsync(ConfigService.SaveAll, async error =>
+                {
+                    if (_closed) return ExitSaveDecision.Stay;
+                    ActivateAndFocus();
+                    var dialog = new ContentDialog { XamlRoot = RootGrid.XamlRoot, Title = Text.T("Exit_SaveFailed"),
+                        Content = error.Message, PrimaryButtonText = Text.T("Exit_Retry"), SecondaryButtonText = Text.T("Exit_Discard"),
+                        CloseButtonText = Text.T("Exit_Stay"), DefaultButton = ContentDialogButton.Close };
+                    var result = await dialog.ShowAsync();
+                    return result == ContentDialogResult.Primary ? ExitSaveDecision.Retry : result == ContentDialogResult.Secondary ? ExitSaveDecision.Discard : ExitSaveDecision.Stay;
+                });
+            }
+            catch (Exception ex) { LogService.Write("App", "Exit confirmation failed; window retained", ex); return false; }
+            finally { _saveConfirmation = null; }
         }
 
         public void ActivateAndFocus()
@@ -411,6 +453,7 @@ namespace EricGameLauncher
             try
             {
                 var bitmap = await AppIconService.LoadBitmapImageAsync();
+                if (_closed) return;
                 if (bitmap == null)
                 {
                     _splashIconApplied = false;
@@ -608,9 +651,10 @@ namespace EricGameLauncher
         private async Task EnforceStartupOverlayTimeoutAsync()
         {
             await Task.Delay(TimeSpan.FromSeconds(10));
+            if (_closed) return;
             DispatcherQueue.TryEnqueue(() =>
             {
-                if (!_startupOverlayHidden)
+                if (!_closed && !_startupOverlayHidden)
                 {
                     LogService.Write("Startup", "Startup overlay timeout reached, forcing main interface");
                     TryHideStartupOverlay();

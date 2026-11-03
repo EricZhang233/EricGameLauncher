@@ -1,4 +1,3 @@
-using CommunityToolkit.WinUI.UI.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -6,14 +5,22 @@ using System;
 
 namespace EricGameLauncher;
 
-public sealed class LauncherAdaptiveGridView : AdaptiveGridView
+public sealed class LauncherAdaptiveGridView : GridView
 {
+    public static readonly DependencyProperty DesiredWidthProperty = DependencyProperty.Register(nameof(DesiredWidth), typeof(double), typeof(LauncherAdaptiveGridView), new PropertyMetadata(134.0, (owner, _) => ((LauncherAdaptiveGridView)owner).RecalculateAdaptiveWidth()));
+    public double DesiredWidth { get => (double)GetValue(DesiredWidthProperty); set => SetValue(DesiredWidthProperty, value); }
     private ScrollViewer? _scrollViewer;
     private Thickness? _basePadding;
     private double _calculatedItemWidth = double.NaN;
+    public event Action<AppItem>? ActivationRequested;
+
+    protected override DependencyObject GetContainerForItemOverride() => new LauncherGridViewItem(item => ActivationRequested?.Invoke(item));
 
     public LauncherAdaptiveGridView()
     {
+        IsTabStop = false;
+        UseLayoutRounding = false;
+        Items.VectorChanged += (_, _) => RecalculateAdaptiveWidth();
         SizeChanged += (_, _) => RecalculateAdaptiveWidth();
         Loaded += (_, _) => AttachScrollViewer();
         Unloaded += (_, _) => DetachScrollViewer();
@@ -43,7 +50,6 @@ public sealed class LauncherAdaptiveGridView : AdaptiveGridView
 
         itemsPanel.HorizontalAlignment = HorizontalAlignment.Stretch;
 
-        // Measure the content viewport, then mirror its reserved scrollbar width on the left.
         double viewportWidth = _scrollViewer is { ViewportWidth: > 0 }
             ? Math.Min(ActualWidth, _scrollViewer.ViewportWidth)
             : ActualWidth;
@@ -51,7 +57,9 @@ public sealed class LauncherAdaptiveGridView : AdaptiveGridView
         double rightInset = Padding.Right + BorderThickness.Right + itemsPanel.Margin.Right;
         double availableWidth = viewportWidth - leftInset - rightInset;
 
-        double calculatedWidth = CalculateItemWidth(availableWidth);
+        double columns = Math.Max(1, Math.Round(availableWidth / DesiredWidth));
+        var margin = ContainerFromIndex(0) is FrameworkElement first ? first.Margin : default;
+        double calculatedWidth = availableWidth / columns - margin.Left - margin.Right;
         if (!double.IsFinite(calculatedWidth) || calculatedWidth <= 0)
             return;
 
@@ -126,6 +134,11 @@ public sealed class LauncherAdaptiveGridView : AdaptiveGridView
     protected override void PrepareContainerForItemOverride(DependencyObject element, object item)
     {
         base.PrepareContainerForItemOverride(element, item);
+        if (element is ContentControl content)
+        {
+            content.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+            content.VerticalContentAlignment = VerticalAlignment.Stretch;
+        }
         if (element is FrameworkElement container && double.IsFinite(_calculatedItemWidth))
             container.Width = _calculatedItemWidth;
     }

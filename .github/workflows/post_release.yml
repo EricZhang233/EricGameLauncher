@@ -49,11 +49,31 @@ jobs:
           name: ${{ needs.build.outputs.artifact_name }}
           path: ${{ runner.temp }}/egl-release-package
       - name: Upload package to matching Release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
+        env:
+          PACKAGE_PATH: ${{ runner.temp }}/egl-release-package/${{ needs.build.outputs.package_name }}
         with:
-          tag_name: ${{ github.event.release.tag_name }}
-          files: ${{ runner.temp }}/egl-release-package/${{ needs.build.outputs.package_name }}
-          fail_on_unmatched_files: true
+          script: |
+            const {owner, repo} = context.repo;
+            const release = context.payload.release;
+            if (!release?.id || !release.tag_name.startsWith('v')) throw new Error('Missing release identity.');
+            const guard = async () => {
+              const {data: current} = await github.rest.repos.getRelease({owner, repo, release_id: release.id});
+              if (current.id !== release.id || current.tag_name !== release.tag_name || current.published_at !== release.published_at || current.draft) throw new Error('Release state changed; refusing asset upload.');
+            };
+            await guard();
+            const file = process.env.PACKAGE_PATH;
+            const name = require('path').basename(file);
+            const data = require('fs').readFileSync(file);
+            if (!data.length || !name.endsWith('.zip')) throw new Error('Missing release package.');
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, {owner, repo, release_id: release.id, per_page: 100});
+            for (const asset of assets.filter(asset => asset.name === name)) {
+              await guard();
+              await github.rest.repos.deleteReleaseAsset({owner, repo, asset_id: asset.id});
+            }
+            await guard();
+            await github.rest.repos.uploadReleaseAsset({owner, repo, release_id: release.id, name, data, headers: {'content-type': 'application/zip', 'content-length': data.length}});
+            await guard();
   publish_notes:
     needs: upload_asset
     runs-on: ubuntu-latest

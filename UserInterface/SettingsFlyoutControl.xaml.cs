@@ -178,13 +178,13 @@ public sealed partial class SettingsFlyoutControl : UserControl
     private void GitHubTokenSaveBtn_Click(object sender, RoutedEventArgs e)
     {
         string newValue = GitHubTokenBox.Text ?? "";
-        if (ConfigService.GitHubToken != newValue)
+        try
         {
-            ConfigService.GitHubToken = newValue;
-            if (!PersistSettings()) return;
-            LogService.Write("UI", "GitHubTokenSaveBtn: token updated");
+            ConfigService.SaveGitHubToken(newValue);
+            LogService.Write("UI", "GitHubTokenSaveBtn: token saved");
+            SwitchToTokenView();
         }
-        SwitchToTokenView();
+        catch (Exception ex) { OperationFailed?.Invoke(ex); }
     }
 
     private void GitHubTokenCancelBtn_Click(object sender, RoutedEventArgs e) => SwitchToTokenView();

@@ -6,6 +6,9 @@ namespace EricGameLauncher
 {
     public partial class App : Application
     {
+        private readonly Action? _launchOverride;
+        internal App(Action launchOverride) : this() { _launchOverride = launchOverride; }
+
         public App()
         {
                 try { StartupArgs.Parse(); DebugPaths.ApplyIfDebug(); } catch { }
@@ -20,6 +23,7 @@ namespace EricGameLauncher
 
         protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
+            if (_launchOverride != null) { _launchOverride(); return; }
             using (LogService.StartOperation("Startup", "OnLaunched"))
             {
                 try
@@ -152,36 +156,51 @@ namespace EricGameLauncher
             catch (Exception ex) { LogService.Write("QuickStart", "Exit dispatch failed", ex); }
         }
 
-        public void RequestFullExit()
-        {
-            using (LogService.StartOperation("App", "RequestFullExit"))
-            {
-                try
-                {
-                    LogService.Write("App", $"Full exit requested quickStart={ConfigService.QuickStart} host={m_serviceHost} window={m_window != null}");
-                    ConfigService.TrySaveAll();
-                    ServiceHost.StopServer();
-                    m_serviceHost = false;
-                    CloseKeeperWindow();
-                }
-                catch (Exception ex) { LogService.Write("App", "Full exit cleanup failed", ex); }
+        private bool _exitPending;
+        public async void RequestFullExit() => await RequestFullExitAsync();
 
-                try { Exit(); }
-                catch (Exception ex)
+        internal async Task<bool> RequestFullExitAsync(bool alreadySaved = false)
+        {
+            if (_exitPending) return false;
+            _exitPending = true;
+            try
+            {
+                if (!alreadySaved && m_window == null && !ConfigService.TrySaveAll())
                 {
-                    LogService.Write("App", "Full exit failed, terminating process", ex);
-                    Environment.Exit(0);
+                    ShowMainWindow(true, false);
+                    if (m_window == null) return false;
                 }
+                if (!alreadySaved && m_window is MainWindow window && !await window.ConfirmSaveBeforeCloseAsync()) return false;
+                using (LogService.StartOperation("App", "RequestFullExit"))
+                {
+                    try
+                    {
+                        LogService.Write("App", $"Full exit requested quickStart={ConfigService.QuickStart} host={m_serviceHost} window={m_window != null}");
+                        ServiceHost.StopServer();
+                        m_serviceHost = false;
+                        CloseKeeperWindow();
+                    }
+                    catch (Exception ex) { LogService.Write("App", "Full exit cleanup failed", ex); }
+
+                    try { Exit(); }
+                    catch (Exception ex)
+                    {
+                        LogService.Write("App", "Full exit failed, terminating process", ex);
+                        Environment.Exit(0);
+                    }
+                }
+                return true;
             }
+            finally { _exitPending = false; }
         }
 
-        private void ShowMainWindow(bool activate)
+        private void ShowMainWindow(bool activate, bool reload = true)
         {
             try
             {
                 if (m_window == null)
                 {
-                    if (m_serviceHost) ConfigService.Reload();
+                    if (m_serviceHost && reload) ConfigService.Reload();
                     LogService.Write("QuickStart", "Creating main window");
                     m_window = new MainWindow();
                     m_window.Closed += OnMainWindowClosed;
@@ -202,7 +221,6 @@ namespace EricGameLauncher
             {
                 if (sender is MainWindow window) window.Closed -= OnMainWindowClosed;
                 m_window = null;
-                ConfigService.TrySaveAll();
                 ConfigService.Reload();
                 LogService.Write("QuickStart", $"Main window closed quickStart={ConfigService.QuickStart} host={m_serviceHost}");
                 if (!ConfigService.QuickStart)

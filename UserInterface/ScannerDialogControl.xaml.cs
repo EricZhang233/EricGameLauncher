@@ -10,8 +10,9 @@ public sealed partial class ScannerDialogControl : ContentDialog
     private readonly ObservableCollection<ScannedGame> _existingGames = new();
     private readonly ObservableCollection<ScannedGame> _invalidGames = new();
 
-    public event Action<IReadOnlyList<ScannedGame>>? ImportRequested;
-    public event Action<IReadOnlyList<ScannedGame>>? DeleteInvalidRequested;
+    public Func<IReadOnlyList<ScannedGame>, ScanActionResult>? ImportRequested { get; set; }
+    public Func<IReadOnlyList<ScannedGame>, ScanActionResult>? DeleteInvalidRequested { get; set; }
+    public event Action<Exception>? OperationFailed;
 
     public ScannerDialogControl()
     {
@@ -40,6 +41,13 @@ public sealed partial class ScannerDialogControl : ContentDialog
         _newGames.Clear();
         _existingGames.Clear();
         _invalidGames.Clear();
+    }
+
+    public void ShowFailure(Exception error)
+    {
+        ScannerLoadingPanel.Visibility = Visibility.Collapsed;
+        ScannerResultPanel.Visibility = Visibility.Visible;
+        ScannerDescriptionText.Text = Text.T("Scanner_Failed") + " " + error.Message;
     }
 
     public void ShowResults(IEnumerable<ScannedGame> newGames, IEnumerable<ScannedGame> existingGames, IEnumerable<ScannedGame> invalidGames)
@@ -77,13 +85,13 @@ public sealed partial class ScannerDialogControl : ContentDialog
             var selectedItems = ScannerNewGamesList.SelectedItems.Cast<ScannedGame>().ToList();
             if (selectedItems.Count == 0) return;
 
-            ImportRequested?.Invoke(selectedItems);
+            var result = ImportRequested?.Invoke(selectedItems) ?? throw new InvalidOperationException(Text.T("Scanner_Failed"));
 
-            foreach (var item in selectedItems) _newGames.Remove(item);
+            foreach (var item in selectedItems.Where(x => result.CompletedPaths.Contains(x.ExePath))) _newGames.Remove(item);
             ScannerNewGamesHeader.Text = string.Format(Text.T("Scanner_NewGames"), _newGames.Count);
             if (_newGames.Count == 0) ScannerNewGamesSection.Visibility = Visibility.Collapsed;
         }
-        catch (Exception ex) { LogService.Write("Scan", "Scanner import selected failed", ex); }
+        catch (Exception ex) { LogService.Write("Scan", "Scanner import selected failed", ex); OperationFailed?.Invoke(ex); }
     }
 
     private void ScannerDeleteInvalidBtn_Click(object sender, RoutedEventArgs e)
@@ -93,13 +101,13 @@ public sealed partial class ScannerDialogControl : ContentDialog
             var selectedInvalid = ScannerInvalidGamesList.SelectedItems.Cast<ScannedGame>().ToList();
             if (selectedInvalid.Count == 0) return;
 
-            DeleteInvalidRequested?.Invoke(selectedInvalid);
+            var result = DeleteInvalidRequested?.Invoke(selectedInvalid) ?? throw new InvalidOperationException(Text.T("Scanner_Failed"));
 
-            foreach (var item in selectedInvalid) _invalidGames.Remove(item);
+            foreach (var item in selectedInvalid.Where(x => result.CompletedPaths.Contains(x.ExePath))) _invalidGames.Remove(item);
             ScannerInvalidGamesHeader.Text = string.Format(Text.T("Scanner_InvalidGames"), _invalidGames.Count);
             if (_invalidGames.Count == 0) ScannerInvalidGamesSection.Visibility = Visibility.Collapsed;
         }
-        catch (Exception ex) { LogService.Write("Scan", "Scanner delete invalid failed", ex); }
+        catch (Exception ex) { LogService.Write("Scan", "Scanner delete invalid failed", ex); OperationFailed?.Invoke(ex); }
     }
 
     private void ScannerNewGamesList_SelectionChanged(object sender, SelectionChangedEventArgs e)

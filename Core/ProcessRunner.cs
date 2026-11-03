@@ -11,6 +11,24 @@ public sealed record LaunchResult(bool Success, string? Error = null)
 
 public static class ProcessRunner
 {
+    public static string? FileTarget(string? command)
+    {
+        if (string.IsNullOrWhiteSpace(command)) return null;
+        command = Environment.ExpandEnvironmentVariables(command.Trim());
+        if (command.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase) || command.Contains("://", StringComparison.Ordinal)) return null;
+        string file = SplitPath(command).filePath;
+        if (File.Exists(file) || Path.IsPathRooted(file)) return file;
+        foreach (string directory in new[] { Environment.CurrentDirectory, Environment.SystemDirectory }.Concat((Environment.GetEnvironmentVariable("PATH") ?? "").Split(';')))
+        {
+            try
+            {
+                string candidate = Path.Combine(directory.Trim('"'), file);
+                if (File.Exists(candidate)) return candidate;
+            }
+            catch (ArgumentException) { }
+        }
+        return file;
+    }
     public static LaunchResult Run(string path, bool admin)
     {
         if (string.IsNullOrEmpty(path)) return new(false, Text.T("Launch_Failed"));
@@ -56,7 +74,7 @@ public static class ProcessRunner
 
                     try
                     {
-                        string? dir = Path.GetDirectoryName(filePath);
+                        string? dir = filePath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) ? null : Path.GetDirectoryName(filePath);
                         if (!string.IsNullOrEmpty(dir)) psi.WorkingDirectory = dir;
                     }
                     catch (Exception ex) { LogService.Write("App", "Swallowed exception", ex); }
@@ -109,7 +127,10 @@ public static class ProcessRunner
             }
         }
 
-        int lastSpaceIndex = input.LastIndexOf(' ');
+        string expandedInput = Environment.ExpandEnvironmentVariables(input);
+        if (File.Exists(expandedInput)) return (expandedInput, string.Empty);
+
+        int lastSpaceIndex = input.LastIndexOfAny([' ', '\t']);
         if (lastSpaceIndex > 0)
         {
             int currentIndex = lastSpaceIndex;
@@ -122,10 +143,17 @@ public static class ProcessRunner
                     string arguments = input.Substring(currentIndex + 1).Trim();
                     return (expandedPath, arguments);
                 }
-                currentIndex = input.LastIndexOf(' ', currentIndex - 1);
+                currentIndex = input.LastIndexOfAny([' ', '\t'], currentIndex - 1);
             }
         }
 
-        return (Environment.ExpandEnvironmentVariables(input), string.Empty);
+        int separator = input.IndexOfAny([' ', '\t']);
+        if (separator > 0)
+        {
+            string command = Environment.ExpandEnvironmentVariables(input[..separator]);
+            if (command.IndexOfAny(['\\', '/', ':']) < 0)
+                return (command, input[(separator + 1)..].Trim());
+        }
+        return (expandedInput, string.Empty);
     }
 }

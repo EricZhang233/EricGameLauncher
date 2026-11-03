@@ -2,11 +2,11 @@ namespace EricGameLauncher;
 
 public static class LaunchService
 {
-    public static (string path, bool admin) GetLaunchTarget(AppItem item, bool useAlt = false)
+    public static (string path, bool admin) GetLaunchTarget(AppItem item, bool useAlt = false, bool? adminOverride = null)
     {
         if (useAlt && !string.IsNullOrEmpty(item.AlternativeLaunchCommand))
-            return (item.AlternativeLaunchCommand, item.IsAltAdmin);
-        return (item.ExePath ?? "", item.IsAdmin);
+            return (item.AlternativeLaunchCommand, adminOverride ?? item.IsAltAdmin);
+        return (item.ExePath ?? "", adminOverride ?? item.IsAdmin);
     }
 
     public static (string path, bool admin)? GetAlongsideTarget(AppItem item, bool requestAlongside = false)
@@ -24,12 +24,12 @@ public static class LaunchService
         return null;
     }
 
-    public static LaunchResult Launch(AppItem item, bool useAlt = false, bool requestAlongside = false)
-        => CompleteLaunch(item, ExecuteLaunch(CreateRequest(item, useAlt, requestAlongside)));
+    public static LaunchResult Launch(AppItem item, bool useAlt = false, bool requestAlongside = false, bool? adminOverride = null)
+        => CompleteLaunch(item, ExecuteLaunch(CreateRequest(item, useAlt, requestAlongside, adminOverride)));
 
-    public static async Task<LaunchResult> LaunchAsync(AppItem item, bool useAlt = false, bool requestAlongside = false)
+    public static async Task<LaunchResult> LaunchAsync(AppItem item, bool useAlt = false, bool requestAlongside = false, bool? adminOverride = null)
     {
-        var request = CreateRequest(item, useAlt, requestAlongside);
+        var request = CreateRequest(item, useAlt, requestAlongside, adminOverride);
         var outcome = await RunOnLaunchThreadAsync(() => ExecuteLaunch(request));
         return CompleteLaunch(item, outcome);
     }
@@ -37,8 +37,8 @@ public static class LaunchService
     private sealed record LaunchRequest(string? Title, string Id, (string path, bool admin) Target,
         (string path, bool admin)? Alongside);
 
-    private static LaunchRequest CreateRequest(AppItem item, bool useAlt, bool requestAlongside)
-        => new(item.Title, item.Id, GetLaunchTarget(item, useAlt), GetAlongsideTarget(item, requestAlongside));
+    private static LaunchRequest CreateRequest(AppItem item, bool useAlt, bool requestAlongside, bool? adminOverride)
+        => new(item.Title, item.Id, GetLaunchTarget(item, useAlt, adminOverride), GetAlongsideTarget(item, requestAlongside));
 
     private static LaunchResult CompleteLaunch(AppItem item, (LaunchResult Result, long? Count) outcome)
     {
@@ -86,10 +86,10 @@ public static class LaunchService
     private static LaunchResult LaunchManagerTarget((string path, bool admin)? target)
         => target.HasValue ? ProcessRunner.Run(target.Value.path, target.Value.admin) : new(false, Text.T("Launch_Failed"));
 
-    public static Task LaunchCustomCommandAsync(CustomMenuItem ci)
+    public static Task<LaunchResult> LaunchCustomCommandAsync(CustomMenuItem ci)
     {
         var command = new CustomMenuItem { Command = ci.Command, IsAdmin = ci.IsAdmin };
-        return RunOnLaunchThreadAsync(() => { LaunchCustomCommand(command); return true; });
+        return RunOnLaunchThreadAsync(() => LaunchCustomCommand(command));
     }
 
     internal static Task<T> RunOnLaunchThreadAsync<T>(Func<T> action)
@@ -113,9 +113,6 @@ public static class LaunchService
         return completion.Task;
     }
 
-    public static void LaunchCustomCommand(CustomMenuItem ci)
-    {
-        if (!string.IsNullOrEmpty(ci.Command))
-            ProcessRunner.Run(ci.Command, ci.IsAdmin);
-    }
+    public static LaunchResult LaunchCustomCommand(CustomMenuItem ci)
+        => ProcessRunner.Run(ci.Command ?? "", ci.IsAdmin);
 }

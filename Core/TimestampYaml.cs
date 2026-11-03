@@ -9,7 +9,7 @@ internal sealed class TimestampYaml : IYamlTypeConverter
 {
     public bool Accepts(Type type) => type == typeof(DateTimeOffset) || type == typeof(DateTimeOffset?);
 
-    public object? ReadYaml(IParser parser, Type type)
+    public object? ReadYaml(IParser parser, Type type, ObjectDeserializer rootDeserializer)
     {
         if (parser.TryConsume<Scalar>(out var scalar))
         {
@@ -24,5 +24,5 @@ internal sealed class TimestampYaml : IYamlTypeConverter
         throw new InvalidDataException("Invalid persisted deletion timestamp.");
     }
 
-    public void WriteYaml(IEmitter emitter, object? value, Type type) => emitter.Emit(new Scalar(value is DateTimeOffset timestamp ? timestamp.ToString("O", CultureInfo.InvariantCulture) : ""));
+    public void WriteYaml(IEmitter emitter, object? value, Type type, ObjectSerializer serializer) => emitter.Emit(new Scalar(value is DateTimeOffset timestamp ? timestamp.ToString("O", CultureInfo.InvariantCulture) : ""));
 }

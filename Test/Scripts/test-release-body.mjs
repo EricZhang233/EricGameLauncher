@@ -18,6 +18,7 @@ function script(job) {
 }
 const prepare = script('prepare_release');
 const finalize = script('publish_notes');
+const upload = script('upload_asset');
 const pending = '正在构建，稍后将在此显示更新日志和软件包';
 const notes = '# Tagged release notes\n\nVerified package is ready.\n';
 let checks = 0;
@@ -62,4 +63,32 @@ for (const [name, execute] of [['preparation', prepare], ['finalization', finali
   await check(`${name} propagates update permission errors`, execute, {denied: true, error: true});
 }
 await check('empty final notes are rejected before modifying the body', finalize, {notes: ' \r\n ', error: true});
+process.env.PACKAGE_PATH = '/fixture/package.zip';
+for (const state of ['normal', 'missing', 'replaced', 'draft', 'republished', 'deleted-during-upload']) {
+  const calls = [];
+  const release = {id: 17, tag_name: 'v1.3.1', published_at: 'original'};
+  const repos = {
+    getRelease: async ({release_id}) => {
+      assert.equal(release_id, 17);
+      if (state === 'missing') throw Object.assign(new Error('removed'), {status: 404});
+      return {data: {...release, id: state === 'replaced' ? 18 : 17, draft: state === 'draft', published_at: state === 'republished' ? 'new' : 'original'}};
+    },
+    listReleaseAssets: () => {},
+    deleteReleaseAsset: async args => { assert.equal(args.asset_id, 19); calls.push('delete'); },
+    uploadReleaseAsset: async args => {
+      assert.equal(args.release_id, 17);
+      if (state === 'deleted-during-upload') throw Object.assign(new Error('removed'), {status: 404});
+      calls.push('upload');
+    }
+  };
+  const github = {rest: {repos}, paginate: async (_, args) => { assert.equal(args.release_id, 17); return [{id: 19, name: 'package.zip'}]; }};
+  const requireFixture = name => name === 'fs' ? {readFileSync: () => Buffer.from('zip')} : {basename: () => 'package.zip'};
+  let failed = false;
+  try { await upload(github, {repo: {owner: 'fixture', repo: 'fixture'}, payload: {release}}, requireFixture); }
+  catch { failed = true; }
+  assert.equal(failed, state !== 'normal');
+  assert.equal(calls.includes('upload'), state === 'normal');
+  checks++;
+  console.log('PASS asset upload stays bound to original release: ' + state);
+}
 console.log(`${checks} checks passed.`);

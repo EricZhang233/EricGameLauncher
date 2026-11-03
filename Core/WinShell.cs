@@ -187,18 +187,29 @@ public static class ShortcutResolver
             try
             {
                 Type? shellType = Type.GetTypeFromProgID("WScript.Shell");
-                if (shellType == null) return;
+                if (shellType == null) throw new InvalidOperationException(Text.T("Shortcut_CreateFailed"));
 
                 dynamic? shell = Activator.CreateInstance(shellType);
-                if (shell == null) return;
+                if (shell == null) throw new InvalidOperationException(Text.T("Shortcut_CreateFailed"));
 
                 try
                 {
-                    dynamic shortcut = shell.CreateShortcut(shortcutPath);
-                    shortcut.TargetPath = targetPath;
-                    shortcut.WorkingDirectory = Path.GetDirectoryName(targetPath);
-                    shortcut.Description = description;
-                    shortcut.Save();
+                    string temporary = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(shortcutPath))!, Guid.NewGuid().ToString("N") + ".lnk");
+                    try
+                    {
+                        dynamic shortcut = shell.CreateShortcut(temporary);
+                        try
+                        {
+                            shortcut.TargetPath = targetPath;
+                            shortcut.WorkingDirectory = Path.GetDirectoryName(targetPath);
+                            shortcut.Description = description;
+                            shortcut.Save();
+                        }
+                        finally { Marshal.ReleaseComObject(shortcut); }
+                        if (!File.Exists(temporary)) throw new IOException(Text.T("Shortcut_CreateFailed"));
+                        File.Move(temporary, shortcutPath, true);
+                    }
+                    finally { if (File.Exists(temporary)) File.Delete(temporary); }
                 }
                 finally
                 {
@@ -209,6 +220,7 @@ public static class ShortcutResolver
             catch (Exception ex)
             {
                 LogService.Write("App", "CreateShortcut failed", ex);
+                throw;
             }
         }
     }
@@ -238,10 +250,6 @@ public static class ShortcutResolver
                 {
                     result.ActualPath = info.ActualUrl;
                     result.IsUrlProtocol = true;
-                }
-                else if (!string.IsNullOrEmpty(info.TargetPath))
-                {
-                    result.ActualPath = info.TargetPath;
                 }
             }
         }

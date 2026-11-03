@@ -9,7 +9,6 @@ namespace EricGameLauncher;
 public static class CliService
 {
     private static bool _jsonMode = false;
-    private static string _lang = "Zh-CN";
     private static bool _jsonWritten;
 
     public static async Task<int> RunAsync(string[] rawArgs)
@@ -39,10 +38,7 @@ public static class CliService
         {
             StartupArgs.Parse();
             DebugPaths.ApplyIfDebug();
-            ConfigService.Initialize();
-            Text.Load(_lang);
-            JumpListService.Initialize();
-            ServerConfigManager.LoadReadIds();
+            Text.Load(Text.DetectSystemLanguage());
 
             var args = rawArgs.Skip(1).Where(a => !string.Equals(a, "-debug", StringComparison.OrdinalIgnoreCase)).ToArray();
 
@@ -69,7 +65,13 @@ public static class CliService
 
             _jsonMode = commandArgs.Contains("--json");
 
-            var parsed = ParseOptions(commandArgs);
+            var definition = Commands.FirstOrDefault(x => x.Name == command);
+            if (definition == null) return UnknownCommand(command);
+            var parsed = CliArguments.Parse(command, commandArgs, definition.Options);
+            ConfigService.Initialize();
+            Text.Load(ConfigService.Language);
+            JumpListService.Initialize();
+            ServerConfigManager.LoadReadIds();
 
             return command switch
             {
@@ -104,51 +106,6 @@ public static class CliService
         }
     }
 
-    private static Dictionary<string, string> ParseOptions(string[] args)
-    {
-        var opts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        for (int i = 0; i < args.Length; i++)
-        {
-            var arg = args[i];
-            if (arg == "--json") continue;
-
-            if (arg.StartsWith("--"))
-            {
-                var key = arg.TrimStart('-');
-                if (i + 1 < args.Length && !args[i + 1].StartsWith("--"))
-                {
-                    opts[key] = args[i + 1];
-                    i++;
-                }
-                else
-                {
-                    opts[key] = "true";
-                }
-            }
-            else if (arg.StartsWith("-") && arg.Length == 2 && arg != "--")
-            {
-                var key = arg.TrimStart('-');
-                if (i + 1 < args.Length && !args[i + 1].StartsWith("-"))
-                {
-                    opts[key] = args[i + 1];
-                    i++;
-                }
-                else
-                {
-                    opts[key] = "true";
-                }
-            }
-            else
-            {
-                if (!opts.ContainsKey("_positional"))
-                    opts["_positional"] = arg;
-                else
-                    opts["_positional"] += " " + arg;
-            }
-        }
-        return opts;
-    }
-
     private static void WriteLine(string text = "", ConsoleColor? color = null)
     {
         try
@@ -175,13 +132,9 @@ public static class CliService
 
     private static void WriteJson(object obj)
     {
-        try
-        {
-            var json = JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull });
-            Console.WriteLine(json);
-            _jsonWritten = true;
-        }
-        catch { }
+        var json = JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull });
+        Console.WriteLine(json);
+        _jsonWritten = true;
     }
 
     private static int WriteHelp(string? error = null)
@@ -283,7 +236,7 @@ public static class CliService
                         if (!string.IsNullOrEmpty(item.RecycleId))
                             WriteLine(string.Format(Text.Cli("FmtRecycleId"), item.RecycleId));
                         if (item.Status == (int)AppItemStatus.PendingDeletion)
-                            WriteLine(Text.Cli("LblStatusPending"), ConsoleColor.DarkYellow);
+                            WriteLine(string.Format(Text.Cli("LblStatusPending"), string.IsNullOrEmpty(item.TimeRemainingText) ? Text.Cli("LblNA") : item.TimeRemainingText), ConsoleColor.DarkYellow);
                         else
                             WriteLine(Text.Cli("LblStatusRecycled"));
                     }
@@ -358,7 +311,7 @@ public static class CliService
             }
 
             WriteLine(string.Format(Text.Cli("MsgLaunching"), item.Title), ConsoleColor.Green);
-            LaunchService.Launch(item, alt || item.UseAlternativeLaunch, alongside).EnsureSuccess();
+            LaunchService.Launch(item, alt || item.UseAlternativeLaunch, alongside, admin ? true : null).EnsureSuccess();
             if (LaunchService.GetAlongsideTarget(item, alongside).HasValue)
                 WriteLine(string.Format(Text.Cli("MsgAlongside"), item.AlongsideCommand), ConsoleColor.Green);
 
@@ -559,74 +512,21 @@ public static class CliService
             bool invalid = opts.ContainsKey("invalid");
             bool deleteInvalid = opts.ContainsKey("delete-invalid");
 
-            var scannedGames = new List<ScannedGame>();
-            if (all || wegame)
-            {
-                var wegameGames = ScanService.ScanWeGame();
-                scannedGames.AddRange(wegameGames);
-                WriteLine(string.Format(Text.Cli("MsgFoundCount"), wegameGames.Count, "WeGame"));
-            }
-            if (all || google)
-            {
-                WriteLine(Text.Cli("ScanGoogle"), ConsoleColor.Cyan);
-                scannedGames.AddRange(GooglePlayGamesHelper.GetInstalledGames());
-            }
-
-            if (all || steam)
-            {
-                WriteLine(Text.Cli("ScanSteam"), ConsoleColor.Cyan);
-                try
-                {
-                    var steamGames = ScanService.ScanSteam();
-                    scannedGames.AddRange(steamGames);
-                    WriteLine(string.Format(Text.Cli("MsgFoundCount"), steamGames.Count, "Steam"));
-                }
-                catch (Exception ex)
-                {
-                    WriteLine(string.Format(Text.Cli("MsgScanFailed"), "Steam", ex.Message), ConsoleColor.DarkYellow);
-                    try { LogService.Write("CLI", "Steam scan failed", ex); } catch { }
-                }
-            }
-
-            if (all || epic)
-            {
-                WriteLine(Text.Cli("ScanEpic"), ConsoleColor.Cyan);
-                try
-                {
-                    var epicGames = ScanService.ScanEpic();
-                    scannedGames.AddRange(epicGames);
-                    WriteLine(string.Format(Text.Cli("MsgFoundCount"), epicGames.Count, "Epic"));
-                }
-                catch (Exception ex)
-                {
-                    WriteLine(string.Format(Text.Cli("MsgScanFailed"), "Epic", ex.Message), ConsoleColor.DarkYellow);
-                    try { LogService.Write("CLI", "Epic scan failed", ex); } catch { }
-                }
-            }
-
-            if (all || xbox)
-            {
-                WriteLine(Text.Cli("ScanXbox"), ConsoleColor.Cyan);
-                try
-                {
-                    var uwpGames = await ScanService.ScanXboxAsync();
-                    scannedGames.AddRange(uwpGames);
-                    WriteLine(string.Format(Text.Cli("MsgFoundCount"), uwpGames.Count, "Xbox/UWP"));
-                }
-                catch (Exception ex)
-                {
-                    WriteLine(string.Format(Text.Cli("MsgScanFailed"), "Xbox", ex.Message), ConsoleColor.DarkYellow);
-                    try { LogService.Write("CLI", "Xbox scan failed", ex); } catch { }
-                }
-            }
+            var requested = new List<string>();
+            if (steam) requested.Add("Steam");
+            if (epic) requested.Add("Epic Games");
+            if (xbox) requested.Add("Xbox");
+            if (google) requested.Add("Google Play Games");
+            if (wegame) requested.Add("WeGame");
+            var scan = await PlatformScan.RunAsync(all ? null : requested);
+            scan.RequireComplete();
+            var scannedGames = scan.Games;
 
             if (classify || invalid || deleteInvalid)
             {
                 var allItems = ConfigService.LoadItems();
                 var (newGames, existingGames) = ScanService.Classify(scannedGames, allItems);
-                var invalidGames = ScanService.FindInvalidGames(
-                    allItems, scannedGames,
-                    ScanService.CanValidateSteam, ScanService.CanValidateEpic);
+                var invalidGames = ScanService.FindInvalidGames(allItems, scan);
 
                 if (deleteInvalid)
                 {
@@ -639,6 +539,7 @@ public static class CliService
                 {
                     WriteJson(new
                     {
+                        scanStatus = new { scan.Requested, scan.Completed, scan.Unavailable },
                         newGames = newGames.Select(g => new { g.Title, g.ExePath, g.PlatformBadge }),
                         imported = import ? ItemService.ImportGames(newGames) : 0,
                         existingGames = existingGames.Select(g => new { g.Title, g.ExePath, g.PlatformBadge }),
@@ -803,6 +704,7 @@ public static class CliService
                 var settingsObj = new
                 {
                     launchMode = ConfigService.LaunchMode,
+                    lang = ConfigService.Language,
                     closeAfterLaunch = ConfigService.CloseAfterLaunch,
                     quickStart = ConfigService.QuickStart,
                     quickStartRegistered = QuickStartService.IsAutoStartRegistered(),
@@ -866,17 +768,7 @@ public static class CliService
                 var key = parts[0].Trim();
                 var value = parts[1].Trim();
 
-                if (key.Equals("lang", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (value != "Zh-CN" && value != "EN")
-                    {
-                        WriteLine(Text.Cli("ErrLang"), ConsoleColor.Red);
-                        return 1;
-                    }
-                    _lang = value;
-                    Text.Load(_lang);
-                }
-                else if (key.Equals("storagemode", StringComparison.OrdinalIgnoreCase))
+                if (key.Equals("storagemode", StringComparison.OrdinalIgnoreCase))
                 {
                     if (value != "system" && value != "portable")
                     {
@@ -909,6 +801,7 @@ public static class CliService
                 string? result = key switch
                 {
                     "launchmode" => ConfigService.LaunchMode,
+                    "lang" => ConfigService.Language,
                     "closeafterlaunch" => ConfigService.CloseAfterLaunch.ToString(),
                     "quickstart" => ConfigService.QuickStart.ToString(),
                     "iconsize" => ConfigService.IconSize.ToString(),
@@ -1282,6 +1175,7 @@ public static class CliService
     {
         try
         {
+            if (!ServerConfigManager.LoadReadIds()) throw new DataFileException(ServerConfigManager.ReadIdsPath);
             await ServerConfigManager.FetchConfigAsync();
             var readId = opts.GetValueOrDefault("read");
 
@@ -1470,42 +1364,10 @@ public static class CliService
 
     private static bool ParseBool(string value)
     {
-        if (string.IsNullOrEmpty(value)) return false;
-        if (value == "1") return true;
-        if (bool.TryParse(value, out var result)) return result;
-        return false;
+        return CliArguments.ParseBoolean(value);
     }
 
-    private static object ItemToJson(AppItem item)
-    {
-        return new
-        {
-            item.Id,
-            item.Title,
-            item.ExePath,
-            item.IsAdmin,
-            item.Platform,
-            item.PlatformName,
-            item.IsPlatform,
-            item.Pin,
-            item.LaunchCount,
-            item.IconPath,
-            item.RecycleId,
-            item.MgrPath,
-            item.AlternativeLaunchCommand,
-            item.UseAlternativeLaunch,
-            item.AlongsideCommand,
-            item.RunAlongside,
-            status = item.Status switch
-            {
-                0 => "normal",
-                1 => "recycled",
-                2 => "pending_deletion",
-                _ => "unknown"
-            },
-            customMenuItems = item.CustomMenuItems?.Select(m => new { m.Title, m.Command, m.IsAdmin })
-        };
-    }
+    private static object ItemToJson(AppItem item) => ItemQuery.FromItem(item);
 
     private sealed record CommandDef(string Name, string[] Options, string DescKey, string HelpKey);
 

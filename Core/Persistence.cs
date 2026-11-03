@@ -37,13 +37,13 @@ internal static class ConfigPersistence
         .WithTypeConverter(new TimestampYaml())
         .WithNamingConvention(CamelCaseNamingConvention.Instance).IgnoreUnmatchedProperties().Build();
 
-    internal static IDisposable Enter(string path)
+    internal static IDisposable Enter(string path, TimeSpan? timeout = null)
     {
         string key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(path).ToUpperInvariant())));
         var mutex = new Mutex(false, "Local\\EricGameLauncher.Data." + key);
         try
         {
-            try { if (!mutex.WaitOne(TimeSpan.FromSeconds(20))) throw new TimeoutException(Text.T("DataFile_Busy")); }
+            try { if (!mutex.WaitOne(timeout ?? TimeSpan.FromSeconds(20))) throw new TimeoutException(Text.T("DataFile_Busy")); }
             catch (AbandonedMutexException) { }
             return new Lease(mutex);
         }

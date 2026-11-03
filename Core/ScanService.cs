@@ -1,26 +1,24 @@
 namespace EricGameLauncher;
 
+public sealed record ScanActionResult(int Changed, IReadOnlyList<string> CompletedPaths);
+
 public static class ScanService
 {
     public static async Task<List<ScannedGame>> ScanAllAsync(CancellationToken cancellationToken = default)
     {
-        var steam = Task.Run(ScanSteam, cancellationToken);
-        var epic = Task.Run(ScanEpic, cancellationToken);
-        var xbox = ScanXboxAsync();
-        var google = Task.Run(GooglePlayGamesHelper.GetInstalledGames, cancellationToken);
-        var wegame = Task.Run(ScanWeGame, cancellationToken);
-        var groups = await Task.WhenAll(steam, epic, xbox, google, wegame).WaitAsync(cancellationToken);
-        return groups.SelectMany(x => x).ToList();
+        var result = await PlatformScan.RunAsync(token: cancellationToken);
+        result.RequireComplete();
+        return result.Games;
     }
 
     public static List<ScannedGame> ScanSteam()
     {
-        return SteamHelper.GetAllInstalledGames();
+        return SteamHelper.DetectSteamPath() is string root ? PlatformScan.ReadSteam(PlatformScan.SteamLibraries(root)) : [];
     }
 
     public static List<ScannedGame> ScanEpic()
     {
-        return EpicGamesHelper.GetAllInstalledGames();
+        return EpicGamesHelper.DetectEpicManifestDir() is string root ? PlatformScan.ReadEpic(root) : [];
     }
 
     public static List<ScannedGame> ScanWeGame() => WeGameHelper.GetInstalledGames();
@@ -50,10 +48,9 @@ public static class ScanService
             }
             else
             {
-                string gameNorm = PathHashHelper.PathKey(game.ExePath);
+                string gameNorm = PlatformScan.Identity(game.ExePath);
                 exists = gameNorm.Length > 0 && allItems.Any(a =>
-                    (PathHashHelper.PathKey(a.ExePath) == gameNorm) || WeGameHelper.MatchesLaunchPath(game, a.ExePath) ||
-                    string.Equals(a.Title, game.Title, StringComparison.OrdinalIgnoreCase));
+                    PlatformScan.Identity(a.ExePath) == gameNorm || WeGameHelper.MatchesLaunchPath(game, a.ExePath));
             }
 
             if (exists) existingGames.Add(game);
@@ -67,6 +64,15 @@ public static class ScanService
         List<AppItem> allItems, List<ScannedGame> scannedGames,
         bool canValidateSteam, bool canValidateEpic)
     {
+        var scope = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Xbox" };
+        if (canValidateSteam) scope.Add("Steam");
+        if (canValidateEpic) scope.Add("Epic Games");
+        return FindInvalidGames(allItems, new(scannedGames, scope, new Dictionary<string, string>(), true));
+    }
+
+    public static List<ScannedGame> FindInvalidGames(List<AppItem> allItems, PlatformScanResult result)
+    {
+        var scannedGames = result.Games;
         var invalidGames = new List<ScannedGame>();
 
         foreach (var item in allItems)
@@ -77,8 +83,7 @@ public static class ScanService
 
             if (platformName == "Steam" || platformName == "Epic Games" || platformName == "Xbox")
             {
-                if (platformName == "Steam" && !canValidateSteam) continue;
-                if (platformName == "Epic Games" && !canValidateEpic) continue;
+                if (!result.Completed.Contains(platformName) || result.Failures.ContainsKey(platformName)) continue;
 
                 if (platformName == "Xbox")
                 {
@@ -89,15 +94,14 @@ public static class ScanService
 
                 bool found = scannedGames.Any(game =>
                     game.PlatformBadge == platformName &&
-                    ((!string.IsNullOrEmpty(item.ExePath) && PathHashHelper.PathKey(item.ExePath) == PathHashHelper.PathKey(game.ExePath)) ||
-                     string.Equals(item.Title, game.Title, StringComparison.OrdinalIgnoreCase)));
+                    PlatformScan.Identity(item.ExePath) == PlatformScan.Identity(game.ExePath));
 
                 if (!found)
                     invalidGames.Add(CreateInvalidGame(item, platformName));
             }
             else
             {
-                if (IsUserLaunchTargetInvalid(item.ExePath))
+                if (result.IncludeLocal && IsUserLaunchTargetInvalid(item.ExePath))
                     invalidGames.Add(CreateInvalidGame(item, "User"));
             }
         }
@@ -115,10 +119,10 @@ public static class ScanService
             return !StoreHelper.IsAppInstalled(exePath);
 
         if (item.PlatformName == "Steam")
-            return canValidateSteam && !steamInstalledUrls.Contains(exePath);
+            return canValidateSteam && !steamInstalledUrls.Any(x => PlatformScan.Identity(x) == PlatformScan.Identity(exePath));
 
         if (item.PlatformName == "Epic Games")
-            return canValidateEpic && !epicInstalledUrls.Contains(exePath);
+            return canValidateEpic && !epicInstalledUrls.Any(x => PlatformScan.Identity(x) == PlatformScan.Identity(exePath));
 
         return IsUserLaunchTargetInvalid(exePath);
     }
@@ -169,26 +173,28 @@ public static class ScanService
     public static HashSet<string> GetSteamInstalledUrls()
     {
         return CanValidateSteam
-            ? new HashSet<string>(SteamHelper.GetAllInstalledGames().Select(x => x.ExePath), StringComparer.OrdinalIgnoreCase)
+            ? new HashSet<string>(ScanSteam().Select(x => x.ExePath), StringComparer.OrdinalIgnoreCase)
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     }
 
     public static HashSet<string> GetEpicInstalledUrls()
     {
         return CanValidateEpic
-            ? new HashSet<string>(EpicGamesHelper.GetAllInstalledGames().Select(x => x.ExePath), StringComparer.OrdinalIgnoreCase)
+            ? new HashSet<string>(ScanEpic().Select(x => x.ExePath), StringComparer.OrdinalIgnoreCase)
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     }
 
-    public static int DeleteInvalidGames(List<ScannedGame> games)
+    public static int DeleteInvalidGames(List<ScannedGame> games) => DeleteInvalidGamesDetailed(games).Changed;
+
+    public static ScanActionResult DeleteInvalidGamesDetailed(List<ScannedGame> games)
     {
         using (LogService.StartOperation("Scan", "DeleteInvalidGames"))
         {
             var processedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            bool canValidateSteam = CanValidateSteam;
-            bool canValidateEpic = CanValidateEpic;
-            var steamInstalledUrls = GetSteamInstalledUrls();
-            var epicInstalledUrls = GetEpicInstalledUrls();
+            bool canValidateSteam = games.Any(x => x.PlatformBadge == "Steam") && CanValidateSteam;
+            bool canValidateEpic = games.Any(x => x.PlatformBadge == "Epic Games") && CanValidateEpic;
+            var steamInstalledUrls = canValidateSteam ? GetSteamInstalledUrls() : [];
+            var epicInstalledUrls = canValidateEpic ? GetEpicInstalledUrls() : [];
             var idsToRemove = new List<string>();
 
             foreach (var game in games)
@@ -204,9 +210,17 @@ public static class ScanService
                 idsToRemove.Add(item.Id);
             }
 
-            int removed = ItemService.RemoveItems(idsToRemove);
+            var removedPaths = new List<string>();
+            int removed = ItemService.RemoveItems(idsToRemove, item =>
+            {
+                var candidate = games.First(x => x.ItemId == item.Id);
+                if (PlatformScan.Identity(candidate.ExePath) != PlatformScan.Identity(item.ExePath) ||
+                    !IsItemStillInvalid(item, canValidateSteam, canValidateEpic, steamInstalledUrls, epicInstalledUrls)) return false;
+                removedPaths.Add(candidate.ExePath);
+                return true;
+            });
             LogService.Write("Scan", $"DeleteInvalidGames removed={removed}");
-            return removed;
+            return new(removed, removedPaths);
         }
     }
 

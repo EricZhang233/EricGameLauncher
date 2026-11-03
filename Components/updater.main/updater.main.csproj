@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <Compile Include="..\..\Core\UpdatePackageIntegrity.cs" Link="UpdatePackageIntegrity.cs" />
-    <PackageReference Include="YamlDotNet" Version="12.0.2" />
+    <Compile Include="..\..\Core\UpdateDownload.cs" Link="UpdateDownload.cs" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 </Project>

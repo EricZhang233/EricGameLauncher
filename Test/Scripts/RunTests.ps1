@@ -109,10 +109,15 @@ $definitions = @(
         $probe = Join-Path $main 'EricGameLauncher.Regression.dll'
         Copy-Item -LiteralPath (Join-Path $testRoot 'build/Regression/bin/Debug/net10.0-windows10.0.26100/EricGameLauncher.Regression.dll') -Destination $probe
         $launchFixture = Join-Path $testRoot 'build/LaunchFixture/bin/Debug/net10.0/EricGameLauncher.LaunchFixture.exe'
-        try { Invoke-Native 'dotnet' @('exec', '--runtimeconfig', "$main/EricGameLauncher.runtimeconfig.json", '--depsfile', "$main/EricGameLauncher.deps.json", $probe, "$main/EricGameLauncher.Cli.exe", $launchFixture) }
+        try {
+            Invoke-Native 'dotnet' @('exec', '--runtimeconfig', "$main/EricGameLauncher.runtimeconfig.json", '--depsfile', "$main/EricGameLauncher.deps.json", $probe, "$main/EricGameLauncher.Cli.exe", $launchFixture)
+            $uiHost = (Join-Path $testRoot 'ui-host') + [IO.Path]::DirectorySeparatorChar
+            Invoke-Native 'dotnet' @('build', 'EricGameLauncher.csproj', '-c', 'Debug', '-p:EglUiHarness=true', "-p:EglUiHarnessOutput=$uiHost", '-p:NuGetAudit=false', '-warnaserror')
+            Invoke-Native (Join-Path $uiHost 'EricGameLauncher.exe') @((Join-Path $testRoot 'ui'), $launchFixture)
+        }
         finally { Remove-Item -LiteralPath $probe -ErrorAction SilentlyContinue }
     } },
-    @{ Name = 'Updater integrity and command modes'; Action = { Invoke-Native 'dotnet' @('run', '--project', 'Test/UpdateIntegrity/UpdateIntegrity.csproj', '-p:NuGetAudit=false', '--', 'Components/updater.main/bin/Debug/net10.0/win-x64/updater.main.exe') } },
+    @{ Name = 'Updater integrity and command modes'; Action = { Invoke-Native 'dotnet' @('run', '--project', 'Test/UpdateIntegrity/UpdateIntegrity.csproj', '-p:NuGetAudit=false', '--', 'Components/updater.main/bin/Debug/net10.0/win-x64/updater.main.exe', (Join-Path $testRoot 'build/LaunchFixture/bin/Debug/net10.0/EricGameLauncher.LaunchFixture.exe')) } },
     @{ Name = 'Log pressure'; Action = { Invoke-Native 'dotnet' @('run', '--project', 'Test/LogStress/LogStress.csproj', '-p:NuGetAudit=false') } },
     @{ Name = 'Promotion gates'; Action = { Invoke-Native 'node' @('Test/Scripts/test-promotion.mjs') } },
     @{ Name = 'Failed release draft recovery'; Action = { Invoke-Native 'node' @('Test/Scripts/test-release-withdrawal.mjs') } },

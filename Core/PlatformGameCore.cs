@@ -125,7 +125,7 @@ public static class GamePlatformHelper
     }
 
 
-    public static string? GetRuntimeManagerPath(string? mgrPath, string? exePath)
+    public static string? GetRuntimeManagerPath(string? mgrPath, string? exePath, string? confirmedPlatform = null)
     {
         LogService.Write("Platform", $"GetRuntimeManagerPath Start mgrPath={mgrPath} exePath={exePath}");
         if (!string.IsNullOrEmpty(mgrPath))
@@ -141,9 +141,7 @@ public static class GamePlatformHelper
 
         if (exePath.StartsWith(LauncherConstants.UwpAppsFolderPrefix, StringComparison.OrdinalIgnoreCase))
         {
-            var cachedPlatform = DetectPlatform(exePath);
-            if (cachedPlatform != null) return cachedPlatform.DefaultLauncherPath;
-            return null;
+            return confirmedPlatform == "Xbox" ? LauncherConstants.XboxProtocol : null;
         }
 
         var platform = DetectPlatform(exePath);
@@ -337,44 +335,7 @@ public static class SteamHelper
 
     public static List<ScannedGame> GetAllInstalledGames()
     {
-        var results = new List<ScannedGame>();
-        try
-        {
-            var libraryFolders = GetLibraryFolders();
-            foreach (var libFolder in libraryFolders)
-            {
-                string appsDir = Path.Combine(libFolder, "steamapps");
-                if (!Directory.Exists(appsDir)) continue;
-
-                try
-                {
-                    var manifestFiles = Directory.GetFiles(appsDir, "appmanifest_*.acf");
-                    foreach (var mf in manifestFiles)
-                    {
-                        string fileName = Path.GetFileNameWithoutExtension(mf);
-                        if (fileName.StartsWith("appmanifest_") && int.TryParse(fileName.Substring(12), out int appId))
-                        {
-                            if (appId == 228980 || appId == 1070560 || appId == 1391110 || appId == 1628350)
-                                continue;
-
-                            var info = GetGameInfo(appId);
-                            if (info != null)
-                            {
-                                results.Add(new ScannedGame
-                                {
-                                    Title = info.Name ?? $"Steam Game {appId}",
-                                    ExePath = $"steam://rungameid/{appId}",
-                                    PlatformBadge = "Steam"
-                                });
-                            }
-                        }
-                    }
-                }
-                catch (Exception) { }
-            }
-        }
-        catch (Exception) { }
-        return results;
+        return ScanService.ScanSteam();
     }
 }
 
@@ -467,52 +428,7 @@ public static class EpicGamesHelper
 
     public static List<ScannedGame> GetAllInstalledGames()
     {
-        var results = new List<ScannedGame>();
-        string? manifestDir = DetectEpicManifestDir();
-        if (string.IsNullOrEmpty(manifestDir)) return results;
-
-        try
-        {
-            var manifestFiles = Directory.GetFiles(manifestDir, "*.item");
-            foreach (var file in manifestFiles)
-            {
-                try
-                {
-                    string content = File.ReadAllText(file);
-                    var nameMatch = Regex.Match(content, "\"DisplayName\"\\s*:\\s*\"([^\"]+)\"", RegexOptions.IgnoreCase);
-                    var appNameMatch = Regex.Match(content, "\"AppName\"\\s*:\\s*\"([^\"]+)\"", RegexOptions.IgnoreCase);
-                    var catalogNsMatch = Regex.Match(content, "\"CatalogNamespace\"\\s*:\\s*\"([^\"]+)\"", RegexOptions.IgnoreCase);
-                    var catalogItemMatch = Regex.Match(content, "\"CatalogItemId\"\\s*:\\s*\"([^\"]+)\"", RegexOptions.IgnoreCase);
-
-                    string? exePath = ExtractExePathFromManifest(content);
-                    if (!string.IsNullOrEmpty(exePath) && appNameMatch.Success)
-                    {
-                        string displayName = nameMatch.Success ? nameMatch.Groups[1].Value : appNameMatch.Groups[1].Value;
-                        string appName = appNameMatch.Groups[1].Value;
-                        string catalogNs = catalogNsMatch.Success ? catalogNsMatch.Groups[1].Value : "";
-                        string catalogItemId = catalogItemMatch.Success ? catalogItemMatch.Groups[1].Value : "";
-
-                        string fullEpicId = appName;
-                        if (!string.IsNullOrEmpty(catalogNs) && !string.IsNullOrEmpty(catalogItemId))
-                        {
-                            fullEpicId = $"{catalogNs}:{catalogItemId}:{appName}";
-                        }
-
-                        string epicUrl = $"{LauncherConstants.EpicAppsProtocol}{Uri.EscapeDataString(fullEpicId)}?action=launch&silent=true";
-
-                        results.Add(new ScannedGame
-                        {
-                            Title = displayName,
-                            ExePath = epicUrl,
-                            PlatformBadge = "Epic Games"
-                        });
-                    }
-                }
-                catch (Exception) { }
-            }
-        }
-        catch (Exception) { }
-        return results;
+        return ScanService.ScanEpic();
     }
 }
 

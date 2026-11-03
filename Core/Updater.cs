@@ -370,7 +370,7 @@ public class UpdateService
         }
     }
 
-    public static async Task StartUpdaterAndWaitAsync(Asset asset, Action<string>? onProgress = null)
+    public static async Task StartUpdaterAndWaitAsync(Asset asset, Action<string>? onProgress = null, CancellationToken cancellationToken = default)
     {
         var sw = Stopwatch.StartNew();
         try
@@ -379,7 +379,7 @@ public class UpdateService
                 throw new UpdateVerificationException(Text.T("Update_MissingDigest"));
             string downloadUrl = asset.browser_download_url;
             LogService.Write("Update", $"StartUpdater Start: downloadUrl={downloadUrl}");
-            string tempDir = Path.Combine(ConfigService.SystemCachePath, "updater.main");
+            string tempDir = Path.Combine(ConfigService.SystemCachePath, "updater.main", Guid.NewGuid().ToString("N"));
             if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
 
             string mainUpdaterPath = Path.Combine(tempDir, "updater.main.exe");
@@ -401,13 +401,15 @@ public class UpdateService
                 }
             }
 
-            string pipeName = $"EricGameLauncher_UpdatePipe_{System.Diagnostics.Process.GetCurrentProcess().Id}";
-            using var pipeServer = new NamedPipeServerStream(pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(35));
+            string pipeName = $"EricGameLauncher_UpdatePipe_{Guid.NewGuid():N}";
+            string cancelFile = Path.Combine(tempDir, "cancel");
+            using var pipeServer = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(TimeSpan.FromMinutes(35));
             using var connectionCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token);
             connectionCts.CancelAfter(TimeSpan.FromMinutes(5));
 
-            string installDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
+            string installDir = Path.TrimEndingDirectorySeparator(AppDomain.CurrentDomain.BaseDirectory);
             ProcessStartInfo psi = new ProcessStartInfo
             {
                 FileName = mainUpdaterPath,
@@ -418,12 +420,16 @@ public class UpdateService
             {
                 installDir, downloadUrl, "--sha256", asset.digest!,
                 "--verification-error", Text.T("Update_VerificationStopped"),
+                "--controller-error", Text.T("Update_ControlLost"),
                 "--failure-close-message", Text.T("Update_UpdaterClosePrompt"),
-                "--pipe-name", pipeName, "--main-pid", Environment.ProcessId.ToString(CultureInfo.InvariantCulture)
+                "--pipe-name", pipeName, "--main-pid", Environment.ProcessId.ToString(CultureInfo.InvariantCulture), "--cancel-file", cancelFile
             })
                 psi.ArgumentList.Add(argument);
 
             using var updaterProcess = Process.Start(psi) ?? throw new InvalidOperationException(Text.T("Update_Failed"));
+            bool handedOff = false;
+            try
+            {
             LogService.Write("Update", $"StartUpdater Launched: duration={sw.ElapsedMilliseconds}ms pid={updaterProcess.Id}");
 
             var connectionTask = pipeServer.WaitForConnectionAsync(connectionCts.Token);
@@ -447,11 +453,24 @@ public class UpdateService
                 onProgress?.Invoke(line);
                 if (line == "READY")
                 {
-                    cts.Cancel();
+                    ConfigService.SaveAll();
+                    using var control = new StreamWriter(pipeServer, new System.Text.UTF8Encoding(false), 1024, leaveOpen: true) { AutoFlush = true };
+                    await control.WriteLineAsync("PROCEED".AsMemory(), cts.Token);
+                    handedOff = true;
                     return;
                 }
             }
             throw new InvalidOperationException(Text.T("Update_Failed"));
+            }
+            finally
+            {
+                if (!handedOff)
+                {
+                    try { File.WriteAllText(cancelFile, "CANCEL"); } catch (Exception ex) { LogService.Write("Update", "Cancellation marker failed", ex); }
+                    try { if (!updaterProcess.HasExited) { updaterProcess.Kill(true); await updaterProcess.WaitForExitAsync(); } }
+                    catch (Exception ex) { LogService.Write("Update", "Updater termination delegated to cancellation monitor", ex); }
+                }
+            }
         }
         catch (Exception ex)
         {

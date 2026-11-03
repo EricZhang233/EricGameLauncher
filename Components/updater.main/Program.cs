@@ -43,6 +43,11 @@ namespace updater.main
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             Log($"Start argsCount={args.Length}");
+            if (args.Length >= 4 && args[0] == "--restart-agent")
+            {
+                await RunRestartAgentAsync(args[1], args[2], args[3], args.Skip(4));
+                return;
+            }
             Console.Title = "Eric Game Launcher - MainUpdater";
             Console.WriteLine("========================================");
             Console.WriteLine("    Eric Game Launcher Update System    ");
@@ -91,6 +96,23 @@ namespace updater.main
             string cacheDir = Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher");
             if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
             string tempZip = Path.Combine(cacheDir, $"update_{Guid.NewGuid():N}.zip");
+            string restartSignal = GetArgValue(args, "--restart-signal");
+            if (string.IsNullOrEmpty(restartSignal))
+            {
+                restartSignal = Path.Combine(cacheDir, "restart-" + Guid.NewGuid().ToString("N"));
+                var broker = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true };
+                foreach (string value in new[] { "--restart-agent", restartSignal, Path.GetFullPath(installDir), "EricGameLauncher.exe" }) broker.ArgumentList.Add(value);
+                using var started = Process.Start(broker) ?? throw new InvalidOperationException();
+                args = args.Concat(new[] { "--restart-signal", restartSignal }).ToArray();
+                Log($"Original-token restart agent started pid={started.Id}");
+            }
+            void SignalRestart(string state)
+            {
+                string temporary = restartSignal + "." + Guid.NewGuid().ToString("N");
+                try { File.WriteAllText(temporary, state); File.Move(temporary, restartSignal, true); }
+                finally { try { File.Delete(temporary); } catch { } }
+            }
+            void FailRestart() { try { SignalRestart("FAIL"); } catch { } }
 
             if (!HasWriteAccess(installDir))
             {
@@ -103,10 +125,10 @@ namespace updater.main
                         ProcessStartInfo psi = new ProcessStartInfo
                         {
                             FileName = Process.GetCurrentProcess().MainModule?.FileName,
-                            Arguments = string.Join(" ", args.Select(a => $"\"{a.Replace("\"", "\\\"")}\"")),
                             UseShellExecute = true,
                             Verb = "runas"
                         };
+                        foreach (string value in args) psi.ArgumentList.Add(value);
                         Process.Start(psi);
                         Log("ElevationRelaunch");
                         Environment.ExitCode = 2;
@@ -116,6 +138,7 @@ namespace updater.main
                     {
                         Console.WriteLine($"ERROR: Elevation failed: {ex}");
                         Log($"ElevationFailed {ex}");
+                        FailRestart();
                         Environment.ExitCode = 1;
                         await Task.Delay(5000);
                         return;
@@ -125,6 +148,7 @@ namespace updater.main
                 {
                     Console.WriteLine("ERROR: Target directory is read-only despite administrator privileges.");
                     Log("ElevationNoWriteAccess");
+                    FailRestart();
                     Environment.ExitCode = 1;
                     await Task.Delay(5000);
                     return;
@@ -140,9 +164,9 @@ namespace updater.main
             {
                 try
                 {
-                    pipeClient = new NamedPipeClientStream(".", pipeName, PipeDirection.Out);
+                    pipeClient = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
                     pipeClient.Connect(5000);
-                    pipeWriter = new StreamWriter(pipeClient) { AutoFlush = true };
+                    pipeWriter = new StreamWriter(pipeClient, new UTF8Encoding(false), 1024, leaveOpen: true) { AutoFlush = true };
                     Log("PipeConnected");
                 }
                 catch (Exception ex) { Log($"PipeConnectFailed {ex}"); pipeClient?.Dispose(); pipeClient = null; pipeWriter = null; }
@@ -155,72 +179,59 @@ namespace updater.main
 
             try
             {
+                using var operation = new CancellationTokenSource(TimeSpan.FromMinutes(30));
+                using var monitor = new CancellationTokenSource();
+                var approved = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                if (!string.IsNullOrEmpty(pipeName) && pipeClient == null) throw new IOException(GetArgValue(args, "--controller-error"));
+                async Task ReadControlAsync()
+                {
+                    if (pipeClient == null) { approved.TrySetResult(true); return; }
+                    try
+                    {
+                        using var control = new StreamReader(pipeClient, Encoding.UTF8, true, 1024, leaveOpen: true);
+                        if (await control.ReadLineAsync(operation.Token) == "PROCEED") approved.TrySetResult(true);
+                        else operation.Cancel();
+                    }
+                    catch { operation.Cancel(); }
+                }
+                async Task WatchCancellationAsync()
+                {
+                    string cancel = GetArgValue(args, "--cancel-file");
+                    try
+                    {
+                        while (!monitor.IsCancellationRequested)
+                        {
+                            if (cancel.Length > 0 && File.Exists(cancel)) { operation.Cancel(); return; }
+                            await Task.Delay(200, monitor.Token);
+                        }
+                    }
+                    catch (OperationCanceledException) { }
+                }
+                var controlTask = ReadControlAsync();
+                var cancellationTask = WatchCancellationAsync();
+                using var stopMonitor = operation.Token.Register(() => monitor.Cancel());
+                try
+                {
                 var downloadTaskSw = System.Diagnostics.Stopwatch.StartNew();
                 Console.WriteLine($"[1/4] Downloading update package...");
                 Log($"Download Start url={downloadUrl}");
                 SendProgress("DOWNLOAD 0");
-                using (var client = new HttpClient { Timeout = TimeSpan.FromMinutes(30) })
+                using (var client = new HttpClient { Timeout = Timeout.InfiniteTimeSpan })
                 {
                     client.DefaultRequestHeaders.Add("User-Agent", "EricGameLauncher-Updater");
-
-                    using (var response = await client.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead))
-                    {
-                        response.EnsureSuccessStatusCode();
-
-                        var totalBytes = response.Content.Headers.ContentLength ?? -1L;
-                        var canReportProgress = totalBytes != -1;
-
-                        using (var stream = await response.Content.ReadAsStreamAsync())
-                        using (var fileStream = new FileStream(tempZip, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true))
-                        {
-                            var buffer = new byte[8192];
-                            var totalRead = 0L;
-                            var lastReportTime = DateTime.Now;
-                            var startTime = DateTime.Now;
-                            int read;
-
-                            while ((read = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
-                            {
-                                await fileStream.WriteAsync(buffer, 0, read);
-                                totalRead += read;
-
-                                var now = DateTime.Now;
-                                var elapsedSinceReport = (now - lastReportTime).TotalMilliseconds;
-
-                                if (elapsedSinceReport > 200 || totalRead == totalBytes)
-                                {
-                                    lastReportTime = now;
-                                    double speed = (totalRead / 1024.0 / 1024.0) / (now - startTime).TotalSeconds;
-
-                                    if (canReportProgress)
-                                    {
-                                        double percent = (double)totalRead / totalBytes * 100;
-                                        SendProgress($"DOWNLOAD {percent:F1}");
-                                    }
-                                    string progressText;
-                                    if (canReportProgress)
-                                    {
-                                        double percent = (double)totalRead / totalBytes * 100;
-                                        progressText = $"\r      Progress: {percent:F1}% ({totalRead / 1024.0 / 1024.0:F2} / {totalBytes / 1024.0 / 1024.0:F2} MB) | Speed: {speed:F2} MB/s    ";
-                                    }
-                                    else
-                                    {
-                                        progressText = $"\r      Downloaded: {totalRead / 1024.0 / 1024.0:F2} MB | Speed: {speed:F2} MB/s    ";
-                                    }
-                                    Console.Write(progressText);
-                                }
-                            }
-                        }
-                    }
+                    using var fileStream = new FileStream(tempZip, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true);
+                    await UpdateDownload.DownloadAsync(client, downloadUrl, fileStream, percent => SendProgress($"DOWNLOAD {percent:F1}"),
+                        TimeSpan.FromMinutes(30), TimeSpan.FromSeconds(60), operation.Token);
                 }
                 Console.WriteLine("\n      Download completed.");
                 Log($"Download Complete duration={downloadTaskSw.ElapsedMilliseconds}ms size={new FileInfo(tempZip).Length}");
 
                 using var verifiedPackage = new FileStream(tempZip, FileMode.Open, FileAccess.Read, FileShare.Read);
-                if (!await UpdatePackageIntegrity.VerifyAsync(verifiedPackage, expectedDigest))
+                if (!await UpdatePackageIntegrity.VerifyAsync(verifiedPackage, expectedDigest, operation.Token))
                 {
                     Console.Error.WriteLine(GetArgValue(args, "--verification-error"));
                     Log("HASH_MISMATCH: update stopped before READY and installation");
+                    FailRestart();
                     SendProgress("ERROR HASH_MISMATCH");
                     Environment.ExitCode = 1;
                     try { pipeWriter?.Dispose(); pipeClient?.Dispose(); } catch { }
@@ -231,6 +242,11 @@ namespace updater.main
                 Log("SHA256 verification passed");
 
                 SendProgress("READY");
+                await approved.Task.WaitAsync(operation.Token);
+                operation.Token.ThrowIfCancellationRequested();
+                monitor.Cancel();
+                await cancellationTask;
+                await controlTask;
                 try { pipeWriter?.Dispose(); pipeClient?.Dispose(); } catch { }
 
                 if (mainPid > 0)
@@ -239,10 +255,10 @@ namespace updater.main
                     {
                         var proc = Process.GetProcessById(mainPid);
                         Log($"WaitingForMainProcess pid={mainPid}");
-                        proc.WaitForExit();
+                        await proc.WaitForExitAsync(operation.Token);
                         Log($"MainProcessExited pid={mainPid}");
                     }
-                    catch (Exception ex) { Log($"WaitMainProcessFailed {ex}"); }
+                    catch (ArgumentException) { }
                 }
 
                 Console.WriteLine($"[2/4] Closing Eric Game Launcher...");
@@ -255,7 +271,7 @@ namespace updater.main
                     try
                     {
                         string? path = p.MainModule?.FileName;
-                        if (path == null || !string.Equals(Path.GetDirectoryName(Path.GetFullPath(path)), Path.GetFullPath(installDir).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) continue;
+                        if (path == null || !string.Equals(Path.GetDirectoryName(Path.GetFullPath(path)), Path.TrimEndingDirectorySeparator(Path.GetFullPath(installDir)), StringComparison.OrdinalIgnoreCase)) continue;
                         p.CloseMainWindow();
                         if (!p.WaitForExit(10000)) { p.Kill(); p.WaitForExit(); }
                     }
@@ -275,12 +291,7 @@ namespace updater.main
                 string exePath = Path.Combine(installDir, "EricGameLauncher.exe");
                 if (File.Exists(exePath))
                 {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = exePath,
-                        WorkingDirectory = installDir,
-                        UseShellExecute = true
-                    });
+                    SignalRestart("SUCCESS");
                 }
                 Log("Restart End");
 
@@ -288,6 +299,14 @@ namespace updater.main
                 Console.WriteLine("Update successful! Closing updater...");
                 Log("Success");
                 await Task.Delay(2000);
+                }
+                finally
+                {
+                    monitor.Cancel();
+                    operation.Cancel();
+                    await cancellationTask;
+                    await controlTask;
+                }
             }
             catch (Exception ex)
             {
@@ -295,6 +314,7 @@ namespace updater.main
                 Console.WriteLine("ERROR: " + ex);
                 Console.WriteLine("Please try manual update or check network connection.");
                 Log($"Failure {ex}");
+                FailRestart();
                 SendProgress("ERROR UPDATE_FAILED");
                 Environment.ExitCode = 1;
                 try { pipeWriter?.Dispose(); pipeClient?.Dispose(); } catch { }
@@ -306,6 +326,29 @@ namespace updater.main
                 if (File.Exists(tempZip)) try { File.Delete(tempZip); } catch (Exception ex) { Log($"DeleteTempZipFailed {ex}"); }
                 Log($"End duration={sw.ElapsedMilliseconds}ms");
             }
+        }
+
+        private static async Task RunRestartAgentAsync(string signal, string directory, string executable, IEnumerable<string> arguments)
+        {
+            try
+            {
+                using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(35));
+                string status = "";
+                while (status is not ("SUCCESS" or "FAIL"))
+                {
+                    if (File.Exists(signal)) status = File.ReadAllText(signal);
+                    if (status is not ("SUCCESS" or "FAIL")) await Task.Delay(200, deadline.Token);
+                }
+                if (status != "SUCCESS") return;
+                string target = Path.Combine(directory, executable);
+                if (Path.GetFileName(executable) != executable || !File.Exists(target)) return;
+                var start = new ProcessStartInfo(target) { WorkingDirectory = directory, UseShellExecute = false };
+                foreach (string argument in arguments) start.ArgumentList.Add(argument);
+                using var restarted = Process.Start(start);
+                Log($"Restarted from original-token agent pid={restarted?.Id}");
+            }
+            catch (Exception ex) { Log($"RestartAgentFailed {ex}"); Environment.ExitCode = 1; }
+            finally { try { File.Delete(signal); } catch { } }
         }
 
         private static void WaitForFailureDismissal(string[] args)

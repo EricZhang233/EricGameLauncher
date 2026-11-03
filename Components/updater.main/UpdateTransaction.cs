@@ -5,6 +5,7 @@ namespace updater.main;
 
 public static class UpdateTransaction
 {
+    public const string ManifestName = "._update_manifest.json";
     public sealed class Journal
     {
         public List<string> BackedUp { get; set; } = [];
@@ -14,7 +15,8 @@ public static class UpdateTransaction
 
     public static void Apply(string installDirectory, ZipArchive archive, Action<string>? checkpoint = null)
     {
-        string root = Path.GetFullPath(installDirectory).TrimEnd(Path.DirectorySeparatorChar);
+        string root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(installDirectory));
+        using var lease = AcquireLease(root);
         string staging = Path.Combine(root, "._update_staging");
         string backup = Path.Combine(root, "._update_backup");
         if (Directory.Exists(backup))
@@ -31,7 +33,7 @@ public static class UpdateTransaction
             foreach (var entry in archive.Entries)
             {
                 if (string.IsNullOrEmpty(entry.Name)) continue;
-                string relative = entry.FullName.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+                string relative = Path.GetRelativePath(staging, Contained(staging, entry.FullName.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar)));
                 string top = relative.Split(Path.DirectorySeparatorChar)[0];
                 if (top.Equals("Data", StringComparison.OrdinalIgnoreCase) || top.Equals("storage.mode", StringComparison.OrdinalIgnoreCase)) continue;
                 if (top.StartsWith("._update_", StringComparison.OrdinalIgnoreCase) || top.StartsWith(".migration-", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("UPDATE_RESERVED_PATH");
@@ -40,13 +42,28 @@ public static class UpdateTransaction
                 entry.ExtractToFile(destination, true);
             }
             if (!File.Exists(Path.Combine(staging, "EricGameLauncher.exe"))) throw new InvalidDataException("The package has no launcher executable.");
+            var incoming = Directory.GetFiles(staging, "*", SearchOption.AllDirectories)
+                .Select(file => Path.GetRelativePath(staging, file)).ToArray();
+            string manifest = Path.Combine(root, ManifestName);
+            var previous = File.Exists(manifest)
+                ? JsonSerializer.Deserialize<string[]>(File.ReadAllText(manifest)) ?? throw new InvalidDataException("UPDATE_INVALID_MANIFEST")
+                : [];
+            foreach (string relative in previous)
+            {
+                Contained(root, relative);
+                string normalized = Path.GetRelativePath(root, Contained(root, relative));
+                string top = normalized.Split(Path.DirectorySeparatorChar)[0];
+                if (top.Equals("Data", StringComparison.OrdinalIgnoreCase) || top.Equals("storage.mode", StringComparison.OrdinalIgnoreCase)
+                    || top.StartsWith("._update_", StringComparison.OrdinalIgnoreCase) || top.StartsWith(".migration-", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("UPDATE_INVALID_MANIFEST");
+            }
+            File.WriteAllText(Path.Combine(staging, ManifestName), JsonSerializer.Serialize(incoming));
             Directory.CreateDirectory(backup);
             Save(backup, journal);
-            foreach (string file in Directory.GetFiles(root, "*", SearchOption.AllDirectories))
+            foreach (string relative in previous.Concat(incoming).Append(ManifestName).Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                string relative = Path.GetRelativePath(root, file);
-                string top = relative.Split(Path.DirectorySeparatorChar)[0];
-                if (top.Equals("Data", StringComparison.OrdinalIgnoreCase) || top.StartsWith("._update_", StringComparison.OrdinalIgnoreCase) || top.StartsWith(".migration-", StringComparison.OrdinalIgnoreCase) || top.Equals("storage.mode", StringComparison.OrdinalIgnoreCase)) continue;
+                string file = Contained(root, relative);
+                if (!File.Exists(file)) continue;
                 journal.BackedUp.Add(relative); Save(backup, journal);
                 string target = Contained(Path.Combine(backup, "files"), relative);
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
@@ -104,10 +121,23 @@ public static class UpdateTransaction
         }
     }
 
-    private static string Contained(string root, string relative)
+    private static FileStream AcquireLease(string root)
+    {
+        try
+        {
+            return new FileStream(Path.Combine(root, "._update_lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        }
+        catch (IOException ex) when ((ex.HResult & 0xFFFF) is 32 or 33)
+        {
+            throw new IOException("UPDATE_IN_PROGRESS", ex);
+        }
+    }
+
+    internal static string Contained(string root, string relative)
     {
         string path = Path.GetFullPath(Path.Combine(root, relative));
-        if (!path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException(relative);
+        string prefix = Path.EndsInDirectorySeparator(root) ? root : root + Path.DirectorySeparatorChar;
+        if (path.Length <= root.Length || !path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException(relative);
         return path;
     }
 
