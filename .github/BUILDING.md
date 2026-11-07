@@ -26,9 +26,11 @@ pwsh.exe -File .github/scripts/build-release.ps1 -Tag v1.2.4 -PackageDirectory C
 
 依赖使用 Windows App SDK 的 WinUI 与 Runtime 组件包，Foundation、InteractiveExperiences 和 WebView2 通过 WinUI 的依赖链保留，不引用整套 SDK、WinUIEx、AI、ML、Widgets 或 DWrite 包。拼音搜索使用 TinyPinyin，配置和更新器使用 YamlDotNet，图标处理直接引用 System.Drawing.Common，令牌与平台数据解密直接引用 System.Security.Cryptography.ProtectedData。任务栏跳转列表使用 Windows 原生 COM 接口，不引用 WPF；排序、分隔符、应用标识和图标引用维护均保留。不对反射与 COM 使用路径启用未经验证的 IL 裁剪，也不改变程序集身份。
 
+主程序与 CLI 在 ResolvePackageAssets 之后、依赖清单生成与文件复制之前，统一排除当前没有引用的 17 个 Windows App SDK 托管投影及 UniversalBGTask 原生宿主。排除清单集中在 Directory.Build.targets，编译引用和运行时资产同步处理，不使用构建后删 DLL，也不改写第三方程序集。当前发行目录保留 19 个 DLL；Windows SDK、WinUI、InteractiveExperiences、MRT Core 投影、Bootstrap 引导库及 WebView2 的托管/原生组件仍必需。快速启动使用本程序的 Run 启动项和 -service 常驻进程、互斥量及命名管道，不使用 Windows App SDK 的 BackgroundTask 宿主。新增相关 SDK 功能时需重新审查排除清单。
+
 默认 `ico.ico` 只作为源码中的编译输入，写入 EXE 原生图标及程序集资源，不复制到输出目录。窗口图标从内嵌资源生成独立 HICON；启动界面、标题栏及内置图标图片在内存中转换和加载，不查询安装目录中的同名 ICO，也不生成默认 ICO/PNG 缓存。用户显式配置的自定义图标仍按其设置加载。
 
-`Directory.Build.props` 统一派生版本属性，`Directory.Build.targets` 供主程序与 CLI 共用 Release 启动配置内嵌目标，其余构建、资源输出和公共清理目标集中在 `EricGameLauncher.csproj`，不另设 Build 目录。`.github/scripts/ReleaseTools.psm1` 提供统一的目录/ZIP 发布检查，供本地构建、正式发布及测试共用；检查必要的程序集，拒绝外部 JSON/PRI、私有配置、缓存、日志及散装 XBF/XAML。公共清理目标供 clean、Release 收尾和测试失败收尾共用。
+`Directory.Build.props` 统一派生版本属性，`Directory.Build.targets` 供主程序与 CLI 共用 SDK 资产筛选及 Release 启动配置内嵌目标，其余构建、资源输出和公共清理目标集中在 `EricGameLauncher.csproj`，不另设 Build 目录。`.github/scripts/ReleaseTools.psm1` 提供统一的目录/ZIP 发布检查，供本地构建、正式发布及测试共用；检查必要的程序集，拒绝外部 JSON/PRI、私有配置、缓存、日志及散装 XBF/XAML。公共清理目标供 clean、Release 收尾和测试失败收尾共用。
 
 已移除 Validate 工作流及其手动、可复用入口。自动晋升只接受目标提交最新的 Release 全流程已完成且成功；失败、排队、运行中或失败重跑均不回退到更早成功记录，本地测试成功也不能代替发行构建和上传成功。
 

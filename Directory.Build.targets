@@ -1,4 +1,37 @@
 <Project>
+  <ItemGroup>
+    <_UnusedWindowsAppSdkFile Include="Microsoft.Security.Authentication.OAuth.Projection.dll" />
+    <_UnusedWindowsAppSdkFile Include="Microsoft.Windows.ApplicationModel.Background.Projection.dll" />
+    <_UnusedWindowsAppSdkFile Include="Microsoft.Windows.ApplicationModel.Background.UniversalBGTask.dll" />
+    <_UnusedWindowsAppSdkFile Include="Microsoft.Windows.ApplicationModel.DynamicDependency.Projection.dll" />
+    <_UnusedWindowsAppSdkFile Include="Microsoft.Windows.ApplicationModel.WindowsAppRuntime.Projection.dll" />
+    <_UnusedWindowsAppSdkFile Include="Microsoft.Windows.AppLifecycle.Projection.dll" />
+    <_UnusedWindowsAppSdkFile Include="Microsoft.Windows.AppNotifications.Builder.Projection.dll" />
+    <_UnusedWindowsAppSdkFile Include="Microsoft.Windows.AppNotifications.Projection.dll" />
+    <_UnusedWindowsAppSdkFile Include="Microsoft.Windows.BadgeNotifications.Projection.dll" />
+    <_UnusedWindowsAppSdkFile Include="Microsoft.Windows.Foundation.Projection.dll" />
+    <_UnusedWindowsAppSdkFile Include="Microsoft.Windows.Management.Deployment.Projection.dll" />
+    <_UnusedWindowsAppSdkFile Include="Microsoft.Windows.Media.Capture.Projection.dll" />
+    <_UnusedWindowsAppSdkFile Include="Microsoft.Windows.PushNotifications.Projection.dll" />
+    <_UnusedWindowsAppSdkFile Include="Microsoft.Windows.Security.AccessControl.Projection.dll" />
+    <_UnusedWindowsAppSdkFile Include="Microsoft.Windows.Storage.Pickers.Projection.dll" />
+    <_UnusedWindowsAppSdkFile Include="Microsoft.Windows.Storage.Projection.dll" />
+    <_UnusedWindowsAppSdkFile Include="Microsoft.Windows.System.Power.Projection.dll" />
+    <_UnusedWindowsAppSdkFile Include="Microsoft.Windows.System.Projection.dll" />
+  </ItemGroup>
+  <Target Name="ExcludeUnusedWindowsAppSdkAssets" AfterTargets="ResolvePackageAssets" Condition="'$(AssemblyName)' == 'EricGameLauncher' Or '$(AssemblyName)' == 'EricGameLauncher.Cli'">
+    <PropertyGroup>
+      <_UnusedWindowsAppSdkNames>;@(_UnusedWindowsAppSdkFile);</_UnusedWindowsAppSdkNames>
+    </PropertyGroup>
+    <ItemGroup>
+      <_UnusedSdkRuntimeAsset Include="@(RuntimeCopyLocalItems);@(NativeCopyLocalItems);@(RuntimeTargetsCopyLocalItems)" Condition="$([System.String]::Copy('$(_UnusedWindowsAppSdkNames)').Contains(';%(Filename)%(Extension);'))" />
+      <RuntimeCopyLocalItems Remove="@(_UnusedSdkRuntimeAsset)" />
+      <NativeCopyLocalItems Remove="@(_UnusedSdkRuntimeAsset)" />
+      <RuntimeTargetsCopyLocalItems Remove="@(_UnusedSdkRuntimeAsset)" />
+      <ResolvedCompileFileDefinitions Remove="@(ResolvedCompileFileDefinitions)" Condition="$([System.String]::Copy('$(_UnusedWindowsAppSdkNames)').Contains(';%(ResolvedCompileFileDefinitions.Filename)%(ResolvedCompileFileDefinitions.Extension);'))" />
+    </ItemGroup>
+    <Message Importance="High" Text="Excluded @(_UnusedSdkRuntimeAsset->Count()) unused Windows App SDK runtime assets before dependency generation and copying." />
+  </Target>
   <Target Name="PrepareEmbeddedHostConfiguration" BeforeTargets="GenerateBuildDependencyFile;GenerateBuildRuntimeConfigurationFiles" Condition="'$(Configuration)' == 'Release' And ('$(AssemblyName)' == 'EricGameLauncher' Or '$(AssemblyName)' == 'EricGameLauncher.Cli')">
     <PropertyGroup>
       <ProjectDepsFilePath>$(IntermediateOutputPath)$(AssemblyName).deps.json</ProjectDepsFilePath>

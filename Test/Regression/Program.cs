@@ -64,6 +64,7 @@ async Task<(int Code, string Output, string Error)> Cli(params string[] argument
 
 try
 {
+    await DependencyFeatures.RunAsync(Check, root, cli);
     StoragePolicyFeatures.Run(Check, root);
     JumpListFeatures.Run(Check);
     await AsyncLaunchFeatures.RunAsync(Check, root, Path.GetFullPath(args[1]));

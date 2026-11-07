@@ -78,6 +78,7 @@
 | B10 | 发布目录缺少辅助 EXE 或 deps | 增量发布重新补齐必需文件 | 自动 test-payload-repair |
 | B11 | 本地运行时准备、三段 NuGet 版本/路径格式/恢复失败、包 CLI 超时诊断 | 正确解析依赖版本并构造官方链接，拒绝无效版本；CLI 超时记录窗口标题和输出，保留安装日志 | 元数据自动 test-runtime-metadata；本地安装和包启停为显式手动检查 |
 | B12 | 发版等待正文→构建→附件→正式日志，空日志/权限错误/删除/重发/草稿 | 正式日志最后写入，保留原换行，拒绝修改已变化的发行记录，异常触发转草稿 | 自动 test-release-body；检查无云端测试入口，真实云端需验收 |
+| B13 | DLL 引用闭包、未用 SDK 资产、快速启动真实进程 | 每个托管 DLL 都有入口引用链；Bootstrap/WebView2 原生库保留，未用 SDK 资产不在两个入口的清单及目录中；真实 -service 进程通过属于自身 PID 的管道唤醒窗口并正常退出，未加载 UniversalBGTask，调试夹具不修改开机启动项 | 自动 DependencyFeatures、test-build-output |
 
 ## 实机测试点与操作
 

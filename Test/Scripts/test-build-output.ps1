@@ -26,6 +26,20 @@ $unusedPackages = @($dependencies.libraries.Keys | Where-Object { $_ -match '^(W
 Check ($unusedPackages.Count -eq 0) 'runtime dependency graph excludes the unused SDK modules and window extension library'
 $unusedFiles = @(Get-ChildItem -LiteralPath $MainDirectory -Recurse -File | Where-Object { $_.Name -match '^(WinUIEx|Microsoft\.ML\.OnnxRuntime|System\.Numerics\.Tensors|Microsoft\.Windows\.Widgets\.Projection)\.dll$|^Microsoft\.Windows\.AI\..*\.dll$' })
 Check ($unusedFiles.Count -eq 0) 'build output contains no unused AI, machine learning, Widgets or WinUIEx assemblies'
+[xml]$buildTargets = Get-Content -LiteralPath (Join-Path $repo 'Directory.Build.targets') -Raw
+$unusedSdkFiles = @($buildTargets.Project.ItemGroup._UnusedWindowsAppSdkFile | ForEach-Object Include)
+foreach ($entry in @('EricGameLauncher', 'EricGameLauncher.Cli')) {
+    $graph = Get-Content -LiteralPath (Join-Path $MainDirectory "$entry.deps.json") -Raw | ConvertFrom-Json -AsHashtable
+    $assets = foreach ($target in $graph.targets.Values) {
+        foreach ($library in $target.Values) {
+            foreach ($kind in @('runtime', 'native', 'runtimeTargets')) {
+                if ($library[$kind]) { $library[$kind].Keys | ForEach-Object { [IO.Path]::GetFileName($_) } }
+            }
+        }
+    }
+    Check (@($assets | Where-Object { $_ -in $unusedSdkFiles }).Count -eq 0) "$entry runtime graph excludes unused SDK assets"
+}
+Check (@($unusedSdkFiles | Where-Object { Test-Path -LiteralPath (Join-Path $MainDirectory $_) }).Count -eq 0) 'unused SDK assets are excluded before output copying'
 $looseXaml = @(Get-ChildItem -LiteralPath $MainDirectory -Recurse -File | Where-Object { $_.Extension -in '.xbf', '.xaml' })
 Check ($looseXaml.Count -eq 0) 'build output does not copy assembly-embedded XBF or source XAML'
 Check (@(Get-ChildItem -LiteralPath $MainDirectory -Recurse -File -Filter '*.pri').Count -eq 0) 'build output contains no PRI files'
