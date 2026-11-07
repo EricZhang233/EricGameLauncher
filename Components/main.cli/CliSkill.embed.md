@@ -69,6 +69,8 @@ Icon maintenance records ownership of newly generated and imported cache files. 
 
 Storage transfer retains source data. Completed transactions and successful rollbacks remove their temporary backups. Incomplete transfers retain a journal for recovery on the next transfer. Historic backup folders without a journal are preserved for manual recovery.
 
+Installations under Program Files or Windows, and installations whose directory or existing Data directory is not writable, are locked to system storage. A stored portable preference is ignored, the GUI switch is hidden, and both `storage --switch portable` and `settings --set storageMode=portable` fail. This restriction also applies when running an installation under Program Files or Windows with administrator privileges.
+
 `iconSize` accepts finite numbers from 32 through 512, using a decimal point. Invalid stored sizes fall back to 118 and are recorded in the log. Complete any required configuration migration before changing settings. A rejected save returns failure. Token saves restore the previous active value on failure and can be retried with the same input.
 
 Updates and repairs take an exclusive installation-directory lock before recovering or applying files. A competing updater fails with `UPDATE_IN_PROGRESS`. The operating system releases the lock when its owner exits, allowing a later retry to recover an interrupted transaction.

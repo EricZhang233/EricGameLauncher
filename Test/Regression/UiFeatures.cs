@@ -51,6 +51,23 @@ internal static class UiFeatures
                 window.StartInitialization();
                 Check(await window.WaitStartupCompleteAsync(TimeSpan.FromSeconds(20)), "real XAML view completes startup");
                 var view = Find<MainView>((DependencyObject)window.Content)!;
+                var storageSettings = new SettingsFlyoutControl();
+                storageSettings.ApplyLocalization();
+                storageSettings.Sync();
+                var storageButton = (Button)storageSettings.FindName("BtnSwitchStorageMode");
+                Check(storageButton.Visibility == Visibility.Visible, "writable installation displays the storage switch");
+                var storageLock = typeof(ConfigService).GetField("_storageModeLocked", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+                try
+                {
+                    storageLock.SetValue(null, true);
+                    storageSettings.Sync();
+                    Check(storageButton.Visibility == Visibility.Collapsed, "locked installation hides the storage switch");
+                }
+                finally
+                {
+                    storageLock.SetValue(null, false);
+                    storageSettings.Sync();
+                }
                 var panel = (PropertyPanelControl)view.FindName("PropertyControl");
                 var closing = new MainWindow();
                 closing.PrepareOffscreenWarmup();

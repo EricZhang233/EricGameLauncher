@@ -271,6 +271,9 @@ public static class ConfigService
 
     private static bool _debugModeApplied = false;
     private static bool _initialized = false;
+    private static bool _storageModeLocked;
+
+    public static bool IsStorageModeLocked => _storageModeLocked;
 
     public static string SettingsFilePath => Path.Combine(CurrentDataPath, SettingsFileName);
     public static string ItemsFilePath => Path.Combine(CurrentDataPath, ItemsFileName);
@@ -321,8 +324,10 @@ public static class ConfigService
         string systemSettingsPath = Path.Combine(SystemBasePath, SettingsFileName);
         string systemItemsPath = Path.Combine(SystemBasePath, ItemsFileName);
 
-        string mode = File.Exists(StorageMigration.ModeFile) ? File.ReadAllText(StorageMigration.ModeFile).Trim() : "";
-        if (mode == "system") CurrentDataPath = SystemBasePath;
+        _storageModeLocked = StoragePolicy.RequiresSystemMode(AppPaths.InstallDirectory);
+        if (_storageModeLocked) LogService.Write("Config", $"Storage mode locked to System installDir={AppPaths.InstallDirectory}");
+        string mode = !_storageModeLocked && File.Exists(StorageMigration.ModeFile) ? File.ReadAllText(StorageMigration.ModeFile).Trim() : "";
+        if (_storageModeLocked || mode == "system") CurrentDataPath = SystemBasePath;
         else if (mode == "portable") CurrentDataPath = PortableBasePath;
         else if (File.Exists(portableSettingsPath) || File.Exists(portableItemsPath))
             CurrentDataPath = PortableBasePath;
@@ -377,6 +382,11 @@ public static class ConfigService
     {
         lock (ConfigPersistence.Gate)
         {
+            if (_storageModeLocked && !useSystemPath)
+            {
+                LogService.Write("Config", "Portable storage switch rejected for protected installation");
+                throw new InvalidOperationException(Text.Cli("ErrStorageLocked"));
+            }
             string newPath = useSystemPath ? SystemBasePath : PortableBasePath;
             if (CurrentDataPath == newPath) return;
             SaveAll();
@@ -754,7 +764,13 @@ public static class ConfigService
 
     private static void FollowStorageMode()
     {
-        if (_debugModeApplied || !File.Exists(StorageMigration.ModeFile)) return;
+        if (_debugModeApplied) return;
+        if (_storageModeLocked)
+        {
+            CurrentDataPath = SystemBasePath;
+            return;
+        }
+        if (!File.Exists(StorageMigration.ModeFile)) return;
         string mode = File.ReadAllText(StorageMigration.ModeFile).Trim();
         if (mode == "system") CurrentDataPath = SystemBasePath;
         else if (mode == "portable") CurrentDataPath = PortableBasePath;

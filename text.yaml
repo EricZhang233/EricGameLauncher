@@ -369,6 +369,7 @@ CLI:
   ErrNoInstallCmd: ".install.cmd not found in output directory."
   ErrCantDetermineExe: "Cannot determine executable path."
   ErrStorageMode: "Mode must be 'system' or 'portable'."
+  ErrStorageLocked: "Storage mode is locked to system because the installation directory is protected or not writable."
   ErrInvalidSetting: "Unknown setting: {0}"
   ErrInvalidFormat: "Invalid format. Use --set <key>=<value>"
   ErrLaunchMode: "launchMode must be 'single' or 'double'."
@@ -744,6 +745,7 @@ CLI:
       --status            Show current storage mode
       --switch <mode>     Switch to system or portable mode
       --json              Output in JSON format
+      Protected or unwritable installation directories are locked to system mode.
   Help_Exit_Text: |
     Usage: EricGameLauncher.Cli.exe exit
 

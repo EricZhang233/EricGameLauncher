@@ -220,9 +220,9 @@ public sealed partial class SettingsFlyoutControl : UserControl
 
     private async void BtnSwitchStorageMode_Click(object sender, RoutedEventArgs e)
     {
-        if (DebugPaths.IsDebug())
+        if (DebugPaths.IsDebug() || ConfigService.IsStorageModeLocked)
         {
-            try { LogService.Write("Config", "BtnSwitchStorageMode_Click ignored in Debug mode"); } catch { }
+            try { LogService.Write("Config", "BtnSwitchStorageMode_Click ignored: storage switching disabled"); } catch { }
             return;
         }
         using (LogService.StartOperation("Config", "BtnSwitchStorageMode_Click"))
@@ -272,7 +272,7 @@ public sealed partial class SettingsFlyoutControl : UserControl
         }
         else
         {
-            BtnSwitchStorageMode.Visibility = Visibility.Visible;
+            BtnSwitchStorageMode.Visibility = ConfigService.IsStorageModeLocked ? Visibility.Collapsed : Visibility.Visible;
         }
 
         StorageModeText.Text = displayText;
