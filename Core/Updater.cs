@@ -74,6 +74,14 @@ public class UpdateService
         public long size { get; set; }
     }
 
+    public static Asset? SelectUpdateAsset(ReleaseInfo release)
+    {
+        string version = release.tag_name.TrimStart('v');
+        return release.assets?.FirstOrDefault(a => a.name.Equals($"EricGameLauncher_Setup_{version}.exe", StringComparison.OrdinalIgnoreCase))
+            ?? (Installation.InstallRegistration.Find(AppPaths.InstallDirectory) == null
+                ? release.assets?.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) : null);
+    }
+
     private static async Task<List<ReleaseInfo>?> FetchReleasesWithFallbackAsync()
     {
         await FetchGate.WaitAsync();
@@ -418,7 +426,7 @@ public class UpdateService
             };
             foreach (string argument in new[]
             {
-                installDir, downloadUrl, "--sha256", asset.digest!,
+                installDir, downloadUrl, "--sha256", asset.digest!, "--owner-sid", Installation.InstallRegistration.CurrentUserSid,
                 "--verification-error", Text.T("Update_VerificationStopped"),
                 "--controller-error", Text.T("Update_ControlLost"),
                 "--failure-close-message", Text.T("Update_UpdaterClosePrompt"),

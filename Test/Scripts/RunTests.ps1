@@ -125,6 +125,7 @@ $definitions = @(
     @{ Name = 'Release input gates'; Action = { Invoke-Native 'pwsh' @('-NoProfile', '-NonInteractive', '-File', 'Test/Scripts/test-release-inputs.ps1') } },
     @{ Name = 'Shared package policy'; Action = { Invoke-Native 'pwsh' @('-NoProfile', '-NonInteractive', '-File', 'Test/Scripts/test-package-policy.ps1') } },
     @{ Name = 'Runtime preparation metadata'; Action = { Invoke-Native 'pwsh' @('-NoProfile', '-NonInteractive', '-File', 'Test/Scripts/test-runtime-metadata.ps1') } },
+    @{ Name = 'Native installer and uninstaller'; Action = { Invoke-Native 'pwsh' @('-NoProfile', '-NonInteractive', '-File', 'Test/Scripts/test-installer.ps1') } },
     @{ Name = 'Release build'; Action = { Invoke-Native 'dotnet' @('build', 'EricGameLauncher.csproj', '-c', 'Release', '--nologo', '-p:NuGetAudit=false', '-p:TestHostRunning=true', '-warnaserror', "-p:ReleasePackageDirectory=$packages") } },
     @{ Name = 'Package and lifecycle'; Action = { Invoke-Native 'pwsh' @('-NoProfile', '-NonInteractive', '-File', 'Test/Scripts/test-package.ps1', '-PackagePath', $package, '-FixtureDirectory', $fixture, '-Cycles', "$LifecycleCycles", '-MetricsPath', (Join-Path $reportDirectory 'lifecycle.json')) } }
 )

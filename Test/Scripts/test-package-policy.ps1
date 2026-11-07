@@ -27,6 +27,7 @@ function dotnet {
     New-Item -ItemType Directory -Path $destination -Force | Out-Null
     $fileName = (Get-EglBuildMetadata).ReleasePackageFileName
     Copy-Item -LiteralPath $global:EglPackagePolicyFixture -Destination (Join-Path $destination $fileName)
+    Copy-Item -LiteralPath $global:EglPackagePolicyFixture -Destination (Join-Path $destination (Get-EglBuildMetadata).ReleaseInstallerFileName)
     $global:LASTEXITCODE = 0
 }
 $savedOutput = $env:GITHUB_OUTPUT

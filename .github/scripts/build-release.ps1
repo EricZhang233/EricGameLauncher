@@ -13,8 +13,13 @@ $packageName = $metadata.ReleasePackageFileName
 $packagePath = Join-Path $packageRoot $packageName
 if (-not (Test-Path -LiteralPath $packagePath -PathType Leaf)) { throw "Build did not create $packageName." }
 Assert-EglReleasePackage -PackagePath $packagePath
+$installerName = $metadata.ReleaseInstallerFileName
+$installerPath = Join-Path $packageRoot $installerName
+if (-not (Test-Path -LiteralPath $installerPath -PathType Leaf)) { throw "Build did not create $installerName." }
+Assert-EglReleasePackage -PackagePath $installerPath
 $digest = (Get-FileHash -LiteralPath $packagePath -Algorithm SHA256).Hash.ToLowerInvariant()
 Write-Output "Built $packageName SHA256=$digest"
+Write-Output "Built $installerName SHA256=$((Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash.ToLowerInvariant())"
 if ($env:GITHUB_OUTPUT) {
-    @("version=$version", "package_path=$packagePath", "artifact_name=$($metadata.ReleaseArtifactName)", "package_name=$packageName") | Out-File -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+    @("version=$version", "package_path=$packagePath", "installer_path=$installerPath", "installer_name=$installerName", "artifact_name=$($metadata.ReleaseArtifactName)", "package_name=$packageName") | Out-File -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 }

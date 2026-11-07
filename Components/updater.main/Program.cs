@@ -15,6 +15,7 @@ using System.Collections.Generic;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 using EricGameLauncher;
+using EricGameLauncher.Installation;
 
 using System.Runtime.Versioning;
 
@@ -81,6 +82,12 @@ namespace updater.main
 
             string installDir = args[0];
             string downloadUrl = args[1];
+            string ownerSid = GetArgValue(args, "--owner-sid");
+            if (ownerSid.Length == 0)
+            {
+                ownerSid = InstallRegistration.CurrentUserSid;
+                args = args.Concat(new[] { "--owner-sid", ownerSid }).ToArray();
+            }
             string expectedDigest = GetArgValue(args, "--sha256");
             if (!UpdatePackageIntegrity.IsValidDigest(expectedDigest))
             {
@@ -95,7 +102,7 @@ namespace updater.main
             Log($"InstallDir exists={Directory.Exists(installDir)}");
             string cacheDir = Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher");
             if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
-            string tempZip = Path.Combine(cacheDir, $"update_{Guid.NewGuid():N}.zip");
+            string tempZip = Path.Combine(cacheDir, $"update_{Guid.NewGuid():N}.exe");
             string restartSignal = GetArgValue(args, "--restart-signal");
             if (string.IsNullOrEmpty(restartSignal))
             {
@@ -282,8 +289,26 @@ namespace updater.main
 
                 Console.WriteLine($"[3/4] Applying updates...");
                 Log("ApplyUpdates Start");
-                using (var archive = new ZipArchive(verifiedPackage, ZipArchiveMode.Read, leaveOpen: true))
+                if (InstallRegistration.Find(installDir, ownerSid) != null)
+                {
+                    if (verifiedPackage.ReadByte() != 'M' || verifiedPackage.ReadByte() != 'Z') throw new InvalidDataException("UPDATE_INSTALLER_REQUIRED");
+                    verifiedPackage.Position = 0;
+                    using (var archive = new ZipArchive(verifiedPackage, ZipArchiveMode.Read, leaveOpen: true))
+                        if (!archive.Entries.Any(e => e.FullName == "EricGameLauncher.exe")) throw new InvalidDataException("UPDATE_INVALID_INSTALLER");
+                    var setup = new ProcessStartInfo(tempZip) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = cacheDir };
+                    foreach (string value in new[] { "--quiet", "--update", "--directory", Path.GetFullPath(installDir), "--owner-sid", ownerSid }) setup.ArgumentList.Add(value);
+                    Log("Applying verified installer silently");
+                    using var installation = Process.Start(setup) ?? throw new IOException("UPDATE_INSTALLER_START_FAILED");
+                    await installation.WaitForExitAsync();
+                    if (installation.ExitCode != 0) throw new IOException($"UPDATE_INSTALLER_FAILED:{installation.ExitCode}");
+                }
+                else
+                {
+                    Log("Applying verified package as ZIP for portable installation");
+                    verifiedPackage.Position = 0;
+                    using var archive = new ZipArchive(verifiedPackage, ZipArchiveMode.Read, leaveOpen: true);
                     UpdateTransaction.Apply(installDir, archive);
+                }
 
 
                 Console.WriteLine($"[4/4] Restarting application...");

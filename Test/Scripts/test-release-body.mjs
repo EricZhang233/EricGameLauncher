@@ -64,6 +64,7 @@ for (const [name, execute] of [['preparation', prepare], ['finalization', finali
 }
 await check('empty final notes are rejected before modifying the body', finalize, {notes: ' \r\n ', error: true});
 process.env.PACKAGE_PATH = '/fixture/package.zip';
+process.env.INSTALLER_PATH = '/fixture/setup.exe';
 for (const state of ['normal', 'missing', 'replaced', 'draft', 'republished', 'deleted-during-upload']) {
   const calls = [];
   const release = {id: 17, tag_name: 'v1.3.1', published_at: 'original'};
@@ -82,12 +83,13 @@ for (const state of ['normal', 'missing', 'replaced', 'draft', 'republished', 'd
     }
   };
   const github = {rest: {repos}, paginate: async (_, args) => { assert.equal(args.release_id, 17); return [{id: 19, name: 'package.zip'}]; }};
-  const requireFixture = name => name === 'fs' ? {readFileSync: () => Buffer.from('zip')} : {basename: () => 'package.zip'};
+  const requireFixture = name => name === 'fs' ? {readFileSync: () => Buffer.from('package')} : {basename: path => path.split('/').at(-1)};
   let failed = false;
   try { await upload(github, {repo: {owner: 'fixture', repo: 'fixture'}, payload: {release}}, requireFixture); }
   catch { failed = true; }
   assert.equal(failed, state !== 'normal');
   assert.equal(calls.includes('upload'), state === 'normal');
+  assert.equal(calls.filter(call => call === 'upload').length, state === 'normal' ? 2 : 0);
   checks++;
   console.log('PASS asset upload stays bound to original release: ' + state);
 }

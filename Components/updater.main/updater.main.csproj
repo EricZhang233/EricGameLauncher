@@ -11,6 +11,7 @@
   <ItemGroup>
     <Compile Include="..\..\Core\UpdatePackageIntegrity.cs" Link="UpdatePackageIntegrity.cs" />
     <Compile Include="..\..\Core\UpdateDownload.cs" Link="UpdateDownload.cs" />
+    <Compile Include="..\..\Core\InstallRegistration.cs" Link="InstallRegistration.cs" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 </Project>

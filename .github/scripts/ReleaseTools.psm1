@@ -1,6 +1,6 @@
 function Get-EglBuildMetadata {
     $project = Join-Path $PSScriptRoot '../../EricGameLauncher.csproj'
-    $result = & dotnet msbuild $project -nologo '-getProperty:ExtractedVersion,AssemblyVersion,ReleasePackageFileName,ReleaseArtifactName,OutputPath,IntermediateOutputPath'
+    $result = & dotnet msbuild $project -nologo '-getProperty:ExtractedVersion,AssemblyVersion,ReleasePackageFileName,ReleaseInstallerFileName,ReleaseArtifactName,OutputPath,IntermediateOutputPath'
     if ($LASTEXITCODE -ne 0) { throw 'Unable to evaluate project release metadata.' }
     $properties = (($result -join "`n") | ConvertFrom-Json -ErrorAction Stop).Properties
     if ([string]::IsNullOrWhiteSpace($properties.ExtractedVersion)) { throw 'Version.cs must define a release version.' }
@@ -31,6 +31,7 @@ function Assert-EglReleasePackage {
         if ($name -match '(^/|^[a-zA-Z]:|(^|/)\.\.(/|$))') { throw "Release package contains an unsafe path: $name" }
         if (-not $seen.Add($name)) { throw "Release package contains a duplicate path: $name" }
         if ($name -match '\.pdb$') { throw "Release package contains debug symbols: $name" }
+        if ($name -match '(^|/)(Uninstall|EricGameLauncher\.(Setup|Uninstall))\.exe$|(^|/)setup\.core\.dll$') { throw "Release payload contains installer code: $name" }
         if ($name -match '\.(xbf|xaml)$') { throw "Release package contains loose XAML resources: $name" }
         if ($name -match '\.(json|pri)$') { throw "Release package contains external startup or resource metadata: $name" }
         if ($name -match '(^|/)ico\.ico$') { throw "Release package contains an external default icon: $name" }

@@ -10,8 +10,7 @@ public static class AppInstallService
 
     private static string GetMainExePath()
     {
-        var currentDir = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName) ?? ".";
-        return Path.Combine(currentDir, $"{AppName}.exe");
+        return Path.Combine(AppPaths.InstallDirectory, $"{AppName}.exe");
     }
 
     private static string DesktopShortcutPath => Path.Combine(
@@ -41,49 +40,11 @@ public static class AppInstallService
 
     internal static void InstallShortcuts(string executable, IReadOnlyList<string> destinations, Action<string>? checkpoint = null)
     {
-        var staged = new Dictionary<string, string>();
-        var backups = new Dictionary<string, string>();
-        var installed = new List<string>();
-        bool recovered = false;
-        try
+        Installation.ShortcutService.Install(executable, destinations, Description, step =>
         {
-            foreach (string target in destinations)
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                string temporary = target + "." + Guid.NewGuid().ToString("N") + ".lnk";
-                staged.Add(target, temporary);
-                checkpoint?.Invoke("create:" + target);
-                ShortcutResolver.CreateShortcut(executable, temporary, Description);
-                if (File.Exists(target))
-                {
-                    string backup = temporary + ".bak";
-                    File.Copy(target, backup);
-                    backups.Add(target, backup);
-                }
-            }
-            foreach (var entry in staged)
-            {
-                checkpoint?.Invoke("install:" + entry.Key);
-                File.Move(entry.Value, entry.Key, true);
-                installed.Add(entry.Key);
-            }
-            recovered = true;
-        }
-        catch
-        {
-            foreach (string target in installed.AsEnumerable().Reverse())
-            {
-                if (backups.TryGetValue(target, out string? backup)) File.Copy(backup, target, true);
-                else File.Delete(target);
-            }
-            recovered = true;
-            throw;
-        }
-        finally
-        {
-            foreach (string temporary in staged.Values) if (File.Exists(temporary)) File.Delete(temporary);
-            if (recovered) foreach (string backup in backups.Values) if (File.Exists(backup)) File.Delete(backup);
-        }
+            LogService.Write("App", $"Shortcut installation {step}");
+            checkpoint?.Invoke(step);
+        });
     }
 
     public static void Uninstall()

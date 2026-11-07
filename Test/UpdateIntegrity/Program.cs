@@ -181,7 +181,7 @@ try
                 if (expectedSignal == "READY")
                 {
                     Assert(!child.HasExited, "verified updater waits for parent before installing");
-                    string packagePath = Directory.GetFiles(tempDir, "update_*.zip", SearchOption.AllDirectories).Single();
+                    string packagePath = Directory.GetFiles(tempDir, "update_*.exe", SearchOption.AllDirectories).Single();
                     bool writeBlocked = false;
                     try { using var writable = File.OpenWrite(packagePath); }
                     catch (IOException) { writeBlocked = true; }
@@ -189,7 +189,7 @@ try
                     pipe.Dispose();
                     await child.WaitForExitAsync(timeout.Token);
                     Assert(child.ExitCode != 0, "controller disconnect before PROCEED stops verified updater");
-                    Assert(Directory.GetFiles(tempDir, "update_*.zip", SearchOption.AllDirectories).Length == 0, "disconnected verified updater cleans its package");
+                    Assert(Directory.GetFiles(tempDir, "update_*.exe", SearchOption.AllDirectories).Length == 0, "disconnected verified updater cleans its package");
                 }
                 else
                 {
@@ -197,7 +197,7 @@ try
                     Assert(child.ExitCode != 0, label + ": failure exit code");
                     if (expectedSignal == "ERROR HASH_MISMATCH")
                         Assert((await stderr).Contains("fixture verification failed"), "updater displays verification failure");
-                    Assert(Directory.GetFiles(tempDir, "update_*.zip", SearchOption.AllDirectories).Length == 0,
+                    Assert(Directory.GetFiles(tempDir, "update_*.exe", SearchOption.AllDirectories).Length == 0,
                         label + ": downloaded package cleaned up");
                 }
             }

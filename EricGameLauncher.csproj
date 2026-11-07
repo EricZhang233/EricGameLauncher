@@ -30,7 +30,7 @@
 
     <!-- 彻底排除源码与中间产物，防止递归扫描 -->
     <DefaultItemExcludes>
-      $(DefaultItemExcludes);Components\updater.main\**;output\**;Releasepack\**;Components\updater.cfgver\**;Components\main.cli\**;Test\**</DefaultItemExcludes>
+      $(DefaultItemExcludes);Components\**;output\**;Releasepack\**;Test\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <!-- 3. 构建生命周期管理：构建前阶段 (Pre-Build Context) -->
@@ -47,7 +47,7 @@
 
   <!-- 强制预编译并发布 MainUpdater 影子组件 -->
   <ItemGroup>
-    <_MainUpdaterSource Include="Components\updater.main\*.cs;Components\updater.main\*.csproj;Core\UpdatePackageIntegrity.cs;Core\UpdateDownload.cs" />
+    <_MainUpdaterSource Include="Components\updater.main\*.cs;Components\updater.main\*.csproj;Core\UpdatePackageIntegrity.cs;Core\UpdateDownload.cs;Core\InstallRegistration.cs" />
     <_CfgUpdaterSource Include="Components\updater.cfgver\*.cs;Components\updater.cfgver\*.csproj;Components\updater.cfgver\*.yaml" />
   </ItemGroup>
   <Target Name="BuildMainUpdater" BeforeTargets="BeforeBuild" Inputs="@(_MainUpdaterSource);Directory.Build.props;Version.cs" Outputs="Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.dll;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.runtimeconfig.json;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.exe;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.deps.json;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\YamlDotNet.dll">
@@ -85,10 +85,14 @@
   </Target>
 
   <!-- Release 自动化打包流 -->
-  <Target Name="ZipReleaseBuild" AfterTargets="Build" DependsOnTargets="EmbedHostConfiguration;ValidateLauncherPackage" Condition="'$(Configuration)' == 'Release'">
+  <Target Name="BuildReleaseInstaller" Condition="'$(Configuration)' == 'Release'">
+    <Exec Command="pwsh.exe -NoProfile -NonInteractive -File &quot;$(EglRepositoryRoot).github\scripts\build-native-setup.ps1&quot; -Version &quot;$(ExtractedVersion)&quot;" />
+  </Target>
+  <Target Name="ZipReleaseBuild" AfterTargets="Build" DependsOnTargets="EmbedHostConfiguration;ValidateLauncherPackage;BuildReleaseInstaller" Condition="'$(Configuration)' == 'Release'">
     <Message Importance="High" Text="Zipping Release artifacts to $(ReleasePackageFileName)..." />
     <MakeDir Directories="$(ReleasePackageDirectory)" />
     <ZipDirectory SourceDirectory="$(OutputPath)" DestinationFile="$(ReleasePackageDirectory)\$(ReleasePackageFileName)" Overwrite="true" />
+    <Exec Command="pwsh.exe -NoProfile -NonInteractive -File &quot;$(EglRepositoryRoot).github\scripts\package-installer.ps1&quot; -PackagePath &quot;$([System.IO.Path]::GetFullPath('$(ReleasePackageDirectory)\$(ReleasePackageFileName)'))&quot; -InstallerStub &quot;$(EglRepositoryRoot)Components\setup\bin\native\EricGameLauncher.Setup.exe&quot; -DestinationPath &quot;$([System.IO.Path]::GetFullPath('$(ReleasePackageDirectory)\$(ReleaseInstallerFileName)'))&quot;" />
   </Target>
 
   <!-- 6. 依赖与资源管理 (Dependencies & Resources) -->
@@ -193,7 +197,7 @@
   </Target>
   <Target Name="CleanLauncherIntermediate">
     <ItemGroup>
-      <_LauncherClean Include="$(EglRepositoryRoot)bin;$(EglRepositoryRoot)obj;$(EglRepositoryRoot)payload;@(_LauncherComponent->'%(RootDir)%(Directory)bin');@(_LauncherComponent->'%(RootDir)%(Directory)obj')" />
+      <_LauncherClean Include="$(EglRepositoryRoot)bin;$(EglRepositoryRoot)obj;$(EglRepositoryRoot)payload;$(EglRepositoryRoot)Components\setup\bin;$(EglRepositoryRoot)Components\setup\obj;$(EglRepositoryRoot)Components\setup.core\bin;$(EglRepositoryRoot)Components\setup.core\obj;$(EglRepositoryRoot)Components\setup.uninstall\bin;$(EglRepositoryRoot)Components\setup.uninstall\obj;@(_LauncherComponent->'%(RootDir)%(Directory)bin');@(_LauncherComponent->'%(RootDir)%(Directory)obj')" />
       <_LauncherCleanTest Include="@(_LauncherTest)" Condition="'$(TestHostRunning)' != 'true' Or !$([System.String]::Copy('%(_LauncherTest.Filename)').EndsWith('.Tests'))" />
       <_LauncherClean Include="@(_LauncherCleanTest->'%(RootDir)%(Directory)bin');@(_LauncherCleanTest->'%(RootDir)%(Directory)obj')" />
     </ItemGroup>

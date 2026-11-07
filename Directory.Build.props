@@ -8,6 +8,7 @@
     <AssemblyVersion Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ExtractedVersion)', '^\d+\.\d+\.\d+$'))">$(ExtractedVersion).0</AssemblyVersion>
     <FileVersion>$(AssemblyVersion)</FileVersion>
     <ReleasePackageFileName>EricGameLauncher_$(ExtractedVersion).zip</ReleasePackageFileName>
+    <ReleaseInstallerFileName>EricGameLauncher_Setup_$(ExtractedVersion).exe</ReleaseInstallerFileName>
     <ReleaseArtifactName>EricGameLauncher-$(ExtractedVersion)-win-x64</ReleaseArtifactName>
     <NuGetAuditMode>all</NuGetAuditMode>
   </PropertyGroup>

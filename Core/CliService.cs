@@ -966,7 +966,7 @@ public static class CliService
             return 0;
         }
 
-        var asset = release.assets?.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+        var asset = UpdateService.SelectUpdateAsset(release);
         if (asset == null || string.IsNullOrEmpty(asset.browser_download_url))
         {
             WriteLine(Text.Cli("ErrNoDownloadUrl"), ConsoleColor.Red);
@@ -989,7 +989,7 @@ public static class CliService
             return 1;
         }
 
-        var asset = release.assets?.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+        var asset = UpdateService.SelectUpdateAsset(release);
         if (asset == null || string.IsNullOrEmpty(asset.browser_download_url))
         {
             WriteLine(Text.Cli("ErrNoDownloadUrl"), ConsoleColor.Red);

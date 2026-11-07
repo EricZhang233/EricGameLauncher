@@ -105,6 +105,9 @@ EricGameLauncher.Cli.exe settings --set quickStart=true
 
 ## Notes
 
+- Updates download the Setup EXE when available and verify its GitHub SHA256 digest before use. Registered installations apply it silently; portable copies extract its ZIP payload without executing the installer. The plain ZIP release asset supports older clients.
+- The Setup EXE also supports `--directory <path>`, `--quiet`, `--extract` and `--desktop`. A Start menu shortcut is required for installation; the desktop shortcut is off by default. Extraction creates neither shortcuts nor system registration. `Uninstall.exe --quiet` removes a registered installation while preserving user data.
+- Installation and extraction append `EricGameLauncher` when the selected directory has a different final folder name. Registered silent updates retain their existing directory.
 - Item operations share the same data store as the GUI, so changes appear in both.
 - Prefer `--id` over `--title` when the ID is known, because titles can collide.
 - When stdout or stderr is redirected, both streams are written as UTF-8 without a BOM, so captured output keeps non-ASCII titles intact.

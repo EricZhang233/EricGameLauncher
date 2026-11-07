@@ -186,36 +186,7 @@ public static class ShortcutResolver
             LogService.Write("Shell", $"CreateShortcut targetPath={targetPath} shortcutPath={shortcutPath} descriptionLen={(description?.Length ?? 0)}");
             try
             {
-                Type? shellType = Type.GetTypeFromProgID("WScript.Shell");
-                if (shellType == null) throw new InvalidOperationException(Text.T("Shortcut_CreateFailed"));
-
-                dynamic? shell = Activator.CreateInstance(shellType);
-                if (shell == null) throw new InvalidOperationException(Text.T("Shortcut_CreateFailed"));
-
-                try
-                {
-                    string temporary = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(shortcutPath))!, Guid.NewGuid().ToString("N") + ".lnk");
-                    try
-                    {
-                        dynamic shortcut = shell.CreateShortcut(temporary);
-                        try
-                        {
-                            shortcut.TargetPath = targetPath;
-                            shortcut.WorkingDirectory = Path.GetDirectoryName(targetPath);
-                            shortcut.Description = description;
-                            shortcut.Save();
-                        }
-                        finally { Marshal.ReleaseComObject(shortcut); }
-                        if (!File.Exists(temporary)) throw new IOException(Text.T("Shortcut_CreateFailed"));
-                        File.Move(temporary, shortcutPath, true);
-                    }
-                    finally { if (File.Exists(temporary)) File.Delete(temporary); }
-                }
-                finally
-                {
-                    if (Marshal.IsComObject(shell))
-                        Marshal.ReleaseComObject(shell);
-                }
+                Installation.ShortcutService.Install(targetPath, [shortcutPath], description ?? "");
             }
             catch (Exception ex)
             {

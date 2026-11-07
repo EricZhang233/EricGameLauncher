@@ -1924,7 +1924,7 @@ namespace EricGameLauncher
                 if (await showTask == ContentDialogResult.Secondary) await ShowUpdateHistoryAsync();
                 return;
             }
-            var asset = release.assets?.FirstOrDefault(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+            var asset = UpdateService.SelectUpdateAsset(release);
             string downloadUrl = asset?.browser_download_url ?? "";
             if (hasUpdate && string.IsNullOrEmpty(downloadUrl)) throw new InvalidOperationException(Text.T("Update_PackageUnavailable"));
             var contentGrid = await BuildReleaseContentAsync(release, true, dialogWidth, dialogHeight, loadingLifetime.Token, view => releaseWebView = view);
