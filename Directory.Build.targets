@@ -1,0 +1,17 @@
+<Project>
+  <Target Name="PrepareEmbeddedHostConfiguration" BeforeTargets="GenerateBuildDependencyFile;GenerateBuildRuntimeConfigurationFiles" Condition="'$(Configuration)' == 'Release' And ('$(AssemblyName)' == 'EricGameLauncher' Or '$(AssemblyName)' == 'EricGameLauncher.Cli')">
+    <PropertyGroup>
+      <ProjectDepsFilePath>$(IntermediateOutputPath)$(AssemblyName).deps.json</ProjectDepsFilePath>
+      <ProjectRuntimeConfigFilePath>$(IntermediateOutputPath)$(AssemblyName).runtimeconfig.json</ProjectRuntimeConfigFilePath>
+    </PropertyGroup>
+  </Target>
+  <Target Name="EmbedHostConfiguration" AfterTargets="Build" DependsOnTargets="PrepareEmbeddedHostConfiguration" Condition="'$(Configuration)' == 'Release' And ('$(AssemblyName)' == 'EricGameLauncher' Or '$(AssemblyName)' == 'EricGameLauncher.Cli')">
+    <ItemGroup>
+      <_HostConfigurationBundle Include="$(IntermediateOutputPath)apphost.exe" RelativePath="$(AssemblyName).exe" />
+      <_HostConfigurationBundle Include="$(ProjectDepsFilePath)" RelativePath="$(AssemblyName).deps.json" />
+      <_HostConfigurationBundle Include="$(ProjectRuntimeConfigFilePath)" RelativePath="$(AssemblyName).runtimeconfig.json" />
+    </ItemGroup>
+    <GenerateBundle FilesToBundle="@(_HostConfigurationBundle)" AppHostName="$(AssemblyName).exe" TargetFrameworkVersion="$(_TargetFrameworkVersionWithoutV)" RuntimeIdentifier="$(RuntimeIdentifier)" OutputDir="$(TargetDir)" IncludeAllContent="false" IncludeNativeLibraries="false" IncludeSymbols="false" EnableCompressionInSingleFile="false" ShowDiagnosticOutput="false" />
+    <Message Importance="High" Text="Embedded startup configuration in $(AssemblyName).exe; assemblies remain external." />
+  </Target>
+</Project>

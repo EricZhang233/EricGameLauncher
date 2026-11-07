@@ -50,6 +50,17 @@ internal static class UiFeatures
                 window.PrepareOffscreenWarmup();
                 window.StartInitialization();
                 Check(await window.WaitStartupCompleteAsync(TimeSpan.FromSeconds(20)), "real XAML view completes startup");
+                Check(!File.Exists(Path.Combine(AppContext.BaseDirectory, "ico.ico")), "window starts without an external default ICO");
+                var windowIcon = (IntPtr)typeof(MainWindow).GetField("_customIconHandle", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(window)!;
+                Check(windowIcon != IntPtr.Zero, "window receives a native icon handle from the embedded resource");
+                var defaultIcon = await AppIconService.LoadBitmapImageAsync();
+                Check(defaultIcon is { PixelWidth: > 0, PixelHeight: > 0 } && AppIconService.GetBitmapImage() != null, "embedded default icon decodes synchronously and asynchronously");
+                Check(!File.Exists(Path.Combine(ConfigService.SystemCachePath, "EricGameLauncher_TempIcon.ico")) && !File.Exists(Path.Combine(ConfigService.SystemCachePath, "EricGameLauncher_TempIcon.png")), "default icon decoding creates no ICO or PNG cache");
+                Check(!Directory.EnumerateFiles(AppContext.BaseDirectory, "*.pri", SearchOption.AllDirectories).Any(), "real XAML view starts without a PRI file");
+                var xamlManager = EmbeddedXamlResources.CreateManager();
+                var embeddedCandidate = xamlManager.MainResourceMap.GetValue("ms-resource://EricGameLauncher/Files/UI/MainView.xbf");
+                Check(embeddedCandidate.Kind == Microsoft.Windows.ApplicationModel.Resources.ResourceCandidateKind.EmbeddedData && embeddedCandidate.ValueAsBytes.Take(4).SequenceEqual(new byte[] { 88, 66, 70, 0 }), "WinUI resolves compiled XAML directly from embedded bytes");
+                Check(xamlManager.MainResourceMap.TryGetValue("ms-resource://other/Files/UI/MainView.xbf") == null && xamlManager.MainResourceMap.TryGetValue("Files/UI/Missing.xbf") == null, "XAML resolver preserves missing and foreign resources");
                 var view = Find<MainView>((DependencyObject)window.Content)!;
                 var storageSettings = new SettingsFlyoutControl();
                 storageSettings.ApplyLocalization();

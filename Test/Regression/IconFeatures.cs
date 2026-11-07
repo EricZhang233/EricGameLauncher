@@ -46,7 +46,10 @@ internal static class IconFeatures
         check(!string.IsNullOrEmpty(ItemService.FindItem(edited.Id, null)?.IconPath), "edit async fills icon after path change");
         ItemService.RemoveItem(edited.Id, null, true);
 
-        var keepIcon = ItemService.CreateItem("Keep Icon", executable, icon: AppIconService.GetIconPath());
+        string explicitIcon = Path.Combine(root, "explicit-default-icon.ico");
+        using (var embedded = AppIconService.OpenDefaultIconStream())
+        using (var destination = File.Create(explicitIcon)) embedded.CopyTo(destination);
+        var keepIcon = ItemService.CreateItem("Keep Icon", executable, icon: explicitIcon);
         await ItemService.AddItemAsync(keepIcon);
         string? keptIcon = ItemService.FindItem(keepIcon.Id, null)?.IconPath;
         check(!string.IsNullOrEmpty(keptIcon) && File.Exists(keptIcon), "add async keeps an explicitly selected icon");

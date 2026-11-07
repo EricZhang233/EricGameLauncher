@@ -15,9 +15,7 @@ namespace EricGameLauncher
             SystemGuard.EnsureSupported();
             ResourceManagerRequested += (_, args) =>
             {
-                string resourcePath = System.IO.Path.Combine(AppContext.BaseDirectory, "EricGameLauncher.pri");
-                args.CustomResourceManager = new Microsoft.Windows.ApplicationModel.Resources.ResourceManager(resourcePath);
-                LogService.Write("Startup", $"XAML resources={resourcePath}");
+                args.CustomResourceManager = EmbeddedXamlResources.CreateManager();
             };
             this.InitializeComponent();
             this.UnhandledException += App_UnhandledException;

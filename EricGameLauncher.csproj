@@ -22,6 +22,7 @@
     <EnableMsixTooling>true</EnableMsixTooling>
     <DisableEmbeddedXbf>false</DisableEmbeddedXbf>
     <GenerateLibraryLayout>true</GenerateLibraryLayout>
+    <AppxGeneratePriEnabled>false</AppxGeneratePriEnabled>
     <ApplicationIcon>ico.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
@@ -84,7 +85,7 @@
   </Target>
 
   <!-- Release 自动化打包流 -->
-  <Target Name="ZipReleaseBuild" AfterTargets="Build" DependsOnTargets="ValidateLauncherPackage" Condition="'$(Configuration)' == 'Release'">
+  <Target Name="ZipReleaseBuild" AfterTargets="Build" DependsOnTargets="EmbedHostConfiguration;ValidateLauncherPackage" Condition="'$(Configuration)' == 'Release'">
     <Message Importance="High" Text="Zipping Release artifacts to $(ReleasePackageFileName)..." />
     <MakeDir Directories="$(ReleasePackageDirectory)" />
     <ZipDirectory SourceDirectory="$(OutputPath)" DestinationFile="$(ReleasePackageDirectory)\$(ReleasePackageFileName)" Overwrite="true" />
@@ -104,9 +105,6 @@
 
   <ItemGroup>
     <Content Include=".install.cmd">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="ico.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <EmbeddedResource Include="ico.ico" />
@@ -165,19 +163,30 @@
     <Delete Files="@(_LauncherDebugSymbols)" />
   </Target>
   <Target Name="ExcludeSourceXamlFromResourceLayout" AfterTargets="GetPackagingOutputs" DependsOnTargets="_CalculateXbfSupport">
-    <Error Condition="'$(_SupportXbfAsEmbedFileResources)' != 'true'" Text="XAML layout requires PRI-embedded XBF support." />
     <ItemGroup>
       <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.Extension)' == '.xaml'" />
     </ItemGroup>
   </Target>
   <Target Name="ExcludeEmbeddedXamlFromOutput" AfterTargets="GetCopyToOutputDirectoryItems" BeforeTargets="_CopyOutOfDateSourceItemsToOutputDirectory;_CopyOutOfDateSourceItemsToOutputDirectoryAlways;_CopyDifferingSourceItemsToOutputDirectory" DependsOnTargets="_CalculateXbfSupport">
-    <Error Condition="'$(_SupportXbfAsEmbedFileResources)' != 'true'" Text="XAML output requires PRI-embedded XBF support." />
     <ItemGroup>
       <_SourceItemsToCopyToOutputDirectory Remove="@(_SourceItemsToCopyToOutputDirectory)" Condition="'%(_SourceItemsToCopyToOutputDirectory.Extension)' == '.xbf' Or '%(_SourceItemsToCopyToOutputDirectory.Extension)' == '.xaml'" />
       <_SourceItemsToCopyToOutputDirectoryAlways Remove="@(_SourceItemsToCopyToOutputDirectoryAlways)" Condition="'%(_SourceItemsToCopyToOutputDirectoryAlways.Extension)' == '.xbf' Or '%(_SourceItemsToCopyToOutputDirectoryAlways.Extension)' == '.xaml'" />
       <_SourceItemsToCopyToOutputDirectoryIfDifferent Remove="@(_SourceItemsToCopyToOutputDirectoryIfDifferent)" Condition="'%(_SourceItemsToCopyToOutputDirectoryIfDifferent.Extension)' == '.xbf' Or '%(_SourceItemsToCopyToOutputDirectoryIfDifferent.Extension)' == '.xaml'" />
       <AllItemsFullPathWithTargetPath Remove="@(AllItemsFullPathWithTargetPath)" Condition="'%(AllItemsFullPathWithTargetPath.Extension)' == '.xbf' Or '%(AllItemsFullPathWithTargetPath.Extension)' == '.xaml'" />
     </ItemGroup>
+  </Target>
+  <Target Name="EmbedCompiledXamlResources" AfterTargets="MarkupCompilePass2">
+    <PropertyGroup>
+      <_XamlResourceRoot>$([System.IO.Path]::GetFullPath('$(XamlGeneratedOutputPath)'))</_XamlResourceRoot>
+    </PropertyGroup>
+    <ItemGroup>
+      <_AssemblyXbf Include="@(_GeneratedXbfFiles->Distinct())" />
+      <EmbeddedResource Include="@(_AssemblyXbf)">
+        <LogicalName>EricGameLauncher.Xaml.$([System.IO.Path]::GetRelativePath('$(_XamlResourceRoot)', '%(_AssemblyXbf.FullPath)').Replace('\', '.').Replace('/', '.'))</LogicalName>
+        <WithCulture>false</WithCulture>
+      </EmbeddedResource>
+    </ItemGroup>
+    <Error Condition="'@(_AssemblyXbf)' == ''" Text="No compiled XAML resources were produced." />
   </Target>
   <Target Name="ValidateLauncherPackage" DependsOnTargets="StripLauncherDebugSymbols" Condition="'$(Configuration)' == 'Release'">
     <Exec Command="pwsh.exe -NoProfile -NonInteractive -File &quot;$(EglRepositoryRoot).github\scripts\validate-package.ps1&quot; -DirectoryPath &quot;$([System.IO.Path]::GetFullPath('$(OutputPath).'))&quot;" />

@@ -5,7 +5,7 @@ Import-Module "$PSScriptRoot/TestWorkspace.psm1" -Force
 $root = New-EglTestDirectory 'package-policy-'
 New-Item -ItemType Directory -Path $root -Force | Out-Null
 $checks = 0
-$required = @('EricGameLauncher.exe', 'EricGameLauncher.dll', 'EricGameLauncher.deps.json', 'EricGameLauncher.runtimeconfig.json', 'EricGameLauncher.Cli.exe', 'EricGameLauncher.Cli.dll', 'EricGameLauncher.Cli.deps.json', 'EricGameLauncher.Cli.runtimeconfig.json', 'EricGameLauncher.pri', '.install.cmd')
+$required = @('EricGameLauncher.exe', 'EricGameLauncher.dll', 'EricGameLauncher.Cli.exe', 'EricGameLauncher.Cli.dll', '.install.cmd')
 function Check([bool]$condition, [string]$name) {
     if (-not $condition) { throw "FAIL $name" }
     $script:checks++
@@ -39,6 +39,28 @@ try {
     Expand-Archive -LiteralPath $clean -DestinationPath $cleanDirectory
     Assert-EglReleasePackage -DirectoryPath $cleanDirectory
     Check $true 'shared package policy accepts a clean directory and archive'
+    foreach ($name in @('ico.ico', 'nested/ICO.ICO')) {
+        $package = Join-Path $root ([guid]::NewGuid().ToString('N') + '.zip')
+        Write-Package $package ($required + $name)
+        $rejected = $false
+        try { Assert-EglReleasePackage -PackagePath $package } catch { $rejected = $_.Exception.Message.StartsWith('Release package contains an external default icon:') }
+        $directory = Join-Path $root ([guid]::NewGuid().ToString('N'))
+        Expand-Archive -LiteralPath $package -DestinationPath $directory
+        $directoryRejected = $false
+        try { Assert-EglReleasePackage -DirectoryPath $directory } catch { $directoryRejected = $_.Exception.Message.StartsWith('Release package contains an external default icon:') }
+        Check ($rejected -and $directoryRejected) "directory and archive reject the external default icon: $name"
+    }
+    foreach ($name in @('EricGameLauncher.runtimeconfig.json', 'EricGameLauncher.deps.json', 'EricGameLauncher.Cli.runtimeconfig.json', 'EricGameLauncher.Cli.deps.json', 'EricGameLauncher.pri', 'nested/RESOURCES.PRI', 'nested/metadata.JSON')) {
+        $package = Join-Path $root ([guid]::NewGuid().ToString('N') + '.zip')
+        Write-Package $package ($required + $name)
+        $archiveRejected = $false
+        try { Assert-EglReleasePackage -PackagePath $package } catch { $archiveRejected = $_.Exception.Message.StartsWith('Release package contains external startup or resource metadata:') }
+        $directory = Join-Path $root ([guid]::NewGuid().ToString('N'))
+        Expand-Archive -LiteralPath $package -DestinationPath $directory
+        $directoryRejected = $false
+        try { Assert-EglReleasePackage -DirectoryPath $directory } catch { $directoryRejected = $_.Exception.Message.StartsWith('Release package contains external startup or resource metadata:') }
+        Check ($archiveRejected -and $directoryRejected) "directory and archive reject external metadata: $name"
+    }
     foreach ($name in @('App.xbf', 'MainWindow.xbf', 'UI/MainView.XBF', 'UI/MainView.xaml')) {
         $package = Join-Path $root ([guid]::NewGuid().ToString('N') + '.zip')
         Write-Package $package ($required + $name)

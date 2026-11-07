@@ -69,12 +69,12 @@
 | B01 | 非 v/畸形/版本不匹配标签、已有包目录 | 编译前拒绝，旧包不动 | 自动 Contracts / test-release-inputs |
 | B02 | 晋升年龄、CI 缺失/失败、阻止标签、资产缺失、API 错误、成功 | 仅满足全部门禁才晋升 | 自动 Contracts / test-promotion |
 | B03 | 执行器 stdout/stderr、非零退出、失败计数、超时子树 | 错误不伪通过，只停止自己创建的进程 | 自动 Contracts / test-machine-runner |
-| B04 | 正式 csproj Release 构建、依赖审查、ZIP 必要文件与私有文件 | 编译无警告，包干净、CLI 可运行 | dotnet test 自动包含 |
-| B05 | 发布包 GUI 单次启动和正常关闭、残留子进程 | 主窗口出现、退出 0、子进程退出 | dotnet test 自动包含，一次启停 |
+| B04 | 正式 csproj Release 构建、依赖审查、ZIP 必要文件与私有文件 | 编译无警告，包干净、CLI 使用 EXE 内嵌启动配置运行，无外部 JSON/PRI | dotnet test 自动包含 |
+| B05 | 发布包 GUI 单次启动和正常关闭、残留子进程 | 主窗口出现、退出 0、子进程退出，程序集 XBF 直接供给 WinUI，不释放 PRI 或启动配置 | dotnet test 自动包含，一次启停；二进制资源解析及缺失资源回退自动 UiFeatures |
 | B06 | 本地独立 test 流程；GitHub 发布→构建→同次 Artifact→附件；任一发布阶段失败转草稿 | test 输出结果和报告，推送为单独操作；云端无测试作业，保护重新发布的版本，重复处理安全，权限/API 错误明确 | 自动 test-machine-runner、test-release-withdrawal；测试失败后停止推送为操作约束；真实 Actions/Release 需云端验收 |
 | B07 | 最新发版失败/运行中/排队/失败重跑、PR/手动/异提交验证 | 晋升不回退到更早成功，只接受 Release 全流程成功 | 自动 test-promotion |
-| B08 | 目录与 ZIP 同策略、根配置/嵌套缓存/大小写重复/路径穿越 | 本地、CI、测试拒绝相同坏包，解压前拒绝 | 自动 test-package-policy |
-| B09 | 主程序、CLI、两个更新器及原生清单版本 | 实际文件版本和程序集版本同源，默认构建依赖外部 Windows App SDK，与 v1.2.4 对齐 | 自动 test-build-output |
+| B08 | 目录与 ZIP 同策略、根配置/嵌套缓存/大小写重复/路径穿越/外部 JSON 和 PRI | 本地、CI、测试拒绝相同坏包，解压前拒绝 | 自动 test-package-policy |
+| B09 | 主程序、CLI、两个更新器及原生清单版本、XBF 与默认图标内嵌 | 实际文件版本和程序集版本同源，默认构建依赖外部 Windows App SDK；每个 XAML 对应一份内嵌 XBF，与 obj 编译产物逐字节一致，输出无 PRI/XBF/XAML/ico.ico；真实窗口及位图直接使用内嵌图标，不生成默认 ICO/PNG 缓存 | 自动 test-build-output、IconFeatures、UiFeatures、test-package |
 | B10 | 发布目录缺少辅助 EXE 或 deps | 增量发布重新补齐必需文件 | 自动 test-payload-repair |
 | B11 | 本地运行时准备、三段 NuGet 版本/路径格式/恢复失败、包 CLI 超时诊断 | 正确解析依赖版本并构造官方链接，拒绝无效版本；CLI 超时记录窗口标题和输出，保留安装日志 | 元数据自动 test-runtime-metadata；本地安装和包启停为显式手动检查 |
 | B12 | 发版等待正文→构建→附件→正式日志，空日志/权限错误/删除/重发/草稿 | 正式日志最后写入，保留原换行，拒绝修改已变化的发行记录，异常触发转草稿 | 自动 test-release-body；检查无云端测试入口，真实云端需验收 |

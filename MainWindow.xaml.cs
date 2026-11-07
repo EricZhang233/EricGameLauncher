@@ -79,48 +79,22 @@ namespace EricGameLauncher
         {
             try
             {
-                IntPtr hCustomIcon = AppIconService.GetCustomIconHandle();
-                if (hCustomIcon != IntPtr.Zero)
+                IntPtr icon = AppIconService.GetCustomIconHandle();
+                if (icon == IntPtr.Zero) icon = AppIconService.GetDefaultIconHandle();
+                if (icon == IntPtr.Zero)
                 {
-                    if (_hWnd != IntPtr.Zero)
-                    {
-                        SendMessage(_hWnd, WM_SETICON, ICON_BIG, hCustomIcon);
-                        SendMessage(_hWnd, WM_SETICON, ICON_SMALL, hCustomIcon);
-                        LogService.Write("App", "SetAppIcon via HICON success");
-                    }
-                    _customIconHandle = hCustomIcon;
-                    LogService.Write("App", "Pre-activation window icon applied");
+                    LogService.Write("App", "SetAppIcon no icon handle available");
                     return;
                 }
-
-                string iconPath = AppIconService.GetIconPath();
-                if (string.IsNullOrEmpty(iconPath) || !System.IO.File.Exists(iconPath))
+                if (_hWnd == IntPtr.Zero)
                 {
-                    LogService.Write("App", "SetAppIcon no icon path available");
+                    DestroyIcon(icon);
                     return;
                 }
-
-                if (_hWnd != IntPtr.Zero)
-                {
-                    IntPtr hIcon = LoadImage(IntPtr.Zero, iconPath, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
-                    if (hIcon != IntPtr.Zero)
-                    {
-                        SendMessage(_hWnd, WM_SETICON, ICON_BIG, hIcon);
-                        SendMessage(_hWnd, WM_SETICON, ICON_SMALL, hIcon);
-                        _customIconHandle = hIcon;
-                        LogService.Write("App", "SetAppIcon via file WM_SETICON success");
-                    }
-                    else
-                    {
-                        this.AppWindow.SetIcon(iconPath);
-                        LogService.Write("App", "SetAppIcon fallback to AppWindow.SetIcon");
-                    }
-                }
-                else
-                {
-                    this.AppWindow.SetIcon(iconPath);
-                }
-
+                SendMessage(_hWnd, WM_SETICON, ICON_BIG, icon);
+                SendMessage(_hWnd, WM_SETICON, ICON_SMALL, icon);
+                if (_customIconHandle != IntPtr.Zero) DestroyIcon(_customIconHandle);
+                _customIconHandle = icon;
                 LogService.Write("App", "Pre-activation window icon applied");
             }
             catch (Exception ex) { LogService.Write("App", "SetAppIcon failed", ex); }
@@ -208,16 +182,10 @@ namespace EricGameLauncher
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        private static extern IntPtr LoadImage(IntPtr hInst, string lpszName, uint uType, int cxDesired, int cyDesired, uint fuLoad);
-
         [DllImport("user32.dll")]
         private static extern bool DestroyIcon(IntPtr hIcon);
 
         private const uint WM_SETICON = 0x0080;
-        private const uint IMAGE_ICON = 1;
-        private const uint LR_LOADFROMFILE = 0x0010;
-        private const uint LR_DEFAULTSIZE = 0x0040;
         private static readonly IntPtr ICON_BIG = (IntPtr)1;
         private static readonly IntPtr ICON_SMALL = (IntPtr)0;
 

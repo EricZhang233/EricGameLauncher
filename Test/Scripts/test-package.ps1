@@ -56,6 +56,10 @@ try {
 $logs = (Get-ChildItem -LiteralPath (Join-Path $FixtureDirectory 'Cache/log') -Recurse -File | Get-Content) -join "`n"
 if (-not $logs.Contains("InstallDir=$FixtureDirectory ResourceDir=$FixtureDirectory")) { throw 'Directory release must load runtime resources from its installation directory.' }
 if (Test-Path -LiteralPath $runtimeCache) { throw 'Directory release unexpectedly extracted a single-file bundle.' }
-$looseXaml = @(Get-ChildItem -LiteralPath $FixtureDirectory -Recurse -File | Where-Object { $_.Extension -in '.xbf', '.xaml' })
-if ($looseXaml.Count) { throw 'Directory release must load its compiled XAML from PRI without loose XBF or XAML files.' }
-Write-Output 'PASS Release GUI loads PRI-embedded XAML directly from the installation directory without bundle extraction'
+$looseXaml = @(Get-ChildItem -LiteralPath $FixtureDirectory -Recurse -File | Where-Object { $_.Extension -in '.xbf', '.xaml', '.pri' })
+if ($looseXaml.Count) { throw 'Directory release must load its compiled XAML from the assembly without PRI, XBF or XAML files.' }
+if (-not $logs.Contains('XAML resources=assembly; no PRI extraction') -or -not $logs.Contains('XAML resource loaded from assembly name=UI/MainView.xbf')) { throw 'Release GUI did not resolve its XAML from assembly resources.' }
+if (-not $logs.Contains('AppIconService loaded default HICON from embedded resource') -or -not $logs.Contains('AppIconService decoded embedded default icon in memory')) { throw 'Release GUI did not load its default icon from embedded resources.' }
+if (Test-Path -LiteralPath (Join-Path $FixtureDirectory 'ico.ico')) { throw 'Release unexpectedly created an external default icon.' }
+if (Test-Path -LiteralPath (Join-Path $FixtureDirectory 'Cache/EricGameLauncher_TempIcon.ico')) { throw 'Release unexpectedly extracted its default icon.' }
+Write-Output 'PASS Release GUI loads assembly-embedded XAML and embedded startup configuration without extracting files'

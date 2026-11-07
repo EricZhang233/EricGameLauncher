@@ -266,7 +266,8 @@ try
     Check(cycleRejected, "migration rejects non-advancing rule");
     Check(!SensitiveText.Redact("githubToken: ghp_FixtureSecret").Contains("FixtureSecret") && !SensitiveText.Redact("header ghp_FixtureSecret").Contains("FixtureSecret"), "token redaction covers YAML and arbitrary log context");
     string iconSource = Path.Combine(root, "rebuild.ico");
-    File.Copy(AppIconService.GetIconPath(), iconSource);
+    using (var iconStream = AppIconService.OpenDefaultIconStream())
+    using (var destination = File.Create(iconSource)) iconStream.CopyTo(destination);
     var rebuilding = ItemService.CreateItem("Before rebuild", iconSource);
     ItemService.AddItem(rebuilding);
     Task rebuildingTask = ConfigService.RefreshGlobalAsync();

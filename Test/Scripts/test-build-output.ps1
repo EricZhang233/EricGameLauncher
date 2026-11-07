@@ -27,7 +27,26 @@ Check ($unusedPackages.Count -eq 0) 'runtime dependency graph excludes the unuse
 $unusedFiles = @(Get-ChildItem -LiteralPath $MainDirectory -Recurse -File | Where-Object { $_.Name -match '^(WinUIEx|Microsoft\.ML\.OnnxRuntime|System\.Numerics\.Tensors|Microsoft\.Windows\.Widgets\.Projection)\.dll$|^Microsoft\.Windows\.AI\..*\.dll$' })
 Check ($unusedFiles.Count -eq 0) 'build output contains no unused AI, machine learning, Widgets or WinUIEx assemblies'
 $looseXaml = @(Get-ChildItem -LiteralPath $MainDirectory -Recurse -File | Where-Object { $_.Extension -in '.xbf', '.xaml' })
-Check ($looseXaml.Count -eq 0) 'build output does not copy PRI-embedded XBF or source XAML'
+Check ($looseXaml.Count -eq 0) 'build output does not copy assembly-embedded XBF or source XAML'
+Check (@(Get-ChildItem -LiteralPath $MainDirectory -Recurse -File -Filter '*.pri').Count -eq 0) 'build output contains no PRI files'
+Check (-not (Test-Path -LiteralPath (Join-Path $MainDirectory 'ico.ico'))) 'build output does not copy the embedded default icon'
+$mainAssembly = [Reflection.Assembly]::LoadFile((Join-Path $MainDirectory 'EricGameLauncher.dll'))
+$embeddedXbf = @($mainAssembly.GetManifestResourceNames() | Where-Object { $_.StartsWith('EricGameLauncher.Xaml.') -and $_.EndsWith('.xbf') })
+$xamlSources = @('App.xaml', 'MainWindow.xaml') + @(Get-ChildItem -LiteralPath (Join-Path $repo 'UI') -File -Filter '*.xaml' | ForEach-Object { 'UI/' + $_.Name })
+Check ($embeddedXbf.Count -eq $xamlSources.Count) 'assembly contains exactly one XBF for every source XAML file'
+foreach ($source in $xamlSources) {
+    $relative = [IO.Path]::ChangeExtension($source, '.xbf')
+    $resource = 'EricGameLauncher.Xaml.' + $relative.Replace('/', '.')
+    $stream = $mainAssembly.GetManifestResourceStream($resource)
+    if ($null -eq $stream) { throw "Missing embedded XAML: $resource" }
+    try {
+        $buffer = [IO.MemoryStream]::new()
+        try { $stream.CopyTo($buffer); $actual = [Convert]::ToBase64String($buffer.ToArray()) }
+        finally { $buffer.Dispose() }
+    } finally { $stream.Dispose() }
+    $expected = [Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $repo ($metadata.IntermediateOutputPath + $relative))))
+    Check ($actual -ceq $expected) "assembly resource matches compiled XBF: $relative"
+}
 foreach ($entry in @('EricGameLauncher', 'EricGameLauncher.Cli')) {
     $runtime = Get-Content -LiteralPath (Join-Path $MainDirectory "$entry.runtimeconfig.json") -Raw | ConvertFrom-Json -AsHashtable
     $frameworks = @($runtime.runtimeOptions.frameworks) + @($runtime.runtimeOptions.framework)
