@@ -4,7 +4,7 @@ namespace EricGameLauncher;
 
 internal static class StorageMigration
 {
-    internal static string ModeFile => Path.Combine(AppContext.BaseDirectory, "storage.mode");
+    internal static string ModeFile => Path.Combine(AppPaths.InstallDirectory, "storage.mode");
     internal sealed class Journal
     {
         public Journal() { }

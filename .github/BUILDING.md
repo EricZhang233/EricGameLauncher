@@ -6,7 +6,7 @@
 
 标签格式为 `vX.Y.Z` 或 `vX.Y.Z.W`，必须与该标签内的 `Version.cs` 完全一致。项目及其辅助组件的构建设置来自项目文件，不读取解决方案中的配置映射。
 
-本地与 CI 均从 `global.json` 选择 .NET SDK，由主项目决定 win-x64 以及外部 .NET 10 Desktop Runtime 和 Windows App SDK 1.8 运行时依赖，与 v1.2.4 的部署方式一致。Windows App SDK 原生运行时和多语言资源不随包分发。Release 打包策略与版本在项目中定义；CI 只指定 Release 配置、审查要求和隔离产物目录。构建警告及 NuGet 审查警告作为失败处理。
+本地与 CI 均从 `global.json` 选择 .NET SDK，由主项目决定 win-x64 以及外部 .NET 10 Runtime 和 Windows App SDK 1.8 运行时依赖，不再要求 Desktop Runtime。Windows App SDK 原生运行时和多语言资源不随包分发。Release 打包策略与版本在项目中定义；CI 只指定 Release 配置、审查要求和隔离产物目录。构建警告及 NuGet 审查警告作为失败处理。
 
 本地测试需要匹配的 Windows App Runtime；必要时手动使用 `Test/Scripts/prepare-runtime.ps1` 安装官方签名运行时。运行时不进入发布 ZIP。
 
@@ -22,7 +22,11 @@ pwsh.exe -File .github/scripts/build-release.ps1 -Tag v1.2.4 -PackageDirectory C
 
 自动构建不会改变用户下载时 Windows 添加互联网来源标记的行为。
 
-版本统一从 `Version.cs` 派生，主程序、CLI、更新器及生成的清单使用同一版本。`Build/Build.psm1` 提供统一的目录/ZIP 发布检查；本地打包、正式发布和测试拒绝相同的配置、缓存与日志条目。`Build/Build.targets` 的公共清理目标供 clean、Release 收尾和测试失败收尾共用。
+版本统一从 `Version.cs` 派生，主程序、CLI、更新器及生成的清单使用同一版本。Release 采用目录式发行，EXE、程序集 DLL、deps/runtimeconfig JSON 和 PRI 随目录分发，不封装为单文件，也不在启动时解包应用依赖。XBF 在 obj 中编译并嵌入 PRI；构建采用资源布局管线，并在复制输出项之前排除已内嵌的 XBF 与源 XAML，不使用构建后删除。Debug 与 Release 都不向输出目录复制这些散装资源。仍依赖系统安装的 x64 .NET Runtime 和 Windows App Runtime，不捆绑系统运行时。便携数据、存储模式、快捷方式和更新目标均以 EXE 所在目录为准。
+
+依赖使用 Windows App SDK 的 WinUI 与 Runtime 组件包，Foundation、InteractiveExperiences 和 WebView2 通过 WinUI 的依赖链保留，不引用整套 SDK、WinUIEx、AI、ML、Widgets 或 DWrite 包。拼音搜索使用 TinyPinyin，配置和更新器使用 YamlDotNet，图标处理直接引用 System.Drawing.Common，令牌与平台数据解密直接引用 System.Security.Cryptography.ProtectedData。任务栏跳转列表使用 Windows 原生 COM 接口，不引用 WPF；排序、分隔符、应用标识和图标引用维护均保留。不对反射与 COM 使用路径启用未经验证的 IL 裁剪，也不改变程序集身份。
+
+`Directory.Build.props` 统一派生版本属性，构建、资源输出和公共清理目标集中在 `EricGameLauncher.csproj`，不另设 Build 目录。`.github/scripts/ReleaseTools.psm1` 提供统一的目录/ZIP 发布检查，供本地构建、正式发布及测试共用；检查必要的程序集、运行时配置和 PRI，拒绝私有配置、缓存、日志及散装 XBF/XAML。公共清理目标供 clean、Release 收尾和测试失败收尾共用。
 
 已移除 Validate 工作流及其手动、可复用入口。自动晋升只接受目标提交最新的 Release 全流程已完成且成功；失败、排队、运行中或失败重跑均不回退到更早成功记录，本地测试成功也不能代替发行构建和上传成功。
 

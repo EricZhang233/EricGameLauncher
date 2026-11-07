@@ -1,5 +1,6 @@
 using EricGameLauncher;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 
 internal static class JumpListFeatures
@@ -58,5 +59,67 @@ internal static class JumpListFeatures
         check(groups[1][0].Id == "candidate" && groups[1].Count(x => x.Id == "candidate") == 1, "application pin moves task to frequent top without duplication");
         groups = (List<List<AppItem>>)select.Invoke(null, [new List<AppItem> { hiddenPlatform, deleted }])!;
         check(groups.Count == 0, "empty task sections produce no separator groups");
+        NativeLinks(check);
+    }
+
+    private static void NativeLinks(Action<bool, string> check)
+    {
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                string executable = Path.Combine(AppContext.BaseDirectory, "EricGameLauncher.exe");
+                string working = Path.GetDirectoryName(executable)!;
+                var first = new NativeJumpList.Task("游戏平台测试", executable, "--jump-launch first", working, executable, 0);
+                var invalid = first with { ApplicationPath = "" };
+                var second = first with { Title = "Second", Arguments = "--jump-launch second" };
+                using var collection = NativeJumpList.CreateCollection([null, first, null, invalid, null, second, null]);
+                collection.Array.GetCount(out uint count);
+                check(count == 3 && collection.Tasks.Count == 2, "native task collection rejects invalid links and normalizes separators");
+                Guid linkId = typeof(NativeJumpList.IShellLink).GUID;
+                collection.Array.GetAt(0, ref linkId, out object native);
+                try
+                {
+                    var link = (NativeJumpList.IShellLink)native;
+                    var path = new StringBuilder(2048);
+                    link.GetPath(path, path.Capacity, IntPtr.Zero, 4);
+                    check(string.Equals(path.ToString(), executable, StringComparison.OrdinalIgnoreCase), "native task targets the launcher executable");
+                    var arguments = new StringBuilder(2048);
+                    link.GetArguments(arguments, arguments.Capacity);
+                    check(arguments.ToString() == first.Arguments, "native task retains the shared jump-launch command");
+                    var directory = new StringBuilder(2048);
+                    link.GetWorkingDirectory(directory, directory.Capacity);
+                    check(string.Equals(directory.ToString(), working, StringComparison.OrdinalIgnoreCase), "native task retains the installation working directory");
+                    var icon = new StringBuilder(2048);
+                    link.GetIconLocation(icon, icon.Capacity, out int index);
+                    check(string.Equals(icon.ToString(), executable, StringComparison.OrdinalIgnoreCase) && index == 0, "native task retains its icon location and index");
+                    var key = NativeJumpList.TitleKey;
+                    ((NativeJumpList.IPropertyStore)native).GetValue(ref key, out var title);
+                    try { check(title.Type == 31 && Marshal.PtrToStringUni(title.Pointer) == first.Title, "native shell title preserves Unicode"); }
+                    finally { Marshal.ThrowExceptionForHR(NativeJumpList.PropVariantClear(ref title)); }
+                    NativeJumpList.SetAppId(native, JumpListService.AppId);
+                    key = new NativeJumpList.PropertyKey(new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), 5);
+                    ((NativeJumpList.IPropertyStore)native).GetValue(ref key, out var appId);
+                    try { check(Marshal.PtrToStringUni(appId.Pointer) == JumpListService.AppId, "native links retain the application identity"); }
+                    finally { Marshal.ThrowExceptionForHR(NativeJumpList.PropVariantClear(ref appId)); }
+                }
+                finally { Marshal.ReleaseComObject(native); }
+                collection.Array.GetAt(1, ref linkId, out native);
+                try
+                {
+                    var key = NativeJumpList.SeparatorKey;
+                    ((NativeJumpList.IPropertyStore)native).GetValue(ref key, out var separator);
+                    try { check(separator.Type == 11 && separator.Boolean == -1, "native separator uses the shell destination-list property"); }
+                    finally { Marshal.ThrowExceptionForHR(NativeJumpList.PropVariantClear(ref separator)); }
+                }
+                finally { Marshal.ReleaseComObject(native); }
+            }
+            catch (Exception ex) { failure = ex; }
+        }) { IsBackground = true };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        if (!thread.Join(TimeSpan.FromSeconds(15))) throw new TimeoutException("Native jump-list fixture timed out.");
+        if (failure != null) throw new InvalidOperationException("Native jump-list fixture failed.", failure);
     }
 }

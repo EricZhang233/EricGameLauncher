@@ -1,7 +1,7 @@
 param([Parameter(Mandatory)][string]$Tag, [Parameter(Mandatory)][string]$PackageDirectory)
 $ErrorActionPreference = 'Stop'
 if ($Tag -cnotmatch '^v\d+\.\d+\.\d+(\.\d+)?$') { throw 'Release tag must start with v followed by a numeric version.' }
-Import-Module "$PSScriptRoot/../../Build/Build.psm1" -Force
+Import-Module "$PSScriptRoot/ReleaseTools.psm1" -Force
 $metadata = Get-EglBuildMetadata
 $version = $metadata.ExtractedVersion
 if ($Tag -cne "v$version") { throw "Release tag $Tag does not match Version.cs ($version)." }

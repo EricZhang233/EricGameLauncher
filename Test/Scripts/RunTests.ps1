@@ -17,7 +17,7 @@ $failed = $false
 $lockHeld = $false
 $mutex = $null
 $started = [DateTime]::UtcNow
-Import-Module "$PSScriptRoot/../../Build/Build.psm1" -Force
+Import-Module "$PSScriptRoot/../../.github/scripts/ReleaseTools.psm1" -Force
 $metadata = Get-EglBuildMetadata
 $main = Join-Path $repo $metadata.OutputPath
 $packages = Join-Path $testRoot 'packages'

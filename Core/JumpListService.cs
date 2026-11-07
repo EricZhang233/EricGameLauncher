@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-using System.Windows.Shell;
 
 namespace EricGameLauncher;
 
@@ -61,18 +60,17 @@ public static class JumpListService
         if (reloadItems || _catalog == null) _catalog = ConfigService.LoadItems().Where(x => x.Status == 0).ToList();
         var items = _catalog;
         LaunchCountCache.Populate(items);
-        var list = new JumpList { ShowRecentCategory = false, ShowFrequentCategory = false };
+        var tasks = new List<NativeJumpList.Task?>();
         foreach (var group in TaskGroups(items))
         {
-            if (list.JumpItems.Count > 0) list.JumpItems.Add(new JumpTask());
-            foreach (var item in group) list.JumpItems.Add(Task(item));
+            if (tasks.Count > 0) tasks.Add(null);
+            foreach (var item in group) tasks.Add(Task(item));
         }
-        list.JumpItemsRejected += (_, e) => LogService.Write("JumpList", $"Rejected {e.RejectedItems.Count} items: {string.Join(", ", e.RejectionReasons)}");
-        if (!IconCacheMaintenance.ProtectJumpReferences(list.JumpItems.OfType<JumpTask>().Select(x => x.IconResourcePath)))
+        if (!IconCacheMaintenance.ProtectJumpReferences(tasks.OfType<NativeJumpList.Task>().Select(x => x.IconResourcePath)))
             throw new DataFileException(Path.Combine(ConfigService.FixedCachePath, ".owned-icons.json"));
-        list.Apply();
-        IconCacheMaintenance.JumpReferences(list.JumpItems.OfType<JumpTask>().Select(x => x.IconResourcePath));
-        LogService.Write("JumpList", $"Updated tasks={list.JumpItems.Count}");
+        var published = NativeJumpList.Publish(AppId, tasks);
+        IconCacheMaintenance.JumpReferences(published.Select(x => x.IconResourcePath));
+        LogService.Write("JumpList", $"Native tasks updated count={published.Count}");
     }
 
     internal static IDisposable EnterPublication(TimeSpan? timeout = null)
@@ -86,39 +84,22 @@ public static class JumpListService
         {
             if (!File.Exists(path)) continue;
             object? link = null;
-            IntPtr text = IntPtr.Zero;
             try
             {
                 link = Activator.CreateInstance(Type.GetTypeFromCLSID(new Guid("00021401-0000-0000-C000-000000000046"))!);
                 var file = (System.Runtime.InteropServices.ComTypes.IPersistFile)link!;
                 file.Load(path, 2);
-                var key = new PropertyKey { Format = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), Id = 5 };
-                text = Marshal.StringToCoTaskMemUni(AppId);
-                var value = new PropertyValue { Type = 31, Pointer = text };
-                ((IPropertyStore)link!).SetValue(ref key, ref value);
-                ((IPropertyStore)link).Commit();
+                NativeJumpList.SetAppId(link!, AppId);
                 file.Save(path, true);
             }
             catch (Exception ex) { LogService.Write("JumpList", "Shortcut identity update failed", ex); }
-            finally { if (text != IntPtr.Zero) Marshal.FreeCoTaskMem(text); if (link != null) Marshal.ReleaseComObject(link); }
+            finally { if (link != null) Marshal.ReleaseComObject(link); }
         }
     }
 
-    [StructLayout(LayoutKind.Sequential)] private struct PropertyKey { public Guid Format; public uint Id; }
-    [StructLayout(LayoutKind.Explicit, Size = 24)] private struct PropertyValue { [FieldOffset(0)] public ushort Type; [FieldOffset(8)] public IntPtr Pointer; }
-    [ComImport, Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface IPropertyStore
+    private static NativeJumpList.Task Task(AppItem item)
     {
-        void GetCount(out uint count);
-        void GetAt(uint index, out PropertyKey key);
-        void GetValue(ref PropertyKey key, out PropertyValue value);
-        void SetValue(ref PropertyKey key, ref PropertyValue value);
-        void Commit();
-    }
-
-    private static JumpTask Task(AppItem item)
-    {
-        string exe = Path.Combine(AppContext.BaseDirectory, "EricGameLauncher.exe");
+        string exe = Path.Combine(AppPaths.InstallDirectory, "EricGameLauncher.exe");
         string icon = item.IconPath ?? "";
         if (File.Exists(icon) && !icon.EndsWith(".ico", StringComparison.OrdinalIgnoreCase))
         {
@@ -130,8 +111,7 @@ public static class JumpListService
             var (target, _) = ProcessRunner.SplitPath(item.ExePath ?? "");
             icon = File.Exists(target) && target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? target : exe;
         }
-        return new JumpTask { Title = item.Title ?? item.Id, ApplicationPath = exe, Arguments = "--jump-launch " + item.Id,
-            WorkingDirectory = AppContext.BaseDirectory, IconResourcePath = icon, IconResourceIndex = 0 };
+        return new NativeJumpList.Task(item.Title ?? item.Id, exe, "--jump-launch " + item.Id, AppPaths.InstallDirectory, icon, 0);
     }
 
     private static string CacheIcon(string source)

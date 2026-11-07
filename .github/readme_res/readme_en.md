@@ -60,7 +60,7 @@
 ## Quick Start
 
 *   Requires Windows 11 24H2 or later, with support for x64 and ARM64 PCs.
-*   Before running, install the x64 versions of the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) and [Windows App Runtime 1.8](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads).
+*   Before running, install the x64 versions of the [.NET 10 Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) and [Windows App Runtime 1.8](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads).
 
 ### Three steps
 
@@ -265,7 +265,7 @@ No. Built on Windows App SDK 1.8 and WinUI 3, this project requires **Windows 11
 <details>
 <summary><b>Which release should I download on an ARM64 PC?</b></summary>
 
-Download the same x64 package. It runs through Windows 11 x64 emulation. Install the x64 versions of both dependencies as well, including the .NET 10 Desktop Runtime and Windows App Runtime 1.8.
+Download the same x64 package. It runs through Windows 11 x64 emulation. Install the x64 versions of both dependencies as well, including the .NET 10 Runtime and Windows App Runtime 1.8.
 </details>
 
 <details>

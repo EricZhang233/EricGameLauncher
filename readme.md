@@ -58,7 +58,7 @@
 ## 快速开始
 
 *   需要 Windows 11 24H2 或更高版本，支持 x64 和 ARM64 电脑。
-*   运行前请安装 x64 版本的 [.NET 10 桌面运行时](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) 和 [Windows App Runtime 1.8](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads)。
+*   运行前请安装 x64 版本的 [.NET 10 运行时](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) 和 [Windows App Runtime 1.8](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads)。
 
 ### 三步上手
 
@@ -261,7 +261,7 @@ flowchart TB
 <details>
 <summary><b>ARM64 电脑应该下载哪个版本？</b></summary>
 
-下载同一份 x64 发行包即可，程序通过 Windows 11 的 x64 模拟运行。运行依赖也请选择 x64 版本，包括 .NET 10 桌面运行时与 Windows App Runtime 1.8。
+下载同一份 x64 发行包即可，程序通过 Windows 11 的 x64 模拟运行。运行依赖也请选择 x64 版本，包括 .NET 10 运行时与 Windows App Runtime 1.8。
 </details>
 
 <details>

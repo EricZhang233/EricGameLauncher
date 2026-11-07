@@ -1,5 +1,5 @@
 function Get-EglBuildMetadata {
-    $project = Join-Path $PSScriptRoot '../EricGameLauncher.csproj'
+    $project = Join-Path $PSScriptRoot '../../EricGameLauncher.csproj'
     $result = & dotnet msbuild $project -nologo '-getProperty:ExtractedVersion,AssemblyVersion,ReleasePackageFileName,ReleaseArtifactName,OutputPath,IntermediateOutputPath'
     if ($LASTEXITCODE -ne 0) { throw 'Unable to evaluate project release metadata.' }
     $properties = (($result -join "`n") | ConvertFrom-Json -ErrorAction Stop).Properties
@@ -31,10 +31,11 @@ function Assert-EglReleasePackage {
         if ($name -match '(^/|^[a-zA-Z]:|(^|/)\.\.(/|$))') { throw "Release package contains an unsafe path: $name" }
         if (-not $seen.Add($name)) { throw "Release package contains a duplicate path: $name" }
         if ($name -match '\.pdb$') { throw "Release package contains debug symbols: $name" }
+        if ($name -match '\.(xbf|xaml)$') { throw "Release package contains loose XAML resources: $name" }
         if ($name -match '(^|/)Microsoft\.UI\.Xaml\.dll$') { throw "Release package contains bundled Windows App SDK runtime: $name" }
         if ($name -match '(^|/)(Data|Cache)(/|$)|\.(log|bak)$|(^|/)(settings\.yaml|items\.yaml|storage\.mode)$') { throw "Release package contains private data: $name" }
     }
-    foreach ($required in @('EricGameLauncher.exe', 'EricGameLauncher.dll', 'EricGameLauncher.Cli.exe', '.install.cmd')) {
+    foreach ($required in @('EricGameLauncher.exe', 'EricGameLauncher.dll', 'EricGameLauncher.deps.json', 'EricGameLauncher.runtimeconfig.json', 'EricGameLauncher.Cli.exe', 'EricGameLauncher.Cli.dll', 'EricGameLauncher.Cli.deps.json', 'EricGameLauncher.Cli.runtimeconfig.json', 'EricGameLauncher.pri', '.install.cmd')) {
         if (-not $seen.Contains($required)) { throw "Release package is missing $required." }
     }
 }

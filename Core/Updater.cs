@@ -409,7 +409,7 @@ public class UpdateService
             using var connectionCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token);
             connectionCts.CancelAfter(TimeSpan.FromMinutes(5));
 
-            string installDir = Path.TrimEndingDirectorySeparator(AppDomain.CurrentDomain.BaseDirectory);
+            string installDir = Path.TrimEndingDirectorySeparator(AppPaths.InstallDirectory);
             ProcessStartInfo psi = new ProcessStartInfo
             {
                 FileName = mainUpdaterPath,

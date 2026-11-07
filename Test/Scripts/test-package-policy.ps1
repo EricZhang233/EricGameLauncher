@@ -1,11 +1,11 @@
 $ErrorActionPreference = 'Stop'
-Import-Module "$PSScriptRoot/../../Build/Build.psm1" -Force
+Import-Module "$PSScriptRoot/../../.github/scripts/ReleaseTools.psm1" -Force
 $metadata = Get-EglBuildMetadata
 Import-Module "$PSScriptRoot/TestWorkspace.psm1" -Force
 $root = New-EglTestDirectory 'package-policy-'
 New-Item -ItemType Directory -Path $root -Force | Out-Null
 $checks = 0
-$required = @('EricGameLauncher.exe', 'EricGameLauncher.dll', 'EricGameLauncher.Cli.exe', '.install.cmd')
+$required = @('EricGameLauncher.exe', 'EricGameLauncher.dll', 'EricGameLauncher.deps.json', 'EricGameLauncher.runtimeconfig.json', 'EricGameLauncher.Cli.exe', 'EricGameLauncher.Cli.dll', 'EricGameLauncher.Cli.deps.json', 'EricGameLauncher.Cli.runtimeconfig.json', 'EricGameLauncher.pri', '.install.cmd')
 function Check([bool]$condition, [string]$name) {
     if (-not $condition) { throw "FAIL $name" }
     $script:checks++
@@ -39,6 +39,17 @@ try {
     Expand-Archive -LiteralPath $clean -DestinationPath $cleanDirectory
     Assert-EglReleasePackage -DirectoryPath $cleanDirectory
     Check $true 'shared package policy accepts a clean directory and archive'
+    foreach ($name in @('App.xbf', 'MainWindow.xbf', 'UI/MainView.XBF', 'UI/MainView.xaml')) {
+        $package = Join-Path $root ([guid]::NewGuid().ToString('N') + '.zip')
+        Write-Package $package ($required + $name)
+        $archiveRejected = $false
+        try { Assert-EglReleasePackage -PackagePath $package } catch { $archiveRejected = $_.Exception.Message.StartsWith('Release package contains loose XAML resources:') }
+        $directory = Join-Path $root ([guid]::NewGuid().ToString('N'))
+        Expand-Archive -LiteralPath $package -DestinationPath $directory
+        $directoryRejected = $false
+        try { Assert-EglReleasePackage -DirectoryPath $directory } catch { $directoryRejected = $_.Exception.Message.StartsWith('Release package contains loose XAML resources:') }
+        Check ($archiveRejected -and $directoryRejected) "directory and archive reject loose XAML resources: $name"
+    }
     foreach ($name in @('settings.yaml', 'items.yaml', 'storage.mode', 'SeTTings.YAML', 'nested/settings.yaml', 'Data/user.txt', 'nested/Cache/state.dat', 'nested/session.log', 'nested/session.bak')) {
         $package = Join-Path $root ([guid]::NewGuid().ToString('N') + '.zip')
         Write-Package $package ($required + $name)

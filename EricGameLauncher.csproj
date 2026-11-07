@@ -19,7 +19,9 @@
     <GenerateAppxPackageOnBuild>false</GenerateAppxPackageOnBuild>
     <WindowsAppSDKUsePrerelease>false</WindowsAppSDKUsePrerelease>
     <WindowsPackageType>None</WindowsPackageType>
-    <DisablePriGeneration>true</DisablePriGeneration>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <DisableEmbeddedXbf>false</DisableEmbeddedXbf>
+    <GenerateLibraryLayout>true</GenerateLibraryLayout>
     <ApplicationIcon>ico.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
@@ -47,13 +49,13 @@
     <_MainUpdaterSource Include="Components\updater.main\*.cs;Components\updater.main\*.csproj;Core\UpdatePackageIntegrity.cs;Core\UpdateDownload.cs" />
     <_CfgUpdaterSource Include="Components\updater.cfgver\*.cs;Components\updater.cfgver\*.csproj;Components\updater.cfgver\*.yaml" />
   </ItemGroup>
-  <Target Name="BuildMainUpdater" BeforeTargets="BeforeBuild" Inputs="@(_MainUpdaterSource);Build\Version.props;Version.cs" Outputs="Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.dll;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.runtimeconfig.json;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.exe;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.deps.json;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\YamlDotNet.dll">
+  <Target Name="BuildMainUpdater" BeforeTargets="BeforeBuild" Inputs="@(_MainUpdaterSource);Directory.Build.props;Version.cs" Outputs="Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.dll;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.runtimeconfig.json;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.exe;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\updater.main.deps.json;Components\updater.main\bin\$(Configuration)\net10.0\win-x64\publish\YamlDotNet.dll">
     <Message Importance="High" Text="Publishing MainUpdater ($(Configuration)) to intermediate directory..." />
     <MSBuild Projects="Components\updater.main\updater.main.csproj" Targets="Restore;Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=false;NuGetAudit=$(NuGetAudit)" />
   </Target>
 
   <!-- 强制预编译并发布 CfgUpdater 影子组件 -->
-  <Target Name="BuildCfgUpdater" BeforeTargets="BeforeBuild" Inputs="@(_CfgUpdaterSource);Build\Version.props;Version.cs" Outputs="Components\updater.cfgver\bin\$(Configuration)\net10.0\win-x64\publish\updater.cfgver.dll;Components\updater.cfgver\bin\$(Configuration)\net10.0\win-x64\publish\updater.cfgver.runtimeconfig.json;Components\updater.cfgver\bin\$(Configuration)\net10.0\win-x64\publish\updater.cfgver.exe;Components\updater.cfgver\bin\$(Configuration)\net10.0\win-x64\publish\updater.cfgver.deps.json;Components\updater.cfgver\bin\$(Configuration)\net10.0\win-x64\publish\YamlDotNet.dll">
+  <Target Name="BuildCfgUpdater" BeforeTargets="BeforeBuild" Inputs="@(_CfgUpdaterSource);Directory.Build.props;Version.cs" Outputs="Components\updater.cfgver\bin\$(Configuration)\net10.0\win-x64\publish\updater.cfgver.dll;Components\updater.cfgver\bin\$(Configuration)\net10.0\win-x64\publish\updater.cfgver.runtimeconfig.json;Components\updater.cfgver\bin\$(Configuration)\net10.0\win-x64\publish\updater.cfgver.exe;Components\updater.cfgver\bin\$(Configuration)\net10.0\win-x64\publish\updater.cfgver.deps.json;Components\updater.cfgver\bin\$(Configuration)\net10.0\win-x64\publish\YamlDotNet.dll">
     <Message Importance="High" Text="Publishing CfgUpdater ($(Configuration)) to intermediate directory..." />
     <MSBuild Projects="Components\updater.cfgver\updater.cfgver.csproj" Targets="Restore;Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=false;NuGetAudit=$(NuGetAudit)" />
   </Target>
@@ -81,14 +83,8 @@
     <Message Importance="High" Text="Post-build cleanup: payload directory removed." />
   </Target>
 
-  <!-- 打包前剥离 UserInterface 下的 xbf 与目录本身 -->
-  <Target Name="StripUserInterfaceXbf" BeforeTargets="ZipReleaseBuild" Condition="'$(Configuration)' == 'Release'">
-    <RemoveDir Directories="$([System.IO.Path]::Combine('$(OutputPath)', 'UserInterface'))" />
-    <Message Importance="High" Text="Stripped UserInterface directory from output before packaging." />
-  </Target>
-
   <!-- Release 自动化打包流 -->
-  <Target Name="ZipReleaseBuild" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+  <Target Name="ZipReleaseBuild" AfterTargets="Build" DependsOnTargets="ValidateLauncherPackage" Condition="'$(Configuration)' == 'Release'">
     <Message Importance="High" Text="Zipping Release artifacts to $(ReleasePackageFileName)..." />
     <MakeDir Directories="$(ReleasePackageDirectory)" />
     <ZipDirectory SourceDirectory="$(OutputPath)" DestinationFile="$(ReleasePackageDirectory)\$(ReleasePackageFileName)" Overwrite="true" />
@@ -98,9 +94,10 @@
 
   <ItemGroup>
     <Compile Include="Test\ProductionAccess.cs" />
-    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WPF" />
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260101001" />
-    <PackageReference Include="WinUIEx" Version="2.4.0" />
+    <PackageReference Include="System.Drawing.Common" Version="10.0.14" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.14" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="1.8.251222000" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="1.8.260101001" />
     <PackageReference Include="TinyPinyin.Net" Version="1.0.2" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
@@ -147,5 +144,53 @@
   </Target>
 
   <Import Project="Test\Test.targets" />
-  <Import Project="Build\Build.targets" />
+  <ItemGroup>
+    <_LauncherComponent Include="$(EglRepositoryRoot)Components\**\*.csproj" Exclude="$(EglRepositoryRoot)Components\**\bin\**;$(EglRepositoryRoot)Components\**\obj\**" />
+    <_LauncherTest Include="$(EglRepositoryRoot)Test\**\*.csproj" Exclude="$(EglRepositoryRoot)Test\artifacts\**;$(EglRepositoryRoot)Test\**\bin\**;$(EglRepositoryRoot)Test\**\obj\**" />
+  </ItemGroup>
+  <Target Name="GenerateLauncherManifest" Inputs="$(EglRepositoryRoot)app.manifest;$(EglRepositoryRoot)Version.cs;$(EglRepositoryRoot)Directory.Build.props;$(MSBuildThisFileFullPath)" Outputs="$(IntermediateOutputPath)app.manifest">
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <Copy SourceFiles="$(EglRepositoryRoot)app.manifest" DestinationFiles="$(IntermediateOutputPath)app.manifest" />
+    <XmlPoke XmlInputPath="$(IntermediateOutputPath)app.manifest" Query="/*[local-name()='assembly']/*[local-name()='assemblyIdentity']/@version" Value="$(AssemblyVersion)" />
+  </Target>
+  <Target Name="SetLauncherManifest" BeforeTargets="PrepareForBuild" DependsOnTargets="GenerateLauncherManifest">
+    <PropertyGroup>
+      <ApplicationManifest>$([System.IO.Path]::GetFullPath('$(IntermediateOutputPath)app.manifest'))</ApplicationManifest>
+    </PropertyGroup>
+  </Target>
+  <Target Name="StripLauncherDebugSymbols" Condition="'$(Configuration)' == 'Release'">
+    <ItemGroup>
+      <_LauncherDebugSymbols Include="$(OutputPath)**\*.pdb" />
+    </ItemGroup>
+    <Delete Files="@(_LauncherDebugSymbols)" />
+  </Target>
+  <Target Name="ExcludeSourceXamlFromResourceLayout" AfterTargets="GetPackagingOutputs" DependsOnTargets="_CalculateXbfSupport">
+    <Error Condition="'$(_SupportXbfAsEmbedFileResources)' != 'true'" Text="XAML layout requires PRI-embedded XBF support." />
+    <ItemGroup>
+      <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.Extension)' == '.xaml'" />
+    </ItemGroup>
+  </Target>
+  <Target Name="ExcludeEmbeddedXamlFromOutput" AfterTargets="GetCopyToOutputDirectoryItems" BeforeTargets="_CopyOutOfDateSourceItemsToOutputDirectory;_CopyOutOfDateSourceItemsToOutputDirectoryAlways;_CopyDifferingSourceItemsToOutputDirectory" DependsOnTargets="_CalculateXbfSupport">
+    <Error Condition="'$(_SupportXbfAsEmbedFileResources)' != 'true'" Text="XAML output requires PRI-embedded XBF support." />
+    <ItemGroup>
+      <_SourceItemsToCopyToOutputDirectory Remove="@(_SourceItemsToCopyToOutputDirectory)" Condition="'%(_SourceItemsToCopyToOutputDirectory.Extension)' == '.xbf' Or '%(_SourceItemsToCopyToOutputDirectory.Extension)' == '.xaml'" />
+      <_SourceItemsToCopyToOutputDirectoryAlways Remove="@(_SourceItemsToCopyToOutputDirectoryAlways)" Condition="'%(_SourceItemsToCopyToOutputDirectoryAlways.Extension)' == '.xbf' Or '%(_SourceItemsToCopyToOutputDirectoryAlways.Extension)' == '.xaml'" />
+      <_SourceItemsToCopyToOutputDirectoryIfDifferent Remove="@(_SourceItemsToCopyToOutputDirectoryIfDifferent)" Condition="'%(_SourceItemsToCopyToOutputDirectoryIfDifferent.Extension)' == '.xbf' Or '%(_SourceItemsToCopyToOutputDirectoryIfDifferent.Extension)' == '.xaml'" />
+      <AllItemsFullPathWithTargetPath Remove="@(AllItemsFullPathWithTargetPath)" Condition="'%(AllItemsFullPathWithTargetPath.Extension)' == '.xbf' Or '%(AllItemsFullPathWithTargetPath.Extension)' == '.xaml'" />
+    </ItemGroup>
+  </Target>
+  <Target Name="ValidateLauncherPackage" DependsOnTargets="StripLauncherDebugSymbols" Condition="'$(Configuration)' == 'Release'">
+    <Exec Command="pwsh.exe -NoProfile -NonInteractive -File &quot;$(EglRepositoryRoot).github\scripts\validate-package.ps1&quot; -DirectoryPath &quot;$([System.IO.Path]::GetFullPath('$(OutputPath).'))&quot;" />
+  </Target>
+  <Target Name="CleanLauncherIntermediate">
+    <ItemGroup>
+      <_LauncherClean Include="$(EglRepositoryRoot)bin;$(EglRepositoryRoot)obj;$(EglRepositoryRoot)payload;@(_LauncherComponent->'%(RootDir)%(Directory)bin');@(_LauncherComponent->'%(RootDir)%(Directory)obj')" />
+      <_LauncherCleanTest Include="@(_LauncherTest)" Condition="'$(TestHostRunning)' != 'true' Or !$([System.String]::Copy('%(_LauncherTest.Filename)').EndsWith('.Tests'))" />
+      <_LauncherClean Include="@(_LauncherCleanTest->'%(RootDir)%(Directory)bin');@(_LauncherCleanTest->'%(RootDir)%(Directory)obj')" />
+    </ItemGroup>
+    <Error Condition="!$([System.IO.Path]::GetFullPath('%(_LauncherClean.Identity)').StartsWith('$(EglRepositoryRoot)'))" Text="Cleanup target escaped repository: %(_LauncherClean.Identity)" />
+    <RemoveDir Directories="@(_LauncherClean)" />
+  </Target>
+  <Target Name="CleanAfterLauncherRelease" AfterTargets="ZipReleaseBuild" DependsOnTargets="CleanLauncherIntermediate" Condition="'$(Configuration)' == 'Release'" />
+  <Target Name="CleanAfterLauncherClean" AfterTargets="Clean" DependsOnTargets="CleanLauncherIntermediate" />
 </Project>

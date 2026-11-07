@@ -264,7 +264,7 @@ public static class ConfigService
     private static readonly byte[] TokenEntropy = Encoding.UTF8.GetBytes("EricGameLauncher.GitHubToken.v1");
 
     private static string SystemBasePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "eric", AppFolderName);
-    private static string PortableBasePath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data");
+    private static string PortableBasePath => Path.Combine(AppPaths.InstallDirectory, "Data");
 
     private static string? _overrideSystemCachePath;
     public static string SystemCachePath => _overrideSystemCachePath ?? Path.Combine(Path.GetTempPath(), "eric", "ericgamelauncher");

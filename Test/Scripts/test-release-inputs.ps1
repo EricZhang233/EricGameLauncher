@@ -6,7 +6,7 @@ function dotnet {
     throw 'Invalid release input reached the compiler.'
 }
 $buildScript = Join-Path $PSScriptRoot '../../.github/scripts/build-release.ps1'
-Import-Module "$PSScriptRoot/../../Build/Build.psm1" -Force
+Import-Module "$PSScriptRoot/../../.github/scripts/ReleaseTools.psm1" -Force
 $version = (Get-EglBuildMetadata).ExtractedVersion
 Import-Module "$PSScriptRoot/TestWorkspace.psm1" -Force
 $fixture = New-EglTestDirectory 'EGL.ReleaseInputs.'

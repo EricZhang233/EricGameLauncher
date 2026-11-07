@@ -24,7 +24,7 @@ public static class AppIconService
         if (_cachedPath != null && File.Exists(_cachedPath))
             return _cachedPath;
 
-        string exeDirPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, IconFileName);
+        string exeDirPath = Path.Combine(AppPaths.InstallDirectory, IconFileName);
         if (File.Exists(exeDirPath))
         {
             _cachedPath = exeDirPath;

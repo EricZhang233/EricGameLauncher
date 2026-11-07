@@ -13,6 +13,12 @@ namespace EricGameLauncher
         {
                 try { StartupArgs.Parse(); DebugPaths.ApplyIfDebug(); } catch { }
             SystemGuard.EnsureSupported();
+            ResourceManagerRequested += (_, args) =>
+            {
+                string resourcePath = System.IO.Path.Combine(AppContext.BaseDirectory, "EricGameLauncher.pri");
+                args.CustomResourceManager = new Microsoft.Windows.ApplicationModel.Resources.ResourceManager(resourcePath);
+                LogService.Write("Startup", $"XAML resources={resourcePath}");
+            };
             this.InitializeComponent();
             this.UnhandledException += App_UnhandledException;
             TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
