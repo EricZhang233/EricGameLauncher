@@ -250,7 +250,7 @@ public static class ServerConfigManager
     }
 }
 
-public static class ConfigService
+public static partial class ConfigService
 {
     private const string AppFolderName = "EricGameLauncher";
     private const string SettingsFileName = "settings.yaml";
@@ -273,7 +273,7 @@ public static class ConfigService
     private static bool _initialized = false;
     private static bool _storageModeLocked;
 
-    public static bool IsStorageModeLocked => _storageModeLocked;
+    public static bool IsStorageModeLocked => _storageModeLocked || (!_debugModeApplied && AppInstallService.IsInstalled);
 
     public static string SettingsFilePath => Path.Combine(CurrentDataPath, SettingsFileName);
     public static string ItemsFilePath => Path.Combine(CurrentDataPath, ItemsFileName);
@@ -382,7 +382,7 @@ public static class ConfigService
     {
         lock (ConfigPersistence.Gate)
         {
-            if (_storageModeLocked && !useSystemPath)
+            if (IsStorageModeLocked && !useSystemPath)
             {
                 LogService.Write("Config", "Portable storage switch rejected for protected installation");
                 throw new InvalidOperationException(Text.Cli("ErrStorageLocked"));
@@ -765,7 +765,7 @@ public static class ConfigService
     private static void FollowStorageMode()
     {
         if (_debugModeApplied) return;
-        if (_storageModeLocked)
+        if (IsStorageModeLocked)
         {
             CurrentDataPath = SystemBasePath;
             return;

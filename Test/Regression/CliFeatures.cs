@@ -5,6 +5,16 @@ internal static class CliFeatures
 {
     internal static async Task RunAsync(Action<bool, string> check, Func<string[], Task<(int Code, string Output, string Error)>> cli)
     {
+        var conflictingUninstall = await cli(["uninstall", "--keep-data", "--remove-data", "--json"]);
+        using (var result = JsonDocument.Parse(conflictingUninstall.Output))
+            check(conflictingUninstall.Code != 0 && !result.RootElement.GetProperty("success").GetBoolean(), "CLI argument parser rejects conflicting uninstall data flags");
+        foreach (string choice in new[] { "--keep-data", "--remove-data" })
+        {
+            var portableUninstall = await cli(["uninstall", choice, "--json"]);
+            using var result = JsonDocument.Parse(portableUninstall.Output);
+            check(portableUninstall.Code != 0 && !result.RootElement.GetProperty("success").GetBoolean()
+                && portableUninstall.Error.Contains(Text.Cli("ErrUninstallPortableDataChoice"), StringComparison.Ordinal), "CLI parser accepts the data flag but prevents its use for portable shortcut removal: " + choice);
+        }
         foreach (string[] arguments in new[] { new[] { "add", "--path", "missing-title.exe" }, new[] { "add", "--title", "missing-path" }, new[] { "edit", "--id", "absent" }, new[] { "restore", "--id", "absent" }, new[] { "sort", "--move-up" }, new[] { "search" }, new[] { "recycle", "--mark" } })
         {
             var result = await cli([.. arguments, "--json"]);

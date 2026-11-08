@@ -1279,6 +1279,15 @@ public static class CliService
     {
         try
         {
+            bool keep = opts.ContainsKey("keep-data"), remove = opts.ContainsKey("remove-data");
+            if (keep && remove) throw new ArgumentException(Text.Cli("ErrUninstallDataChoice"));
+            bool? keepData = keep ? true : remove ? false : null;
+            if (AppInstallService.TryStartUninstaller(keepData))
+            {
+                WriteLine(Text.Cli("MsgUninstallerStarted"), ConsoleColor.Green);
+                return 0;
+            }
+            if (keepData.HasValue) throw new InvalidOperationException(Text.Cli("ErrUninstallPortableDataChoice"));
             AppInstallService.Uninstall();
             WriteLine(Text.Cli("MsgShortcutsRemoved"), ConsoleColor.Green);
             return 0;
@@ -1394,7 +1403,7 @@ public static class CliService
         new("update",         ["--check", "--install", "--repair", "--history", "--channel", "--json"],      "Help_CmdUpdateDesc",         "Help_Update_Text"),
         new("announcements",  ["--list", "--read", "--json"],          "Help_CmdAnnouncementsDesc",  "Help_Announcements_Text"),
         new("install",        [],                                       "Help_CmdInstallDesc",        "Help_Install_Text"),
-        new("uninstall",      [],                                       "Help_CmdUninstallDesc",      "Help_Uninstall_Text"),
+        new("uninstall",      ["--keep-data", "--remove-data"],           "Help_CmdUninstallDesc",      "Help_Uninstall_Text"),
         new("storage",        ["--status", "--switch", "--json"],      "Help_CmdStorageDesc",        "Help_Storage_Text"),
         new("exit",           [],                                       "Help_CmdExitDesc",           "Help_Exit_Text"),
         new("skill",          [],                                       "Help_CmdSkillDesc",          "Help_Skill_Text"),

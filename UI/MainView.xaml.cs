@@ -39,9 +39,11 @@ namespace EricGameLauncher
         private SettingsFlyoutControl CreateSettingsControl()
         {
             var control = new SettingsFlyoutControl();
+            control.OwnerWindowHandle = _hWnd;
             control.LaunchModeChanged += SettingsControl_LaunchModeChanged;
             control.UpdateChannelChanged += SettingsControl_UpdateChannelChanged;
             control.OperationFailed += ShowOperationError;
+            control.ConfigurationImported += () => { LoadSettings(); ApplyLocalization(); UpdateMenuExitVisibility(); };
             LogService.Write("UI", "Settings control created on demand");
             return control;
         }
@@ -124,6 +126,8 @@ namespace EricGameLauncher
         public MainView()
         {
             this.InitializeComponent();
+            MoreMenuFlyout.Opening += (_, _) => UpdateShortcutMenuState();
+            UpdateShortcutMenuState();
             AppGrid.ActivationRequested += LaunchItem;
             ApplyGridItemTransitions();
             LogService.Write("UI", "Main view constructed");
@@ -1651,6 +1655,14 @@ namespace EricGameLauncher
         {
             try { AppInstallService.Install(); }
             catch (Exception ex) { LogService.Write("App", "MenuInstall_Click failed", ex); }
+        }
+
+        private void UpdateShortcutMenuState()
+        {
+            bool enabled = !AppInstallService.IsInstalled;
+            MenuSystemIntegrationItem.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+            MenuInstallItem.IsEnabled = enabled;
+            MenuUninstallItem.IsEnabled = enabled;
         }
 
         private void MenuUninstall_Click(object sender, RoutedEventArgs e)

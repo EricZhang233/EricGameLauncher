@@ -108,9 +108,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include=".install.cmd">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
     <EmbeddedResource Include="ico.ico" />
     <EmbeddedResource Include="text.yaml" />
     <EmbeddedResource Include="Components\main.cli\CliSkill.embed.md" LogicalName="EricGameLauncher.CliSkill.md" />
@@ -165,6 +162,11 @@
       <_LauncherDebugSymbols Include="$(OutputPath)**\*.pdb" />
     </ItemGroup>
     <Delete Files="@(_LauncherDebugSymbols)" />
+  </Target>
+  <Target Name="UseIntermediatePublishDirectoryForLibraryLayout" BeforeTargets="PrepareForPublish" Condition="'$(_IsPublishing)' != 'true'">
+    <PropertyGroup>
+      <PublishDir>$(IntermediateOutputPath)publish\</PublishDir>
+    </PropertyGroup>
   </Target>
   <Target Name="ExcludeSourceXamlFromResourceLayout" AfterTargets="GetPackagingOutputs" DependsOnTargets="_CalculateXbfSupport">
     <ItemGroup>

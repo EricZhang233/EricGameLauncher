@@ -174,18 +174,17 @@ void Finalize(const Options& options, const std::wstring& version) {
     record.root = root;
     record.owner = options.owner;
     if (!record) {
-        if (options.owner != Sid()) throw std::runtime_error("INSTALL_USER_MISMATCH");
+        if (options.owner != Sid() && (!options.stage || IsUserAnAdmin() == FALSE)) throw std::runtime_error("INSTALL_USER_MISMATCH");
         record.id = Guid();
         SYSTEMTIME date{}; GetLocalTime(&date);
         wchar_t value[9]{};
         swprintf_s(value, L"%04u%02u%02u", date.wYear, date.wMonth, date.wDay);
         record.date = value;
     }
-    if (!previous || !options.update) {
-        if (options.owner != Sid()) throw std::runtime_error("INSTALL_USER_MISMATCH");
-        record.desktop = options.desktop ? (fs::path(Folder(FOLDERID_Desktop)) / L"EricGameLauncher.lnk").wstring() : L"";
-        record.menu = (fs::path(Folder(FOLDERID_Programs)) / L"EricGameLauncher.lnk").wstring();
-    }
+    auto locations = UserShortcuts(options);
+    record.menu = locations.menu;
+    bool desktop = options.update ? fs::is_regular_file(locations.desktop) : options.desktop;
+    record.desktop = desktop ? locations.desktop : L"";
     record.version = version;
     unsigned long long size = fs::file_size(fs::path(root) / L"Uninstall.exe");
     for (const auto& relative : ReadLines(fs::path(root) / Manifest)) size += fs::file_size(PayloadPath(root, relative));
@@ -204,8 +203,7 @@ void Finalize(const Options& options, const std::wstring& version) {
             Shortcut(executable, shortcut);
         }
         WriteRegistration(record);
-        for (const auto& shortcut : {previous.desktop, previous.menu})
-            if (!shortcut.empty() && shortcut != record.desktop && shortcut != record.menu && ShortcutTargets(shortcut, executable)) fs::remove(shortcut);
+        if (!options.update && !previous.desktop.empty() && previous.desktop != record.desktop && ShortcutTargets(previous.desktop, executable)) fs::remove(previous.desktop);
     } catch (...) {
         for (const auto& [shortcut, backup] : backups) {
             if (backup.empty()) DeleteFileW(shortcut.c_str());
@@ -225,21 +223,20 @@ void Install(const Options& requested, const std::wstring& package, const std::v
     auto previous = Find(root, options.owner);
     if (options.update && !previous) throw std::runtime_error("INSTALL_REGISTRATION_MISMATCH");
     if (registered && _wcsicmp(registered.root.c_str(), root.c_str()) != 0) throw std::runtime_error(Utf8(Text("Installer_AlreadyInstalled")));
-    if (!CanWrite(root) && !options.stage) {
+    if (!CanWrite(root)) {
+        if (options.stage || IsUserAnAdmin() != FALSE) throw std::runtime_error(Utf8(Text("Installer_DirectoryNotWritable")));
         auto parameters = L"--quiet --stage --directory " + Quote(root) + L" --owner-sid " + Quote(options.owner) + (options.update ? L" --update" : L"");
+        if (options.desktop) parameters += L" --desktop";
         if (!options.cancelFile.empty()) parameters += L" --cancel-file " + Quote(options.cancelFile);
         if (Run(package, parameters, true) != 0) { CheckCancelled(options); throw std::runtime_error(Utf8(Text("Installer_Failed"))); }
-        Finalize(options, version);
         return;
     }
-    if (!options.update) CloseApplication(root);
+    CloseApplication(root);
     Log(L"Install start root=" + root + L" owner=" + options.owner);
     RootCleanup cleanup{root, !fs::exists(root)};
     fs::create_directories(root);
-    Handle lease(CreateFileW((fs::path(root) / L"._install_lock").c_str(), GENERIC_READ | GENERIC_WRITE | DELETE, 0, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, nullptr));
-    Check(lease.value != INVALID_HANDLE_VALUE, "InstallationInProgress");
-    Handle update(CreateFileW((fs::path(root) / L"._update_lock").c_str(), GENERIC_READ | GENERIC_WRITE | DELETE, 0, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, nullptr));
-    Check(update.value != INVALID_HANDLE_VALUE, "UpdateInProgress");
+    DirectoryLease lease(root);
+    if (fs::exists(fs::path(root) / L"._uninstall_backup")) throw std::runtime_error("UNINSTALL_RECOVERY_REQUIRED");
     auto staging = fs::path(root) / L"._install_staging", backup = fs::path(root) / L"._install_backup";
     Prepare(root, staging, backup);
     try {
@@ -257,7 +254,7 @@ void Install(const Options& requested, const std::wstring& package, const std::v
         }
         WriteLines(staging / Manifest, incoming);
         incoming.push_back(L"Uninstall.exe"); incoming.push_back(Manifest);
-        Apply(options, root, staging, backup, incoming, previousFiles, [&] { if (!options.stage) Finalize(options, version); });
+        Apply(options, root, staging, backup, incoming, previousFiles, [&] { Finalize(options, version); });
     } catch (...) {
         Cleanup(root, staging, backup, true);
         Log(L"Installation failed; files rolled back");
@@ -271,7 +268,8 @@ void ExtractOnly(const Options& requested, const std::wstring& package) {
     options.root = Destination(options.root);
     auto root = options.root;
     if (!CanWrite(root)) {
-        auto parameters = L"--quiet --extract --directory " + Quote(root) + L" --owner-sid " + Quote(options.owner);
+        if (options.stage || IsUserAnAdmin() != FALSE) throw std::runtime_error(Utf8(Text("Installer_DirectoryNotWritable")));
+        auto parameters = L"--quiet --stage --extract --directory " + Quote(root) + L" --owner-sid " + Quote(options.owner);
         if (!options.cancelFile.empty()) parameters += L" --cancel-file " + Quote(options.cancelFile);
         auto result = Run(package, parameters, true);
         CheckCancelled(options);
@@ -281,8 +279,9 @@ void ExtractOnly(const Options& requested, const std::wstring& package) {
     bool existed = fs::exists(root);
     fs::create_directories(root);
     try {
-        Handle lease(CreateFileW((fs::path(root) / L"._extract_lock").c_str(), GENERIC_READ | GENERIC_WRITE | DELETE, 0, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, nullptr));
-        Check(lease.value != INVALID_HANDLE_VALUE, "ExtractionInProgress");
+        DirectoryLease lease(root);
+        if (fs::exists(fs::path(root) / L"._uninstall_backup") || fs::exists(fs::path(root) / L"._install_backup") || fs::exists(fs::path(root) / L"._update_backup"))
+            throw std::runtime_error("INSTALL_RECOVERY_REQUIRED");
         auto staging = fs::path(root) / L"._extract_staging", backup = fs::path(root) / L"._extract_backup";
         Prepare(root, staging, backup);
         try {

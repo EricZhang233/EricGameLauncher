@@ -32,16 +32,15 @@ function Build-Resource([string]$Name, [string]$Uninstaller) {
     $fileVersion = if ($Version.Split('.').Count -eq 3) { $Version + '.0' } else { $Version }
     $lines = @(
         '#include <windows.h>',
-        ('#include "' + (Join-Path $repo 'Components/setup/Pages.rc').Replace('\', '\\') + '"'),
         ('100 ICON "' + (Join-Path $repo 'ico.ico').Replace('\', '\\') + '"'),
         ('101 RCDATA "' + (Join-Path $repo 'text.yaml').Replace('\', '\\') + '"'),
         ('103 RCDATA "' + (Join-Path $thirdParty 'LICENSE').Replace('\', '\\') + '"'),
         ('1 24 "' + (Join-Path $repo 'Components/setup/setup.manifest').Replace('\', '\\') + '"'),
         '1 VERSIONINFO', ('FILEVERSION ' + $fileVersion.Replace('.', ',')), ('PRODUCTVERSION ' + $fileVersion.Replace('.', ',')),
         'FILEOS VOS_NT_WINDOWS32', 'FILETYPE VFT_APP', 'BEGIN', 'BLOCK "StringFileInfo"', 'BEGIN', 'BLOCK "040904B0"', 'BEGIN',
-        'VALUE "CompanyName", "EricSoft\0"', ('VALUE "FileDescription", "Eric Game Launcher ' + $Name + '\0"'),
+        'VALUE "CompanyName", "EricSoft\0"', ('VALUE "FileDescription", "EricGameLauncher ' + $Name + '\0"'),
         ('VALUE "FileVersion", "' + $fileVersion + '\0"'), ('VALUE "ProductVersion", "' + $Version + '\0"'),
-        'VALUE "ProductName", "Eric Game Launcher\0"', 'END', 'END', 'BLOCK "VarFileInfo"', 'BEGIN', 'VALUE "Translation", 0x409, 1200', 'END', 'END'
+        'VALUE "ProductName", "EricGameLauncher\0"', 'END', 'END', 'BLOCK "VarFileInfo"', 'BEGIN', 'VALUE "Translation", 0x409, 1200', 'END', 'END'
     )
     if ($Uninstaller) { $lines += '102 RCDATA "' + $Uninstaller.Replace('\', '\\') + '"' }
     [IO.File]::WriteAllLines($resource, $lines, [Text.UTF8Encoding]::new($false))
@@ -52,7 +51,7 @@ function Build-Resource([string]$Name, [string]$Uninstaller) {
 }
 function Link([string]$Name, [string[]]$Objects, [string]$Resource, [string]$Subsystem = 'WINDOWS') {
     $destination = Join-Path $output "$Name.exe"
-    & link.exe /NOLOGO /LTCG /OPT:REF /OPT:ICF /DYNAMICBASE /HIGHENTROPYVA /NXCOMPAT /GUARD:CF /MACHINE:X64 "/SUBSYSTEM:$Subsystem" /MANIFEST:NO "/OUT:$destination" @Objects $Resource kernel32.lib user32.lib gdi32.lib shell32.lib ole32.lib oleaut32.lib advapi32.lib propsys.lib uuid.lib bcrypt.lib comctl32.lib | Out-Host
+    & link.exe /NOLOGO /LTCG /OPT:REF /OPT:ICF /DYNAMICBASE /HIGHENTROPYVA /NXCOMPAT /GUARD:CF /MACHINE:X64 "/SUBSYSTEM:$Subsystem" /MANIFEST:NO "/OUT:$destination" @Objects $Resource kernel32.lib user32.lib gdi32.lib shell32.lib ole32.lib oleaut32.lib advapi32.lib propsys.lib uuid.lib bcrypt.lib comctl32.lib dwmapi.lib uxtheme.lib | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "Native link failed: $Name" }
     return $destination
 }

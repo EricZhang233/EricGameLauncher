@@ -6,9 +6,106 @@ using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using VirtualKey = Windows.System.VirtualKey;
+using Installation = EricGameLauncher.Installation;
 
 internal static class UiFeatures
 {
+    [System.Runtime.InteropServices.DllImport("advapi32.dll")]
+    private static extern int RegOverridePredefKey(IntPtr key, IntPtr replacement);
+
+    private static async Task InstallationRoutingAsync(Action<bool, string> check, MainView view, string fixture)
+    {
+        string isolation = @"Software\EricSoft\Tests\InstallationRouting-" + Guid.NewGuid().ToString("N");
+        using var hive = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(isolation);
+        var currentUser = new IntPtr(unchecked((int)0x80000001));
+        string root = AppPaths.InstallDirectory;
+        string uninstaller = Path.Combine(root, Installation.InstallRegistration.UninstallerName);
+        string capture = Path.Combine(root, "uninstall-capture.json");
+        string? previousCapture = Environment.GetEnvironmentVariable("EGL_UNINSTALL_TEST_CAPTURE");
+        var copied = new List<string>();
+        check(!File.Exists(uninstaller), "isolated UI host has no installed uninstaller");
+        check(RegOverridePredefKey(currentUser, hive.Handle.DangerousGetHandle()) == 0, "installation routing uses an isolated user registry");
+        try
+        {
+            var update = typeof(MainView).GetMethod("UpdateShortcutMenuState", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+            var menu = (MenuFlyoutSubItem)view.FindName("MenuSystemIntegrationItem");
+            update.Invoke(view, null);
+            check(!AppInstallService.IsInstalled && menu.Visibility == Visibility.Visible && !AppInstallService.TryStartUninstaller(), "portable application displays shortcut management without launching an uninstaller");
+            using var record = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(Installation.InstallRegistration.RegistryPath);
+            record.SetValue("InstallLocation", root);
+            record.SetValue("InstallId", Guid.NewGuid().ToString("N"));
+            record.SetValue("OwnerSid", Installation.InstallRegistration.CurrentUserSid);
+            File.WriteAllText(uninstaller, "invalid uninstaller fixture");
+            copied.Add(uninstaller);
+            update.Invoke(view, null);
+            check(AppInstallService.IsInstalled && menu.Visibility == Visibility.Collapsed, "registered installation hides the actual shortcut menu");
+            check(StoragePolicy.RequiresSystemMode(root), "a writable registered installation still requires system storage");
+            var debugMode = typeof(ConfigService).GetField("_debugModeApplied", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+            object? debugBefore = debugMode.GetValue(null);
+            try
+            {
+                debugMode.SetValue(null, false);
+                bool rejected = false;
+                try { ConfigService.SwitchStorageMode(false); } catch (InvalidOperationException) { rejected = true; }
+                check(ConfigService.IsStorageModeLocked && rejected, "installed-mode storage cannot be switched to portable through Core");
+            }
+            finally { debugMode.SetValue(null, debugBefore); }
+            foreach (var action in new Action[] { AppInstallService.Install, AppInstallService.Uninstall })
+            {
+                bool rejected = false;
+                try { action(); } catch (InvalidOperationException) { rejected = true; }
+                check(rejected, "installed shortcut operations are rejected before changing user shortcuts");
+            }
+            var install = typeof(CliService).GetMethod("CmdInstall", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+            var uninstall = typeof(CliService).GetMethod("CmdUninstall", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+            check(await (Task<int>)install.Invoke(null, new object[] { new Dictionary<string, string>() })! != 0, "CLI install reports failure in installed mode");
+            check(await (Task<int>)uninstall.Invoke(null, new object[] { new Dictionary<string, string>() })! != 0, "installed CLI uninstall requires an explicit data choice");
+            check(await (Task<int>)uninstall.Invoke(null, new object[] { new Dictionary<string, string> { ["keep-data"] = "true" } })! != 0, "CLI uninstall reports launch failure instead of falling back to shortcut removal");
+            foreach (string extension in new[] { ".dll", ".deps.json", ".runtimeconfig.json" })
+            {
+                string source = Path.ChangeExtension(fixture, extension);
+                string destination = Path.Combine(root, Path.GetFileName(source));
+                if (File.Exists(destination)) throw new IOException("Uninstaller fixture would overwrite " + destination);
+                File.Copy(source, destination);
+                copied.Add(destination);
+            }
+            File.Copy(fixture, uninstaller, true);
+            Environment.SetEnvironmentVariable("EGL_UNINSTALL_TEST_CAPTURE", capture);
+            check(await (Task<int>)uninstall.Invoke(null, new object[] { new Dictionary<string, string>() })! != 0 && !File.Exists(capture), "bare installed uninstall does not launch even an available uninstaller");
+            check(await (Task<int>)uninstall.Invoke(null, new object[] { new Dictionary<string, string> { ["keep-data"] = "true", ["remove-data"] = "true" } })! != 0 && !File.Exists(capture), "installed uninstall rejects conflicting data choices without launching");
+            foreach (string choice in new[] { "keep-data", "remove-data" })
+            {
+                File.Delete(capture);
+                check(await (Task<int>)uninstall.Invoke(null, new object[] { new Dictionary<string, string> { [choice] = "true" } })! == 0, "CLI uninstall forwards explicit choice: " + choice);
+                var deadline = DateTime.UtcNow.AddSeconds(10);
+                while (!File.Exists(capture) && DateTime.UtcNow < deadline) await Task.Delay(25);
+                using var captured = System.Text.Json.JsonDocument.Parse(await File.ReadAllTextAsync(capture));
+                var arguments = captured.RootElement.GetProperty("Arguments").EnumerateArray().Select(x => x.GetString()).ToArray();
+                check(arguments.SequenceEqual(new[] { "--quiet", "--" + choice, "--directory", root, "--owner-sid", Installation.InstallRegistration.CurrentUserSid })
+                    && captured.RootElement.GetProperty("WorkingDirectory").GetString() == root, "CLI uninstaller receives the selected data policy, silent mode, directory and owner");
+                try
+                {
+                    using var worker = System.Diagnostics.Process.GetProcessById(captured.RootElement.GetProperty("ProcessId").GetInt32());
+                    check(await Task.Run(() => worker.WaitForExit(5000)), "uninstaller test process exits before fixture cleanup");
+                }
+                catch (ArgumentException) { }
+            }
+            record.SetValue("InstallLocation", Path.Combine(root, "another-copy"));
+            update.Invoke(view, null);
+            check(!AppInstallService.IsInstalled && menu.Visibility == Visibility.Visible, "a portable copy displays the shortcut menu despite another directory being registered");
+            check(await (Task<int>)uninstall.Invoke(null, new object[] { new Dictionary<string, string> { ["remove-data"] = "true" } })! != 0, "portable uninstall rejects data options instead of treating them as data deletion");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("EGL_UNINSTALL_TEST_CAPTURE", previousCapture);
+            if (RegOverridePredefKey(currentUser, IntPtr.Zero) != 0) Environment.FailFast("Unable to restore the user registry after installation routing tests.");
+            Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(isolation);
+            foreach (string file in copied) File.Delete(file);
+            File.Delete(capture);
+            typeof(MainView).GetMethod("UpdateShortcutMenuState", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(view, null);
+        }
+    }
+
     internal static int Run(string root, string fixture)
     {
         int result = 1;
@@ -62,9 +159,43 @@ internal static class UiFeatures
                 Check(embeddedCandidate.Kind == Microsoft.Windows.ApplicationModel.Resources.ResourceCandidateKind.EmbeddedData && embeddedCandidate.ValueAsBytes.Take(4).SequenceEqual(new byte[] { 88, 66, 70, 0 }), "WinUI resolves compiled XAML directly from embedded bytes");
                 Check(xamlManager.MainResourceMap.TryGetValue("ms-resource://other/Files/UI/MainView.xbf") == null && xamlManager.MainResourceMap.TryGetValue("Files/UI/Missing.xbf") == null, "XAML resolver preserves missing and foreign resources");
                 var view = Find<MainView>((DependencyObject)window.Content)!;
+                await InstallationRoutingAsync(Check, view, fixture);
                 var storageSettings = new SettingsFlyoutControl();
                 storageSettings.ApplyLocalization();
                 storageSettings.Sync();
+                var transferButton = (Button)storageSettings.FindName("BtnConfigurationTransfer");
+                var dataActions = (StackPanel)storageSettings.FindName("StorageActionButtons");
+                Check(transferButton.Visibility == Visibility.Visible && transferButton.Flyout == null
+                    && dataActions.Children.Contains(transferButton)
+                    && dataActions.Children.Contains((Button)storageSettings.FindName("BtnOpenConfigFolder"))
+                    && dataActions.Children.Contains((Button)storageSettings.FindName("BtnOpenCacheFolder")), "one configuration transfer button shares the existing data action row");
+                var transfer = storageSettings.CreateConfigurationDialog(view.XamlRoot);
+                var transferActions = (Grid)((StackPanel)((ScrollViewer)transfer.Dialog.Content).Content).Children[0];
+                Check(transferActions.Children.Count == 2 && transferActions.Children.Contains(transfer.Import)
+                    && transferActions.Children.Contains(transfer.Export) && transfer.Dialog.PrimaryButtonText == "", "one modal contains import and export actions before an archive is selected");
+                var transferOpened = new TaskCompletionSource();
+                transfer.Dialog.Opened += (_, _) => transferOpened.TrySetResult();
+                var transferOperation = transfer.Dialog.ShowAsync();
+                await transferOpened.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                Check(transfer.Import.XamlRoot == view.XamlRoot && transfer.Export.XamlRoot == view.XamlRoot, "configuration transfer opens as a modal in the current window");
+                var conflictPanel = (StackPanel)((StackPanel)((ScrollViewer)transfer.Dialog.Content).Content).Children[4];
+                var choices = (StackPanel)conflictPanel.Children[1];
+                var explanation = (TextBlock)conflictPanel.Children[2];
+                var replaceChoice = (RadioButton)choices.Children[0];
+                var mergeChoice = (RadioButton)choices.Children[1];
+                replaceChoice.IsChecked = true;
+                Check(choices.Orientation == Orientation.Horizontal && explanation.Visibility == Visibility.Visible
+                    && explanation.Text == Text.T("ConfigArchive_ReplaceDescription"), "selecting replace shows only its explanation below the shared choice row");
+                replaceChoice.IsChecked = false;
+                mergeChoice.IsChecked = true;
+                Check(explanation.Text == Text.T("ConfigArchive_MergeDescription"), "selecting merge switches the explanation to the selected policy");
+                transfer.Dialog.Hide();
+                await transferOperation;
+                var importSelection = SettingsFlyoutControl.CreateImportSelection();
+                Check(importSelection.Settings.IsChecked == true && importSelection.Items.IsChecked == true
+                    && ((StackPanel)importSelection.Content.Children[1]).Orientation == Orientation.Horizontal, "import presents settings and items-with-icons checkboxes on one row");
+                importSelection.Settings.IsChecked = false;
+                Check(importSelection.Items.IsChecked == true, "import section checkboxes support selecting only items and icons");
                 var storageButton = (Button)storageSettings.FindName("BtnSwitchStorageMode");
                 Check(storageButton.Visibility == Visibility.Visible, "writable installation displays the storage switch");
                 var storageLock = typeof(ConfigService).GetField("_storageModeLocked", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
@@ -73,6 +204,7 @@ internal static class UiFeatures
                     storageLock.SetValue(null, true);
                     storageSettings.Sync();
                     Check(storageButton.Visibility == Visibility.Collapsed, "locked installation hides the storage switch");
+                    Check(transferButton.Visibility == Visibility.Visible && transferButton.IsEnabled, "locked storage keeps configuration import and export available");
                 }
                 finally
                 {

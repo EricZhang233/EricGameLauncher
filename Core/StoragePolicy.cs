@@ -4,6 +4,7 @@ internal static class StoragePolicy
 {
     internal static bool RequiresSystemMode(string installDirectory)
     {
+        if (Installation.InstallRegistration.Find(installDirectory) != null) return true;
         if (IsProtectedDirectory(installDirectory)) return true;
         if (!CanWriteDirectory(installDirectory)) return true;
         string data = Path.Combine(installDirectory, "Data");

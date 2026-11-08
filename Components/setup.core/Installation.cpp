@@ -32,6 +32,12 @@ std::string Utf8(const std::wstring& value) {
 void Check(bool result, const char* operation) {
     if (!result) throw std::runtime_error(std::string(operation) + " (" + std::to_string(GetLastError()) + ")");
 }
+DirectoryLease::DirectoryLease(const fs::path& root) {
+    installation.value = CreateFileW((root / L"._install_lock").c_str(), GENERIC_READ | GENERIC_WRITE | DELETE, 0, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, nullptr);
+    Check(installation.value != INVALID_HANDLE_VALUE, "InstallationInProgress");
+    update.value = CreateFileW((root / L"._update_lock").c_str(), GENERIC_READ | GENERIC_WRITE | DELETE, 0, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, nullptr);
+    Check(update.value != INVALID_HANDLE_VALUE, "UpdateInProgress");
+}
 std::vector<unsigned char> Resource(int id) {
     HRSRC entry = FindResourceW(nullptr, MAKEINTRESOURCEW(id), RT_RCDATA);
     Check(entry != nullptr, "FindResource");
@@ -97,9 +103,9 @@ std::wstring Guid() {
     for (wchar_t c : std::wstring(buffer)) if (c != L'{' && c != L'}' && c != L'-') result += c;
     return result;
 }
-std::wstring Folder(REFKNOWNFOLDERID id) {
+std::wstring Folder(REFKNOWNFOLDERID id, DWORD flags) {
     PWSTR path = nullptr;
-    Check(SUCCEEDED(SHGetKnownFolderPath(id, 0, nullptr, &path)), "SHGetKnownFolderPath");
+    Check(SUCCEEDED(SHGetKnownFolderPath(id, flags, nullptr, &path)), "SHGetKnownFolderPath");
     std::wstring result(path);
     CoTaskMemFree(path);
     return result;
@@ -190,6 +196,13 @@ std::wstring Quote(const std::wstring& value) {
     result.append(slashes * 2, L'\\');
     return result + L'"';
 }
+fs::path UninstallDataDirectory(const Options& options) {
+    auto path = options.dataDirectory ? *options.dataDirectory : fs::path(Folder(FOLDERID_ProgramData)) / L"eric" / Product;
+    if (path.empty() || !path.is_absolute()) throw std::runtime_error("UNINSTALL_INVALID_DATA_DIRECTORY");
+    path = path.lexically_normal().make_preferred();
+    while (path != path.root_path() && path.filename().empty()) path = path.parent_path();
+    return path;
+}
 Options Parse() {
     int count = 0;
     LPWSTR* values = CommandLineToArgvW(GetCommandLineW(), &count);
@@ -208,6 +221,11 @@ Options Parse() {
             else if (key == L"--cancel-file") result.cancelFile = values[i];
             else result.parent = std::stoul(values[i]);
         } else if (key == L"--quiet") result.quiet = true;
+        else if (key == L"--keep-data" || key == L"--remove-data") {
+            if (result.dataChoice) throw std::runtime_error(Utf8(Text("Installer_InvalidArguments")));
+            result.keepData = key == L"--keep-data";
+            result.dataChoice = true;
+        }
         else if (key == L"--update") result.update = true;
         else if (key == L"--stage") result.stage = true;
         else if (key == L"--worker") result.worker = true;
@@ -257,12 +275,54 @@ Record ReadRegistration(const std::wstring& owner) {
     record.date = Get(key.value, L"InstallDate");
     DWORD bytes = sizeof(record.size);
     RegGetValueW(key.value, nullptr, L"EstimatedSize", RRF_RT_REG_DWORD, nullptr, &record.size, &bytes);
+    Key startup;
+    auto startupPath = UserPath(owner, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", hive);
+    if (RegOpenKeyExW(hive, startupPath.c_str(), 0, KEY_READ, &startup.value) == ERROR_SUCCESS) {
+        auto command = Get(startup.value, Product);
+        auto prefix = Quote((fs::path(record.root) / L"EricGameLauncher.exe").wstring());
+        if (_wcsnicmp(command.c_str(), prefix.c_str(), prefix.size()) == 0) record.startup = command;
+    }
     return record;
 }
 Record Find(const std::wstring& root, const std::wstring& owner) {
     auto record = ReadRegistration(owner);
     if (!record || !Same(fs::absolute(record.root).lexically_normal(), fs::absolute(root).lexically_normal()) || !fs::is_regular_file(fs::path(root) / L"Uninstall.exe") || !fs::is_regular_file(fs::path(root) / L"EricGameLauncher.exe")) return {};
     return record;
+}
+Record RegisteredInstallation(const std::wstring& owner) {
+    auto record = ReadRegistration(owner);
+    if (!record) return {};
+    try { return Find(record.root, owner); }
+    catch (const fs::filesystem_error&) { Log(L"Ignored invalid installation path in registry"); return {}; }
+}
+ShortcutLocations UserShortcuts(const Options& options) {
+    if (options.shortcuts) return *options.shortcuts;
+    if (options.owner == Sid()) return {
+        (fs::path(Folder(FOLDERID_Desktop, KF_FLAG_DONT_VERIFY)) / L"EricGameLauncher.lnk").wstring(),
+        (fs::path(Folder(FOLDERID_Programs, KF_FLAG_DONT_VERIFY)) / L"EricGameLauncher.lnk").wstring()
+    };
+    HKEY hive;
+    auto path = UserPath(options.owner, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders", hive);
+    Key key;
+    Check(RegOpenKeyExW(hive, path.c_str(), 0, KEY_READ, &key.value) == ERROR_SUCCESS, "OpenUserShellFolders");
+    auto desktop = Get(key.value, L"Desktop"), menu = Get(key.value, L"Programs");
+    if (!fs::path(desktop).is_absolute() || !fs::path(menu).is_absolute()) throw std::runtime_error("INSTALL_SHORTCUT_FOLDER_MISSING");
+    return {(fs::path(desktop) / L"EricGameLauncher.lnk").wstring(), (fs::path(menu) / L"EricGameLauncher.lnk").wstring()};
+}
+Record SelectInstallation(Options& options) {
+    auto installed = RegisteredInstallation(options.owner);
+    options.extract = false;
+    options.update = static_cast<bool>(installed);
+    if (installed) {
+        options.root = installed.root;
+        options.desktop = fs::is_regular_file(UserShortcuts(options).desktop);
+        options.menu = true;
+    }
+    return installed;
+}
+std::wstring UpgradeSummary(const Record& installed, const std::wstring& target) {
+    auto version = installed.version.empty() ? Text("Installer_UnknownVersion") : installed.version;
+    return version + L" → " + target;
 }
 static void Set(HKEY key, const wchar_t* name, const std::wstring& value) {
     Check(RegSetValueExW(key, name, 0, REG_SZ, reinterpret_cast<const BYTE*>(value.c_str()), static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t))) == ERROR_SUCCESS, "RegSetValueEx");
@@ -277,13 +337,13 @@ void WriteRegistration(const Record& record) {
     Check(RegCreateKeyExW(hive, path.c_str(), 0, nullptr, 0, KEY_WRITE, nullptr, &key.value, nullptr) == ERROR_SUCCESS, "RegCreateKeyEx");
     auto executable = (fs::path(record.root) / L"EricGameLauncher.exe").wstring();
     auto uninstall = Quote((fs::path(record.root) / L"Uninstall.exe").wstring()) + L" --owner-sid " + Quote(record.owner);
-    Set(key.value, L"DisplayName", L"Eric Game Launcher");
+    Set(key.value, L"DisplayName", Product);
     Set(key.value, L"DisplayVersion", record.version);
     Set(key.value, L"Publisher", L"EricSoft");
     Set(key.value, L"InstallLocation", record.root);
     Set(key.value, L"DisplayIcon", Quote(executable) + L",0");
     Set(key.value, L"UninstallString", uninstall);
-    Set(key.value, L"QuietUninstallString", uninstall + L" --quiet");
+    Set(key.value, L"QuietUninstallString", uninstall + L" --quiet --remove-data");
     Set(key.value, L"InstallDate", record.date);
     Number(key.value, L"EstimatedSize", record.size);
     Number(key.value, L"NoModify", 1);
@@ -296,6 +356,16 @@ void WriteRegistration(const Record& record) {
     path = UserPath(record.owner, AppPathKey, hive);
     Check(RegCreateKeyExW(hive, path.c_str(), 0, nullptr, 0, KEY_WRITE, nullptr, &app.value, nullptr) == ERROR_SUCCESS, "RegCreateKeyEx");
     Set(app.value, nullptr, executable);
+}
+void RestoreRegistration(const Record& record) {
+    WriteRegistration(record);
+    if (!record.startup.empty()) {
+        HKEY hive;
+        Key startup;
+        auto path = UserPath(record.owner, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", hive);
+        Check(RegCreateKeyExW(hive, path.c_str(), 0, nullptr, 0, KEY_WRITE, nullptr, &startup.value, nullptr) == ERROR_SUCCESS, "CreateStartupRegistration");
+        Set(startup.value, Product, record.startup);
+    }
 }
 void RemoveRegistration(const Record& record) {
     auto existing = ReadRegistration(record.owner);
@@ -323,7 +393,7 @@ void Shortcut(const std::wstring& executable, const std::wstring& destination) {
     std::unique_ptr<IShellLinkW, void(*)(IShellLinkW*)> link(raw, [](auto p) { p->Release(); });
     Check(SUCCEEDED(link->SetPath(executable.c_str())), "SetPath");
     Check(SUCCEEDED(link->SetWorkingDirectory(fs::path(executable).parent_path().c_str())), "SetWorkingDirectory");
-    Check(SUCCEEDED(link->SetDescription(L"Eric Game Launcher")), "SetDescription");
+    Check(SUCCEEDED(link->SetDescription(Product)), "SetDescription");
     IPropertyStore* properties = nullptr;
     Check(SUCCEEDED(link->QueryInterface(IID_PPV_ARGS(&properties))), "IPropertyStore");
     std::unique_ptr<IPropertyStore, void(*)(IPropertyStore*)> store(properties, [](auto p) { p->Release(); });
@@ -395,12 +465,17 @@ void CloseApplication(const std::wstring& root) {
     Check(snapshot.value != INVALID_HANDLE_VALUE, "ProcessSnapshot");
     PROCESSENTRY32W entry{ sizeof(entry) };
     for (BOOL more = Process32FirstW(snapshot.value, &entry); more; more = Process32NextW(snapshot.value, &entry)) {
-        if (_wcsicmp(entry.szExeFile, L"EricGameLauncher.exe") != 0) continue;
+        bool cli = _wcsicmp(entry.szExeFile, L"EricGameLauncher.Cli.exe") == 0;
+        if (!cli && _wcsicmp(entry.szExeFile, L"EricGameLauncher.exe") != 0) continue;
         Handle process(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, entry.th32ProcessID));
         if (process.value == nullptr) continue;
         wchar_t executable[32768]{};
         DWORD size = 32768;
-        if (!QueryFullProcessImageNameW(process.value, 0, executable, &size) || !Same(executable, fs::path(root) / L"EricGameLauncher.exe")) continue;
+        if (!QueryFullProcessImageNameW(process.value, 0, executable, &size) || !Same(executable, fs::path(root) / (cli ? L"EricGameLauncher.Cli.exe" : L"EricGameLauncher.exe"))) continue;
+        if (cli) {
+            if (WaitForSingleObject(process.value, 15000) != WAIT_OBJECT_0) throw std::runtime_error(Utf8(Text("Installer_CloseApplication")));
+            continue;
+        }
         const auto pipePath = L"\\\\.\\pipe\\EricGameLauncher.ServiceHost.v1";
         WaitNamedPipeW(pipePath, 500);
         Handle pipe(CreateFileW(pipePath, GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr));

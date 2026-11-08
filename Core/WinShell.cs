@@ -443,6 +443,9 @@ public static class Win32FileDialog
     [DllImport("comdlg32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern bool GetOpenFileNameW(ref OpenFileName ofn);
 
+    [DllImport("comdlg32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool GetSaveFileNameW(ref OpenFileName ofn);
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct OpenFileName
     {
@@ -493,7 +496,7 @@ public static class Win32FileDialog
             lpstrFileTitle = new string('\0', 128),
             nMaxFileTitle = 64,
             nFilterIndex = 1,
-            Flags = 0x00080000 | 0x00001000
+            Flags = 0x00080000 | 0x00001000 | 0x00000008
         };
 
         try
@@ -508,6 +511,17 @@ public static class Win32FileDialog
     public static string BuildFilter(params string[] parts)
     {
         return string.Concat(parts) + "\0";
+    }
+
+    public static string? ShowSaveFileDialog(IntPtr hwnd, string title, string filter, string suggestedName, string extension)
+    {
+        var dialog = new OpenFileName
+        {
+            lStructSize = Marshal.SizeOf<OpenFileName>(), hwndOwner = hwnd, lpstrTitle = title, lpstrFilter = filter,
+            lpstrFile = suggestedName.PadRight(32768, '\0'), nMaxFile = 32768, lpstrFileTitle = new string('\0', 260), nMaxFileTitle = 260,
+            lpstrDefExt = extension, nFilterIndex = 1, Flags = 0x00080000 | 0x00000800 | 0x00000008 | 0x00000002
+        };
+        return GetSaveFileNameW(ref dialog) ? dialog.lpstrFile.TrimEnd('\0') : null;
     }
 }
 

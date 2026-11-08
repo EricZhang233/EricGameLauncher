@@ -6,7 +6,34 @@ namespace EricGameLauncher;
 public static class AppInstallService
 {
     private const string AppName = "EricGameLauncher";
-    private const string Description = "Eric Game Launcher";
+    private const string Description = AppName;
+
+    public static bool IsInstalled => Installation.InstallRegistration.Find(AppPaths.InstallDirectory) != null;
+
+    private static void RequirePortable()
+    {
+        if (IsInstalled) throw new InvalidOperationException(Text.Cli("ErrInstalledShortcutsManaged"));
+    }
+
+    public static bool TryStartUninstaller(bool? keepData = null)
+    {
+        var installation = Installation.InstallRegistration.Find(AppPaths.InstallDirectory);
+        if (installation == null) return false;
+        if (keepData == null) throw new InvalidOperationException(Text.Cli("ErrUninstallDataChoice"));
+        var start = new ProcessStartInfo(Path.Combine(installation.Directory, Installation.InstallRegistration.UninstallerName))
+        {
+            WorkingDirectory = installation.Directory,
+            UseShellExecute = false
+        };
+        start.ArgumentList.Add("--quiet");
+        start.ArgumentList.Add(keepData.Value ? "--keep-data" : "--remove-data");
+        start.ArgumentList.Add("--directory");
+        start.ArgumentList.Add(installation.Directory);
+        start.ArgumentList.Add("--owner-sid");
+        start.ArgumentList.Add(installation.OwnerSid);
+        using var process = Process.Start(start) ?? throw new InvalidOperationException(Text.Cli("ErrUninstallerStart"));
+        return true;
+    }
 
     private static string GetMainExePath()
     {
@@ -22,6 +49,7 @@ public static class AppInstallService
 
     public static void Install()
     {
+        RequirePortable();
         using (LogService.StartOperation("App", "Install"))
         {
             try
@@ -49,6 +77,7 @@ public static class AppInstallService
 
     public static void Uninstall()
     {
+        RequirePortable();
         using (LogService.StartOperation("App", "Uninstall"))
         {
             try

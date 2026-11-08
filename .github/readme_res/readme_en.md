@@ -53,7 +53,7 @@
 *   💻 **CLI & Skill**: The command line shares the desktop app's library, settings and core services, with built-in help and an integration guide for scripts and AI agents to manage and launch games.
 *   🚀 **Quick Start**: A background host pre-reads configuration and warms up icons and the interface, so the next launch appears almost instantly. It is off by default. Choose More → Exit to end the current session.
 *   🗑️ **Three-stage deletion**: Deleting in the main window only moves an item to the Recycle Bin; only deleting it there starts the 72-hour countdown, and it is purged on the next launch after that. A slip of the hand is recoverable.
-*   🎒 **Fully portable**: Configuration and icon cache can travel with the program — drop it on a USB drive and take your library anywhere. Switch between system and portable modes in one click.
+*   🎒 **Portable configuration**: Extracted copies in writable directories can switch between system and portable data storage; registered installations use system data. Every mode supports ZIP configuration import and export.
 
 <a name="quickstart"></a>
 
@@ -65,7 +65,7 @@
 ### Three steps
 
 1. **Download**: Grab the latest archive from [Releases](https://github.com/EricZhang233/EricGameLauncher/releases) and extract it anywhere (paths with spaces or non-ASCII characters are fine).
-2. **Run**: Double-click `EricGameLauncher.exe`; initialization happens automatically on first launch. Want desktop and Start menu shortcuts as well? Run `.install.cmd` instead.
+2. **Run**: Install using the Setup EXE, or extract and double-click `EricGameLauncher.exe`. Portable copies can create or remove desktop and Start menu shortcuts through the application's Shortcuts menu. Registered installations let the installer manage those shortcuts: the menu is hidden and CLI `install` is disabled. Installed-mode CLI uninstallation requires `uninstall --keep-data` or `uninstall --remove-data`. The graphical uninstaller's Keep data checkbox is unchecked by default and applies only to the fixed system data directory.
 3. **Fill your library**: Click **More → Scan** in the top-right corner to detect installed games and import them in one click, or use **More → Add** to point at an exe, shortcut, web page or Store app.
 
 ---
@@ -253,7 +253,7 @@ No installation is required — extract and run. The only times it writes to the
 <details>
 <summary><b>Where is my data stored?</b></summary>
 
-System mode is the default, storing data in `%ProgramData%\eric\EricGameLauncher` with settings.yaml, items.yaml and the ico folder. You can switch to portable mode to keep everything in a `Data` folder inside the program directory and take it with you. Switching modes migrates configuration and icons. Temporary caches, including launch counts, remain under `%TEMP%\eric\ericgamelauncher`. Back up the entire data directory to preserve your library and icons.
+Registered installations use system storage only, under `%ProgramData%\eric\EricGameLauncher` with settings.yaml, items.yaml and the ico folder. Extracted copies can switch between system and portable storage when the directory is writable; portable data lives in the program directory's `Data` folder. A single icon button in the Settings data row opens the configuration transfer modal. It exports a user-named ZIP containing settings, active and recycled items and referenced icons. The format identifier contains version metadata without a file list. Import validates the identifier, archive structure and configuration contents before offering separate Settings and Items-and-icons checkboxes; existing data requires Replace or Add without duplicates. Unselected sections are retained. GitHub tokens keep their Windows user encryption and may need re-entry on another computer. Temporary caches, including launch counts, remain under `%TEMP%\eric\ericgamelauncher` and are excluded from configuration archives.
 </details>
 
 <details>

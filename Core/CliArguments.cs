@@ -55,6 +55,7 @@ internal static class CliArguments
             _ => []
         };
         if (actions.Count(result.ContainsKey) > 1) throw Error(command);
+        if (command == "uninstall" && result.ContainsKey("keep-data") && result.ContainsKey("remove-data")) throw Error(command);
         if (command == "add" && (!result.ContainsKey("path") || string.IsNullOrWhiteSpace(result["path"]))) throw Error("--path");
         if (command == "sort" && actions.Skip(1).Any(result.ContainsKey) && !result.ContainsKey("id")) throw Error("--id");
         if (command == "settings" && result.TryGetValue("set", out string? setting) && (!setting.Contains('=') || setting.StartsWith('='))) throw Error("--set");

@@ -5,7 +5,7 @@ Import-Module "$PSScriptRoot/TestWorkspace.psm1" -Force
 $root = New-EglTestDirectory 'package-policy-'
 New-Item -ItemType Directory -Path $root -Force | Out-Null
 $checks = 0
-$required = @('EricGameLauncher.exe', 'EricGameLauncher.dll', 'EricGameLauncher.Cli.exe', 'EricGameLauncher.Cli.dll', '.install.cmd')
+$required = @('EricGameLauncher.exe', 'EricGameLauncher.dll', 'EricGameLauncher.Cli.exe', 'EricGameLauncher.Cli.dll')
 function Check([bool]$condition, [string]$name) {
     if (-not $condition) { throw "FAIL $name" }
     $script:checks++
@@ -15,6 +15,7 @@ function Write-Package([string]$path, [string[]]$names) {
     $archive = [IO.Compression.ZipFile]::Open($path, [IO.Compression.ZipArchiveMode]::Create)
     try {
         foreach ($name in $names) {
+            if ($name.EndsWith('/')) { $null = $archive.CreateEntry($name); continue }
             $writer = [IO.StreamWriter]::new($archive.CreateEntry($name).Open())
             try { $writer.Write('isolated package fixture; never executable') } finally { $writer.Dispose() }
         }
@@ -40,6 +41,22 @@ try {
     Expand-Archive -LiteralPath $clean -DestinationPath $cleanDirectory
     Assert-EglReleasePackage -DirectoryPath $cleanDirectory
     Check $true 'shared package policy accepts a clean directory and archive'
+    foreach ($name in @('publish/', 'publish/stale.dll')) {
+        $package = Join-Path $root ([guid]::NewGuid().ToString('N') + '.zip')
+        Write-Package $package ($required + $name)
+        $rejected = $false
+        try { Assert-EglReleasePackage -PackagePath $package } catch { $rejected = $_.Exception.Message.StartsWith('Release package contains a temporary publish directory:') }
+        $directory = Join-Path $root ([guid]::NewGuid().ToString('N'))
+        Expand-Archive -LiteralPath $package -DestinationPath $directory
+        $directoryRejected = $false
+        try { Assert-EglReleasePackage -DirectoryPath $directory } catch { $directoryRejected = $_.Exception.Message.StartsWith('Release package contains a temporary publish directory:') }
+        Check ($rejected -and $directoryRejected) "directory and archive reject temporary publish output: $name"
+    }
+    $legacyInstaller = Join-Path $root 'legacy-installer.zip'
+    Write-Package $legacyInstaller ($required + '.install.cmd')
+    $rejected = $false
+    try { Assert-EglReleasePackage -PackagePath $legacyInstaller } catch { $rejected = $_.Exception.Message.StartsWith('Release package contains the retired shortcut installer:') }
+    Check $rejected 'retired shortcut installer cannot reappear in release payloads'
     foreach ($name in @('ico.ico', 'nested/ICO.ICO')) {
         $package = Join-Path $root ([guid]::NewGuid().ToString('N') + '.zip')
         Write-Package $package ($required + $name)

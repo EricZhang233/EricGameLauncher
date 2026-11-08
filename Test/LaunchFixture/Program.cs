@@ -1,3 +1,10 @@
+if (Environment.GetEnvironmentVariable("EGL_UNINSTALL_TEST_CAPTURE") is { Length: > 0 } uninstallCapture)
+{
+    string temporary = uninstallCapture + "." + Environment.ProcessId;
+    File.WriteAllText(temporary, System.Text.Json.JsonSerializer.Serialize(new { Arguments = args, WorkingDirectory = Environment.CurrentDirectory, ProcessId = Environment.ProcessId }));
+    File.Move(temporary, uninstallCapture, true);
+    return 0;
+}
 if (args.Length >= 2 && args[0] == "--capture")
 {
     using var identity = OperatingSystem.IsWindows() ? System.Security.Principal.WindowsIdentity.GetCurrent() : null;

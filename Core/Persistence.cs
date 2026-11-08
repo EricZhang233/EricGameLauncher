@@ -45,6 +45,8 @@ internal static class ConfigPersistence
         {
             try { if (!mutex.WaitOne(timeout ?? TimeSpan.FromSeconds(20))) throw new TimeoutException(Text.T("DataFile_Busy")); }
             catch (AbandonedMutexException) { }
+            try { ConfigurationArchive.Recover(path); }
+            catch { mutex.ReleaseMutex(); throw; }
             return new Lease(mutex);
         }
         catch { mutex.Dispose(); throw; }

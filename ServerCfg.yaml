@@ -19,6 +19,45 @@ announcements:
     visible: false # bool (true | false)
   # 示例公告结束
 
+  - id: "update-carrier-transition-140"
+    title_zh: |
+      重要：更新包格式调整与数据存储说明
+    title_en: |
+      Important: Update Package Format and Data Storage Changes
+    body_zh: |
+      从 1.4.0 开始，EricGameLauncher 的更新包将以 EXE 为主要载体，统一支持安装与解压两种使用方式，同时在过渡期内继续提供 ZIP 兼容包。
+
+      一、更新兼容安排
+      1.4.0 仍兼容现有更新系统，可通过启动器内置更新功能正常升级，无需手动安装。接下来的几个版本将继续提供 ZIP 兼容包，供旧版更新系统使用，请及时更新。
+      正式移除 ZIP 兼容支持时，我们会另行发布公告，说明受影响的版本和后续升级方式。
+
+      二、安装模式与便携模式
+      安装模式：数据固定保存在 %ProgramData%\eric\EricGameLauncher，不再支持切换为便携数据模式。
+      便携部署：现有便携版通过启动器正常更新后，仍会沿用原有的部署方式和数据存储模式。更新包改为 EXE，不会自动将便携版转换为安装版。
+      如果计划改用安装模式，请先在现有便携版程序中将存储模式切换为“系统模式”，确认数据迁移完成后，再使用安装器进行安装或升级。
+      如果希望继续便携使用，可在安装器首页选择“解压”，并将解压路径设为原便携版的程序目录。
+
+      三、关于数据与手动升级
+      如果跳过了兼容版本升级期或手动运行了安装器想切换为系统安装，请在升级前将旧版数据存储改为系统模式，并确认数据迁移完成。升级后若发现配置、物品或图标丢失，请先检查存储模式和数据位置，读取不同目录并不意味着原有数据丢失。
+    body_en: |
+      Starting with 1.4.0, EXE will become the primary format for EricGameLauncher update packages, supporting both installation and extraction for portable use. Compatible ZIP packages will remain available during the transition.
+
+      Part 1: Update compatibility during the transition
+      Version 1.4.0 remains compatible with the existing updater and can be installed through the launcher's built-in update feature without manual installation. We will continue providing compatible ZIP packages for older updaters over the next several releases. Please keep your launcher up to date.
+      We will publish a separate announcement before removing ZIP compatibility, explaining which versions are affected and how to upgrade.
+
+      Part 2: Installed and portable deployments
+      Installed deployments: Data is stored in the fixed system directory %ProgramData%\eric\EricGameLauncher. Switching to portable data storage is no longer supported.
+      Portable deployments: Updating an existing portable copy through the launcher preserves its deployment type and data storage mode. An EXE update package does not automatically convert a portable copy into an installed application.
+      To switch to an installed deployment, first select System storage mode in your existing portable copy and confirm that data migration has completed. Then use the installer to install or upgrade the application.
+      To continue using a portable copy, select Extract on the installer's home page and choose your existing portable application directory as the destination.
+
+      Part 3: Data and manual upgrades
+      If you miss the compatibility transition window, or choose to switch to an installed deployment by running the installer manually, first set the data storage mode in your old version to System and confirm that migration has completed before upgrading. If your settings, items or icons appear to be missing afterward, check the storage mode and data location first. Reading from a different directory does not mean your original data has been lost.
+    time: "2026-11-08T10:54:00Z"
+    position: normal
+    visible: true
+
   - id: "welcome-1"
     title_zh: |
       欢迎使用EricGameLauncher
@@ -63,15 +102,13 @@ announcements:
 
   - id: "outdated-versions-1"
     title_zh: |
-      过时版本列表
+      停止维护版本列表
     title_en: |
-      Outdated Versions list
+      Versions No Longer Maintained
     body_zh: |
-      v1.0.x：不再接收更新和支持，不再支持服务器配置，且存在多项严重缺陷，不推荐继续使用。
-      v1.2.5及更早版本：部分新功能和修复未被包含，存在体验性问题，且未接入可靠的Cli特性，不推荐继续使用。
+      v1.3.1 及更早版本：已停止维护，不再提供功能更新和问题修复，建议及时通过启动器内置更新功能升级至新版本。
     body_en: |
-      v1.0.x: No longer receiving updates and support, no longer supports server configuration, and contains several critical defects. Continued use is not recommended.
-      v1.2.5 and earlier versions: Some new features and fixes are not included, there are experience issues, and reliable CLI features are not integrated. Continued use is not recommended.
-    time: "2026-06-01T00:00:59Z"
+      v1.3.1 and earlier: No longer maintained and will receive no further feature updates or bug fixes. Please upgrade to a newer release through the launcher's built-in updater.
+    time: "2026-11-08T10:54:00Z"
     position: bottom
     visible: true

@@ -7,6 +7,27 @@ using System.Net;
 using System.Net.Http;
 using updater.main;
 
+if (args.Length == 1 && args[0] == "--configuration-archive")
+{
+    string archiveRoot = EricGameLauncher.Testing.TestWorkspace.NewFixture("EGL.Configuration.");
+    int archiveChecks = 0;
+    try
+    {
+        ConfigService.ApplyDebugMode(archiveRoot);
+        ConfigService.Initialize();
+        Text.Load("EN");
+        ConfigurationFeatures.Run((condition, name) =>
+        {
+            if (!condition) throw new InvalidOperationException("FAIL " + name);
+            Console.WriteLine("PASS " + name);
+            archiveChecks++;
+        }, archiveRoot);
+        Console.WriteLine($"{archiveChecks} checks passed.");
+    }
+    finally { LogService.FlushAndStop(); EricGameLauncher.Testing.TestWorkspace.DeleteFixture(archiveRoot); }
+    return;
+}
+
 if (args.Length == 3 && args[0] == "--hold-publication")
 {
     ConfigService.ApplyDebugMode(args[1]);
@@ -66,6 +87,7 @@ try
 {
     await DependencyFeatures.RunAsync(Check, root, cli);
     StoragePolicyFeatures.Run(Check, root);
+    ConfigurationFeatures.Run(Check, root);
     JumpListFeatures.Run(Check);
     await AsyncLaunchFeatures.RunAsync(Check, root, Path.GetFullPath(args[1]));
     await AlongsideFeatures.RunAsync(Check, Cli, root, Path.GetFullPath(args[1]));

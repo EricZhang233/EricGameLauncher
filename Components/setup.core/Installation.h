@@ -33,17 +33,26 @@ struct Key {
     Key(const Key&) = delete;
     Key& operator=(const Key&) = delete;
 };
+struct DirectoryLease {
+    Handle installation, update;
+    explicit DirectoryLease(const fs::path& root);
+};
 struct Record {
-    std::wstring root, id, owner, desktop, menu, version, date;
+    std::wstring root, id, owner, desktop, menu, version, date, startup;
     DWORD size = 0;
     explicit operator bool() const { return !id.empty(); }
 };
+struct ShortcutLocations { std::wstring desktop, menu; };
 struct Options {
     std::wstring root, owner;
     bool quiet = false, update = false, stage = false, worker = false, help = false;
     bool desktop = false, menu = true, extract = false;
+    bool keepData = false, dataChoice = false;
     std::shared_ptr<std::atomic_bool> cancellation;
     std::wstring cancelFile;
+    std::shared_ptr<const ShortcutLocations> shortcuts;
+    std::shared_ptr<const fs::path> dataDirectory;
+    std::function<void(const std::string&)> checkpoint;
     DWORD parent = 0;
 };
 std::wstring Wide(const std::string& value);
@@ -52,7 +61,7 @@ std::wstring Text(const std::string& key);
 std::wstring Self();
 std::wstring Sid();
 std::wstring Guid();
-std::wstring Folder(REFKNOWNFOLDERID id);
+std::wstring Folder(REFKNOWNFOLDERID id, DWORD flags = 0);
 std::wstring ValidateRoot(const std::wstring& value);
 std::wstring Destination(const std::wstring& value);
 fs::path Owned(const fs::path& root, const std::wstring& relative);
@@ -62,7 +71,12 @@ std::wstring Quote(const std::wstring& value);
 Options Parse();
 Record ReadRegistration(const std::wstring& owner);
 Record Find(const std::wstring& root, const std::wstring& owner);
+Record RegisteredInstallation(const std::wstring& owner);
+Record SelectInstallation(Options& options);
+ShortcutLocations UserShortcuts(const Options& options);
+std::wstring UpgradeSummary(const Record& installed, const std::wstring& target);
 void WriteRegistration(const Record& record);
+void RestoreRegistration(const Record& record);
 void RemoveRegistration(const Record& record);
 void Shortcut(const std::wstring& executable, const std::wstring& destination);
 bool ShortcutTargets(const std::wstring& destination, const std::wstring& executable);
@@ -77,6 +91,7 @@ void Install(const Options& options, const std::wstring& package, const std::vec
 void ExtractOnly(const Options& options, const std::wstring& package);
 void CheckCancelled(const Options& options);
 bool PrepareUninstallWorker(const Options& options);
+fs::path UninstallDataDirectory(const Options& options);
 void Uninstall(const Options& options);
 int Window(Options options, const std::function<void(const Options&)>& execute, bool uninstall);
 }

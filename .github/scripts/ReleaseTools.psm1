@@ -30,15 +30,17 @@ function Assert-EglReleasePackage {
     foreach ($name in $names) {
         if ($name -match '(^/|^[a-zA-Z]:|(^|/)\.\.(/|$))') { throw "Release package contains an unsafe path: $name" }
         if (-not $seen.Add($name)) { throw "Release package contains a duplicate path: $name" }
+        if ($name -match '^publish(/|$)') { throw "Release package contains a temporary publish directory: $name" }
         if ($name -match '\.pdb$') { throw "Release package contains debug symbols: $name" }
         if ($name -match '(^|/)(Uninstall|EricGameLauncher\.(Setup|Uninstall))\.exe$|(^|/)setup\.core\.dll$') { throw "Release payload contains installer code: $name" }
         if ($name -match '\.(xbf|xaml)$') { throw "Release package contains loose XAML resources: $name" }
         if ($name -match '\.(json|pri)$') { throw "Release package contains external startup or resource metadata: $name" }
         if ($name -match '(^|/)ico\.ico$') { throw "Release package contains an external default icon: $name" }
+        if ($name -match '(^|/)\.install\.cmd$') { throw "Release package contains the retired shortcut installer: $name" }
         if ($name -match '(^|/)Microsoft\.UI\.Xaml\.dll$') { throw "Release package contains bundled Windows App SDK runtime: $name" }
         if ($name -match '(^|/)(Data|Cache)(/|$)|\.(log|bak)$|(^|/)(settings\.yaml|items\.yaml|storage\.mode)$') { throw "Release package contains private data: $name" }
     }
-    foreach ($required in @('EricGameLauncher.exe', 'EricGameLauncher.dll', 'EricGameLauncher.Cli.exe', 'EricGameLauncher.Cli.dll', '.install.cmd')) {
+    foreach ($required in @('EricGameLauncher.exe', 'EricGameLauncher.dll', 'EricGameLauncher.Cli.exe', 'EricGameLauncher.Cli.dll')) {
         if (-not $seen.Contains($required)) { throw "Release package is missing $required." }
     }
 }
