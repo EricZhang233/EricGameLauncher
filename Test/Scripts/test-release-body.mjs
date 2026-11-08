@@ -75,21 +75,25 @@ for (const state of ['normal', 'missing', 'replaced', 'draft', 'republished', 'd
       return {data: {...release, id: state === 'replaced' ? 18 : 17, draft: state === 'draft', published_at: state === 'republished' ? 'new' : 'original'}};
     },
     listReleaseAssets: () => {},
-    deleteReleaseAsset: async args => { assert.equal(args.asset_id, 19); calls.push('delete'); },
+    deleteReleaseAsset: async args => { assert.ok([19, 20].includes(args.asset_id)); calls.push('delete:' + args.asset_id); },
     uploadReleaseAsset: async args => {
       assert.equal(args.release_id, 17);
+      assert.ok(['package.zip', 'setup.exe'].includes(args.name));
+      assert.equal(args.headers['content-type'], args.name.endsWith('.zip') ? 'application/zip' : 'application/vnd.microsoft.portable-executable');
+      assert.equal(args.headers['content-length'], args.data.length);
       if (state === 'deleted-during-upload') throw Object.assign(new Error('removed'), {status: 404});
-      calls.push('upload');
+      calls.push('upload:' + args.name);
     }
   };
-  const github = {rest: {repos}, paginate: async (_, args) => { assert.equal(args.release_id, 17); return [{id: 19, name: 'package.zip'}]; }};
+  const github = {rest: {repos}, paginate: async (_, args) => { assert.equal(args.release_id, 17); return [{id: 19, name: 'package.zip'}, {id: 20, name: 'setup.exe'}, {id: 21, name: 'unrelated.txt'}]; }};
   const requireFixture = name => name === 'fs' ? {readFileSync: () => Buffer.from('package')} : {basename: path => path.split('/').at(-1)};
   let failed = false;
   try { await upload(github, {repo: {owner: 'fixture', repo: 'fixture'}, payload: {release}}, requireFixture); }
   catch { failed = true; }
   assert.equal(failed, state !== 'normal');
-  assert.equal(calls.includes('upload'), state === 'normal');
-  assert.equal(calls.filter(call => call === 'upload').length, state === 'normal' ? 2 : 0);
+  assert.equal(calls.some(call => call.startsWith('upload:')), state === 'normal');
+  assert.equal(calls.filter(call => call.startsWith('upload:')).length, state === 'normal' ? 2 : 0);
+  if (state === 'normal') assert.deepEqual(calls, ['delete:19', 'delete:20', 'upload:package.zip', 'upload:setup.exe']);
   checks++;
   console.log('PASS asset upload stays bound to original release: ' + state);
 }

@@ -51,10 +51,18 @@ internal static class CliArguments
             "settings" => ["list", "get", "set"],
             "update" => ["check", "install", "repair", "history"],
             "storage" => ["status", "switch"],
+            "config" => ["export", "import"],
             "announcements" => ["list", "read"],
             _ => []
         };
         if (actions.Count(result.ContainsKey) > 1) throw Error(command);
+        if (command == "config")
+        {
+            if (actions.Count(result.ContainsKey) != 1 || !result.TryGetValue("path", out string? archivePath) || string.IsNullOrWhiteSpace(archivePath)) throw Error(command);
+            if (result.ContainsKey("replace") && result.ContainsKey("merge")) throw Error(command);
+            if (result.ContainsKey("export") && result.Keys.Any(key => key is not ("export" or "path"))) throw Error(command);
+            if (result.ContainsKey("preview") && (result.ContainsKey("replace") || result.ContainsKey("merge"))) throw Error(command);
+        }
         if (command == "uninstall" && result.ContainsKey("keep-data") && result.ContainsKey("remove-data")) throw Error(command);
         if (command == "add" && (!result.ContainsKey("path") || string.IsNullOrWhiteSpace(result["path"]))) throw Error("--path");
         if (command == "sort" && actions.Skip(1).Any(result.ContainsKey) && !result.ContainsKey("id")) throw Error("--id");

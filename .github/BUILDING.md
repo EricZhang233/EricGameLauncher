@@ -10,11 +10,11 @@
 
 本地测试需要匹配的 Windows App Runtime；必要时手动使用 `Test/Scripts/prepare-runtime.ps1` 安装官方签名运行时。运行时不进入发布 ZIP。
 
-CI 将 ZIP 直接生成到运行器临时目录，检查必要文件和私有数据后存为当前运行的 Artifact。附件工作流只取这次构建的 Artifact，上传内部原始 ZIP 到对应 Release；发布说明读取同一标签的 `.releasenote.md`。不读取仓库中的 `Releasepack/`，也不再删除或提交主分支上的文件。
+CI 将兼容 ZIP 与 Setup EXE 直接生成到同一个运行器临时目录，分别检查包内必要文件和私有数据后存为当前运行的同一个 Artifact。附件工作流只取这次构建的 Artifact，上传其中的原始 ZIP 与 EXE 到对应 Release；两个附件均上传成功后才写入同一标签的 `.releasenote.md`。不读取仓库中的 `Releasepack/`，也不再删除或提交主分支上的文件。
 
 需要单独测试构建时，在 Actions 中手动运行 `EricGameLauncher-BuildRelease`，输入一个已存在的 `v` 标签；该入口只生成保留 7 天的 Artifact，不上传 Release 附件。
 
-本地普通 Release 构建默认生成 `Releasepack/EricGameLauncher_<版本>.zip`，该目录仅用于本地构建，已排除在版本控制和源码扫描之外。也可显式指定空目录：
+本地普通 Release 构建默认生成 `Releasepack/EricGameLauncher_<版本>.zip` 和 `Releasepack/EricGameLauncher_Setup_<版本>.exe`，两者使用相同应用载荷。该目录仅用于本地构建，已排除在版本控制和源码扫描之外。也可显式指定空目录：
 
 ```powershell
 pwsh.exe -File .github/scripts/build-release.ps1 -Tag v1.2.4 -PackageDirectory C:\Temp\EGL-CI-Test
@@ -32,6 +32,10 @@ pwsh.exe -File .github/scripts/build-release.ps1 -Tag v1.2.4 -PackageDirectory C
 
 `Directory.Build.props` 统一派生版本属性，`Directory.Build.targets` 供主程序与 CLI 共用 SDK 资产筛选及 Release 启动配置内嵌目标，其余构建、资源输出和公共清理目标集中在 `EricGameLauncher.csproj`，不另设 Build 目录。`.github/scripts/ReleaseTools.psm1` 提供统一的目录/ZIP 发布检查，供本地构建、正式发布及测试共用；检查必要的程序集，拒绝外部 JSON/PRI、私有配置、缓存、日志及散装 XBF/XAML。公共清理目标供 clean、Release 收尾和测试失败收尾共用。
 
-已移除 Validate 工作流及其手动、可复用入口。自动晋升只接受目标提交最新的 Release 全流程已完成且成功；失败、排队、运行中或失败重跑均不回退到更早成功记录，本地测试成功也不能代替发行构建和上传成功。
+已移除 Validate 工作流及其手动、可复用入口。自动晋升只接受目标提交最新的 Release 全流程已完成且成功；失败、排队、运行中或失败重跑均不回退到更早成功记录，本地测试成功也不能代替发行构建和上传成功。1.4.0 起还要求对应版本的 ZIP 与 Setup EXE 两个附件均存在且非空；旧版本保留 ZIP 单包检查，缺包、空包或其他版本的安装包均不能代替本版本所需附件。
 
 test 是独立流程，唯一入口是在仓库根目录运行 `dotnet test`，一次执行依赖审查、Core、集成、发布契约、隔离 Release 包和窗口启停检查。不需要分区参数或其他命令。普通 build/run 不自动触发测试，测试成功不自动提交或推送。推送前单独完成测试，失败则停止后续推送，内容变化后重新测试。测试包仅存于临时目录，不作为正式发行包。详见 [Test](../Test/README.md)。
+
+## 数据模式定位
+
+`storage.mode` 是位于 EXE 同级目录的可选模式标记，不属于配置目录，也不是启动必需文件。普通启动与配置保存不创建它；实际切换数据模式或恢复相关迁移时写入。安装版及存储模式锁定的解压副本忽略此标记，固定使用系统数据。其他解压副本在没有标记时，优先识别 `Data` 中已有的配置，否则使用系统数据。

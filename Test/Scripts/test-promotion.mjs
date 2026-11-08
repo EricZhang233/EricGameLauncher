@@ -12,8 +12,8 @@ let count = 1;
 async function check(name, options, expected) {
   let promoted = false;
   const release = {
-    id: 1, tag_name: 'v1.2.4', prerelease: true, body: '',
-    assets: [{ name: 'EricGameLauncher_1.2.4.zip', size: 1 }],
+    id: 1, tag_name: 'v1.4.0', prerelease: true, body: '',
+    assets: [{ name: 'EricGameLauncher_1.4.0.zip', size: 1 }, { name: 'EricGameLauncher_Setup_1.4.0.exe', size: 1 }],
     published_at: new Date(Date.now() - 72 * 3600000).toISOString(),
     ...options.release,
   };
@@ -67,6 +67,14 @@ await check('push validation cannot authorize promotion', { runs: [{event: 'push
 await check('mismatched commit cannot authorize promotion', { runs: [{head_sha: 'other-commit'}] }, false);
 await check('successful newest validation supersedes old failure', { runs: [{run_number: 99, conclusion: 'failure'}, {run_number: 100}] }, true);
 await check('missing release package blocks promotion', { release: { assets: [] } }, false);
+await check('ZIP alone cannot promote a dual-package release', { release: { assets: [{name: 'EricGameLauncher_1.4.0.zip', size: 1}] } }, false);
+await check('installer alone cannot promote a dual-package release', { release: { assets: [{name: 'EricGameLauncher_Setup_1.4.0.exe', size: 1}] } }, false);
+await check('empty installer blocks promotion', { release: { assets: [{name: 'EricGameLauncher_1.4.0.zip', size: 1}, {name: 'EricGameLauncher_Setup_1.4.0.exe', size: 0}] } }, false);
+await check('empty ZIP blocks promotion', { release: { assets: [{name: 'EricGameLauncher_1.4.0.zip', size: 0}, {name: 'EricGameLauncher_Setup_1.4.0.exe', size: 1}] } }, false);
+await check('installer for another version cannot authorize promotion', { release: { assets: [{name: 'EricGameLauncher_1.4.0.zip', size: 1}, {name: 'EricGameLauncher_Setup_1.3.1.exe', size: 1}] } }, false);
+await check('legacy ZIP-only release remains supported', { release: { tag_name: 'v1.3.1', assets: [{name: 'EricGameLauncher_1.3.1.zip', size: 1}] } }, true);
+await check('future major version also requires its installer', { release: { tag_name: 'v2.0.0', assets: [{name: 'EricGameLauncher_2.0.0.zip', size: 1}] } }, false);
+await check('four-part versions accept matching dual packages', { release: { tag_name: 'v1.4.0.1', assets: [{name: 'EricGameLauncher_1.4.0.1.zip', size: 1}, {name: 'EricGameLauncher_Setup_1.4.0.1.exe', size: 1}] } }, true);
 await check('blocking issue prevents promotion', { blocked: true }, false);
 await check('API failure prevents promotion', { apiError: true }, false);
 await check('validated release can be promoted', {}, true);

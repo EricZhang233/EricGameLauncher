@@ -87,6 +87,7 @@ public static class CliService
                 "search" => await CmdSearch(parsed),
                 "sort" => await CmdSort(parsed),
                 "settings" => await CmdSettings(parsed),
+                "config" => CmdConfig(parsed),
                 "update" => await CmdUpdate(parsed),
                 "announcements" => await CmdAnnouncements(parsed),
                 "install" => await CmdInstall(parsed),
@@ -171,30 +172,9 @@ public static class CliService
 
     private static int WriteCommandHelp(string command)
     {
-        string? helpText = command switch
-        {
-            "list" => Text.Cli("Help_List_Text"),
-            "launch" => Text.Cli("Help_Launch_Text"),
-            "platform" => Text.Cli("Help_Platform_Text"),
-            "add" => Text.Cli("Help_Add_Text"),
-            "edit" => Text.Cli("Help_Edit_Text"),
-            "remove" => Text.Cli("Help_Remove_Text"),
-            "restore" => Text.Cli("Help_Restore_Text"),
-            "recycle" => Text.Cli("Help_Recycle_Text"),
-            "scan" => Text.Cli("Help_Scan_Text"),
-            "search" => Text.Cli("Help_Search_Text"),
-            "settings" => Text.Cli("Help_Settings_Text"),
-            "update" => Text.Cli("Help_Update_Text"),
-            "sort" => Text.Cli("Help_Sort_Text"),
-            "announcements" => Text.Cli("Help_Announcements_Text"),
-            "install" => Text.Cli("Help_Install_Text"),
-            "uninstall" => Text.Cli("Help_Uninstall_Text"),
-            "storage" => Text.Cli("Help_Storage_Text"),
-            "exit" => Text.Cli("Help_Exit_Text"),
-            "skill" => Text.Cli("Help_Skill_Text"),
-            "version" => Text.Cli("Help_Version_Text"),
-            _ => null
-        };
+        var definition = Commands.FirstOrDefault(item => item.Name == command);
+        string? helpText = definition != null && !string.IsNullOrEmpty(definition.HelpKey)
+            ? Text.Cli(definition.HelpKey) : null;
 
         if (helpText != null)
         {
@@ -1371,6 +1351,54 @@ public static class CliService
         }
     }
 
+    private static int CmdConfig(Dictionary<string, string> opts)
+    {
+        string path = Path.GetFullPath(opts["path"]);
+        if (opts.ContainsKey("export"))
+        {
+            int missingIcons = ConfigurationArchive.Export(path);
+            if (_jsonMode) WriteJson(new { success = true, operation = "export", path, missingIcons });
+            else
+            {
+                WriteLine(Text.T("ConfigArchive_Exported"), ConsoleColor.Green);
+                if (missingIcons > 0) WriteLine(string.Format(Text.T("ConfigArchive_MissingIcons"), missingIcons), ConsoleColor.Yellow);
+            }
+            return 0;
+        }
+        var archive = ConfigurationArchive.Read(path);
+        var sections = (opts.ContainsKey("settings") ? ConfigurationSections.Settings : 0)
+            | (opts.ContainsKey("items") ? ConfigurationSections.Items : 0);
+        if (sections == 0) sections = ConfigurationSections.Settings | ConfigurationSections.Items;
+        var plan = ConfigurationArchive.Preview(sections);
+        if (opts.ContainsKey("preview"))
+        {
+            if (_jsonMode) WriteJson(new { success = true, preview = true, path, information = archive.Information,
+                sections = sections.ToString(), hasConflicts = plan.HasConflicts, missingIcons = archive.MissingIcons });
+            else WriteLine(string.Format(Text.Cli("MsgConfigPreview"), archive.Information.OriginalFileName,
+                archive.Information.RuleVersion, archive.Information.ConfigurationVersion, archive.Information.GeneratorVersion,
+                archive.Information.GeneratedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"), plan.HasConflicts, archive.MissingIcons));
+            return 0;
+        }
+        if (plan.HasConflicts && !opts.ContainsKey("replace") && !opts.ContainsKey("merge"))
+            throw new InvalidOperationException(Text.Cli("ErrConfigPolicyRequired"));
+        var mode = opts.ContainsKey("merge") ? ConfigurationImportMode.Merge : ConfigurationImportMode.Replace;
+        var result = archive.Import(sections, mode, plan);
+        bool settingsImported = (sections & ConfigurationSections.Settings) != 0;
+        bool quickStartSynchronized = !settingsImported || QuickStartService.SetEnabled(ConfigService.QuickStart);
+        if (_jsonMode) WriteJson(new { success = true, operation = "import", added = result.Added, skipped = result.Skipped,
+            missingIcons = archive.MissingIcons, quickStartSynchronized, restartRecommended = settingsImported });
+        else
+        {
+            WriteLine((sections & ConfigurationSections.Items) != 0
+                ? string.Format(Text.T("ConfigArchive_Imported"), result.Added, result.Skipped)
+                : Text.T("ConfigArchive_SettingsImported"), ConsoleColor.Green);
+            if (archive.MissingIcons > 0) WriteLine(string.Format(Text.T("ConfigArchive_MissingIcons"), archive.MissingIcons), ConsoleColor.Yellow);
+            if (settingsImported) WriteLine(Text.T("ConfigArchive_RestartNote"));
+        }
+        if (!quickStartSynchronized) WriteLine(Text.T("ConfigArchive_QuickStartFailed"), ConsoleColor.Yellow);
+        return 0;
+    }
+
     private static bool ParseBool(string value)
     {
         return CliArguments.ParseBoolean(value);
@@ -1400,6 +1428,8 @@ public static class CliService
         new("sort",           ["--list", "--id", "--move-up", "--move-down", "--swap-with", "--json"],
                                                                        "Help_CmdSortDesc",           "Help_Sort_Text"),
         new("settings",       ["--list", "--get", "--set", "--json"],  "Help_CmdSettingsDesc",       "Help_Settings_Text"),
+        new("config",         ["--export", "--import", "--path", "--settings", "--items", "--replace", "--merge", "--preview", "--json"],
+                                                                       "Help_CmdConfigDesc",         "Help_Config_Text"),
         new("update",         ["--check", "--install", "--repair", "--history", "--channel", "--json"],      "Help_CmdUpdateDesc",         "Help_Update_Text"),
         new("announcements",  ["--list", "--read", "--json"],          "Help_CmdAnnouncementsDesc",  "Help_Announcements_Text"),
         new("install",        [],                                       "Help_CmdInstallDesc",        "Help_Install_Text"),

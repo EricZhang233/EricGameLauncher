@@ -100,8 +100,16 @@ internal static class UiFeatures
             Environment.SetEnvironmentVariable("EGL_UNINSTALL_TEST_CAPTURE", previousCapture);
             if (RegOverridePredefKey(currentUser, IntPtr.Zero) != 0) Environment.FailFast("Unable to restore the user registry after installation routing tests.");
             Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(isolation);
-            foreach (string file in copied) File.Delete(file);
-            File.Delete(capture);
+            foreach (string file in copied.Append(capture))
+            {
+                var deadline = DateTime.UtcNow.AddSeconds(5);
+                while (true)
+                {
+                    try { File.Delete(file); break; }
+                    catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && DateTime.UtcNow < deadline)
+                    { await Task.Delay(25); }
+                }
+            }
             typeof(MainView).GetMethod("UpdateShortcutMenuState", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(view, null);
         }
     }

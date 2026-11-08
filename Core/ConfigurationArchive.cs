@@ -72,6 +72,7 @@ public sealed class ConfigurationArchive
 
     public static ConfigurationArchive Read(string path)
     {
+        using var operation = LogService.StartOperation("Config", "ReadConfigurationArchive");
         try
         {
             using var archive = ZipFile.OpenRead(path);
@@ -138,6 +139,7 @@ public sealed class ConfigurationArchive
 
     public static int Export(string destination)
     {
+        using var operation = LogService.StartOperation("Config", "ExportConfigurationArchive");
         if (!Path.GetExtension(destination).Equals(".zip", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException(Text.T("ConfigArchive_ZipRequired"));
         Dictionary<string, byte[]> contents = new(StringComparer.OrdinalIgnoreCase);
         int missing = 0;
@@ -224,6 +226,7 @@ public sealed class ConfigurationArchive
 
     public static ConfigurationImportPlan Preview(ConfigurationSections sections)
     {
+        using var operation = LogService.StartOperation("Config", "PreviewConfigurationImport");
         CheckSections(sections);
         lock (ConfigPersistence.Gate)
         {
@@ -237,6 +240,7 @@ public sealed class ConfigurationArchive
 
     public ConfigurationImportResult Import(ConfigurationSections sections, ConfigurationImportMode mode, ConfigurationImportPlan plan, Action<string>? checkpoint = null)
     {
+        using var operation = LogService.StartOperation("Config", "ImportConfigurationArchive");
         CheckSections(sections);
         if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
         int added = 0, skipped = 0;

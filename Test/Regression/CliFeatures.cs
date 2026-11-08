@@ -49,7 +49,7 @@ internal static class CliFeatures
         var readdBusy = await cli(["add", "--title", "CLI 再添加", "--path", "C:\\EGL-cli-edited.exe", "--json"]);
         check(readdBusy.Code != 0, "CLI add still rejects a path already in the main list");
         check((await cli(["recycle", "--purge", "--json"])).Code == 0 && ConfigService.LoadRecycleBinItems().Count == 0, "CLI purge explicitly removes recycled entries");
-        foreach (string command in new[] { "launch", "platform", "add", "edit", "remove", "restore", "recycle", "scan", "search", "sort", "settings", "update", "announcements", "install", "uninstall", "storage" })
+        foreach (string command in new[] { "launch", "platform", "add", "edit", "remove", "restore", "recycle", "scan", "search", "sort", "settings", "config", "update", "announcements", "install", "uninstall", "storage" })
         {
             var help = await cli([command, "--help"]);
             check(help.Code == 0 && !string.IsNullOrWhiteSpace(help.Output), "CLI command help is available: " + command);
@@ -94,5 +94,6 @@ internal static class CliFeatures
         check((await cli(["launch", "--path", "C:\\EGL-missing-launch-target.exe", "--json"])).Code != 0, "CLI launch fails for a missing target");
 
         ConfigService.MutateItems((items, recycled) => { items.Clear(); recycled.Clear(); });
+        await ConfigurationCliFeatures.RunAsync(check, cli);
     }
 }

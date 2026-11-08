@@ -777,6 +777,7 @@ CLI:
   Help_CmdSearchDesc: "  search         Search items by keyword"
   Help_CmdSortDesc: "  sort           Reorder items"
   Help_CmdSettingsDesc: "  settings       View or modify settings"
+  Help_CmdConfigDesc: "  config         Export, preview or import configuration backups"
   Help_CmdUpdateDesc: "  update         Check / install / reinstall updates"
   Help_CmdAnnouncementsDesc: "  announcements  View server announcements"
   Help_CmdInstallDesc: "  install        Create shortcuts (portable mode only)"
@@ -968,6 +969,37 @@ CLI:
       --keep-data        Retain settings, items and icons in the fixed system data directory.
       --remove-data      Delete the fixed system data directory.
       Portable mode: use uninstall without data options to remove desktop and start menu shortcuts only.
+  ErrConfigPolicyRequired: "Configuration conflicts with existing data. Choose --replace or --merge explicitly."
+  MsgConfigPreview: |
+    Archive: {0}
+    Backup format version: {1}
+    Configuration version: {2}
+    Generator version: {3}
+    Created at (local): {4}
+    Existing configuration conflicts: {5}
+    Missing icons: {6}
+  Help_Config_Text: |
+    Usage: EricGameLauncher.Cli.exe config --export --path <backup.zip> [--json]
+           EricGameLauncher.Cli.exe config --import --path <backup.zip> [options]
+
+      --export            Export settings, library, recycle bin and referenced icons.
+      --import            Read a configuration backup for preview or import.
+      --path <file>       Required ZIP backup filename; quote paths containing spaces.
+      --settings          Select settings, including the custom application icon.
+      --items             Select the library, recycle bin and their icons.
+                          Both sections are selected when neither flag is supplied.
+      --preview           Show backup information and current conflicts without importing.
+      --replace           Replace selected sections; unselected sections are retained.
+      --merge             Preserve existing setting values, fill missing fields and add
+                          items without duplicate launch targets; conflicting IDs are renewed.
+      --json              Output a structured result. Diagnostics go to stderr.
+      Existing configuration requires an explicit --replace or --merge choice.
+      --replace and --merge are mutually exclusive and cannot accompany --preview.
+      --export accepts only --path and --json. Export does not copy game files or caches.
+      Settings imports synchronize Quick Start and recommend restarting the GUI.
+      JSON reports quickStartSynchronized=false if this synchronization fails; imported
+      configuration remains saved. Reconfirm and retry if concurrent changes reject import.
+      GitHub tokens retain Windows-user encryption and may need re-entry on another PC.
   Help_Storage_Text: |
     Usage: EricGameLauncher.Cli.exe storage [options]
 

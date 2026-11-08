@@ -45,9 +45,13 @@ jobs:
                 const hoursSincePublish = (now - publishedAt) / (1000 * 60 * 60);
                 
                 if (hoursSincePublish >= 48) {
-                  const expectedAsset = 'EricGameLauncher_' + latestPre.tag_name.replace(/^v/, '') + '.zip';
-                  if (!(latestPre.assets || []).some(asset => asset.name === expectedAsset && asset.size > 0)) {
-                    console.log('Promotion blocked: release package is missing.');
+                  const version = latestPre.tag_name.replace(/^v/, '');
+                  const [major, minor] = version.split('.').map(Number);
+                  const expectedAssets = ['EricGameLauncher_' + version + '.zip'];
+                  if (major > 1 || (major === 1 && minor >= 4)) expectedAssets.push('EricGameLauncher_Setup_' + version + '.exe');
+                  const missingAssets = expectedAssets.filter(name => !(latestPre.assets || []).some(asset => asset.name === name && asset.size > 0));
+                  if (missingAssets.length) {
+                    console.log('Promotion blocked: release packages are missing or empty: ' + missingAssets.join(', '));
                     return;
                   }
                   const ref = await github.rest.git.getRef({owner, repo, ref: 'tags/' + latestPre.tag_name});

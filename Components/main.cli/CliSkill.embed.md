@@ -52,8 +52,12 @@ Edits retain concurrent changes to other fields. A conflicting change returns an
 - `search <query> [--json]` — search by title, path, pinyin, or pinyin initials
 - `sort --list | --id <id> --move-up | --move-down | --swap-with <id>` — reorder items
 
-Update installation and repair verify the downloaded ZIP against the GitHub asset SHA256 digest before proceeding. A missing or invalid digest, a hash mismatch, or an updater failure returns an error without reporting the update as ready.
+Update installation and repair verify the downloaded package against the GitHub asset SHA256 digest before proceeding. A missing or invalid digest, a hash mismatch, or an updater failure returns an error without reporting the update as ready.
 - `settings --list | --get <key> | --set <key>=<value>` — view or modify settings
+- `config --export --path <backup.zip> [--json]` — export settings, library, recycle bin and referenced icons
+- `config --import --path <backup.zip> [--settings] [--items] [--preview | --replace | --merge] [--json]` — preview or import a configuration backup
+
+`config --import --preview` validates the backup and reports its original filename, format/configuration/generator versions, local creation time, selected sections, missing icons and whether current configuration conflicts. It does not import data. Select either or both sections; omitting both selects both. An import into existing configuration requires explicit `--replace` or `--merge`; no implicit overwrite is allowed. Replace only replaces selected sections. Merge preserves existing setting values, fills missing keys, skips duplicate launch targets across the library and recycle bin and renews conflicting IDs for new items. Settings imports synchronize Quick Start and recommend restarting the GUI. JSON reports `quickStartSynchronized=false` if synchronization fails while the imported configuration remains saved. A concurrent change causes import to fail; preview and reconfirm before retrying. ZIP exports exclude game files, temporary caches, launch counts and announcement read state. Encrypted GitHub tokens may need re-entry on another computer or Windows account.
 
 `settings --set lang=EN|Zh-CN|system` persists the language selection for the GUI and later CLI processes. `--get lang` returns the effective language. The default `system` follows Windows. CLI command messages use the CLI resource dictionary.
 
